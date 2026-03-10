@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CartaOS - Deal Intelligence & Execution OS for Biotech</title>
+  <meta name="description" content="CartaOS is the deal intelligence and execution operating system for biotech BD teams. Real data, real intelligence, live platform." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ===== CSS Variables ===== */
+    :root {
+      --bg: #0C0F1A;
+      --surface: #141825;
+      --surface-light: #1C2033;
+      --border: #232840;
+      --border-light: #2E3450;
+      --text: #E8EAF0;
+      --text-muted: #8B90A0;
+      --text-dim: #5A5F73;
+      --accent: #F59E0B;
+      --accent2: #F97316;
+      --coral: #FB7185;
+      --teal: #2DD4BF;
+      --sky: #38BDF8;
+      --violet: #A78BFA;
+      --red: #EF4444;
+      --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'DM Mono', 'Fira Code', monospace;
+      --radius: 12px;
+      --radius-lg: 20px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.3);
+      --transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    /* ===== Utility ===== */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.2);
+      padding: 6px 16px;
+      border-radius: 100px;
+      margin-bottom: 20px;
+    }
+    .section-heading {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 640px;
+      line-height: 1.7;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-body);
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 14px 28px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #000;
+      box-shadow: 0 4px 20px rgba(245,158,11,0.3);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(245,158,11,0.45);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border-light);
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(245,158,11,0.05);
+    }
+
+    /* ===== Nav ===== */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(12,15,26,0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+    .nav-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+    .nav-logo svg { flex-shrink: 0; }
+    .nav-logo .os { color: var(--accent); }
+    .nav .btn { padding: 10px 22px; font-size: 0.88rem; }
+
+    /* ===== Hero ===== */
+    .hero {
+      position: relative;
+      text-align: center;
+      padding: 100px 24px 80px;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      height: 900px;
+      background: radial-gradient(circle, rgba(245,158,11,0.08) 0%, rgba(249,115,22,0.04) 40%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 28px;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5.5vw, 3.6rem);
+      font-weight: 800;
+      line-height: 1.15;
+      max-width: 860px;
+      margin: 0 auto 12px;
+    }
+    .hero h1 .rolling-wrapper {
+      display: inline-block;
+      position: relative;
+      height: 1.18em;
+      overflow: hidden;
+      vertical-align: bottom;
+    }
+    .hero h1 .rolling-text {
+      display: block;
+      animation: roll 9s cubic-bezier(0.4,0,0.2,1) infinite;
+    }
+    .hero h1 .rolling-text span {
+      display: block;
+      height: 1.18em;
+      line-height: 1.18;
+      background: linear-gradient(135deg, var(--accent), var(--accent2), var(--coral));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    @keyframes roll {
+      0%, 28%   { transform: translateY(0); }
+      33%, 61%  { transform: translateY(-33.333%); }
+      66%, 94%  { transform: translateY(-66.666%); }
+      100%      { transform: translateY(0); }
+    }
+    .hero-sub {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      max-width: 700px;
+      margin: 24px auto 40px;
+      line-height: 1.75;
+    }
+    .hero-ctas {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ===== Numbers ===== */
+    .numbers {
+      padding: 60px 24px 80px;
+    }
+    .numbers-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+    .num-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      text-align: center;
+      transition: all var(--transition);
+    }
+    .num-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-light);
+      box-shadow: var(--shadow);
+    }
+    .num-card .number {
+      font-size: 2.4rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .num-card .label {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .num-card .source {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      letter-spacing: 0.02em;
+    }
+
+    /* ===== Problem / Solution ===== */
+    .problem {
+      padding: 80px 24px;
+    }
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      margin-top: 48px;
+    }
+    .problem-col h3 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 28px;
+    }
+    .problem-col.breaks h3 { color: var(--coral); }
+    .problem-col.fixes h3 { color: var(--teal); }
+    .problem-item {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    .problem-icon {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .problem-col.breaks .problem-icon {
+      background: rgba(251,113,133,0.12);
+      color: var(--coral);
+    }
+    .problem-col.fixes .problem-icon {
+      background: rgba(45,212,191,0.12);
+      color: var(--teal);
+    }
+    .problem-text {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .problem-text strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    /* ===== Platform (Now Live) ===== */
+    .platform {
+      padding: 100px 24px;
+    }
+    .platform-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .platform-header .section-sub {
+      margin: 0 auto;
+    }
+    .platform-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 48px;
+    }
+    .plat-card {
+      position: relative;
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      transition: all var(--transition);
+      overflow: hidden;
+    }
+    .plat-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius-lg);
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(245,158,11,0.25), rgba(167,139,250,0.15), rgba(45,212,191,0.15));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+    .plat-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    }
+    .plat-card .card-icon {
+      font-size: 1.8rem;
+      margin-bottom: 16px;
+    }
+    .plat-card h4 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .plat-card p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+    .platform-cta {
+      text-align: center;
+    }
+
+    /* ===== Founder ===== */
+    .founder {
+      padding: 100px 24px;
+    }
+    .founder-inner {
+      display: flex;
+      gap: 56px;
+      align-items: center;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .founder-photo {
+      flex-shrink: 0;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--surface-light), var(--surface));
+      border: 2px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+    .founder-content .tag { margin-bottom: 16px; }
+    .founder-quote {
+      font-size: 1.12rem;
+      font-style: italic;
+      color: var(--text-muted);
+      line-height: 1.75;
+      margin-bottom: 16px;
+      border-left: 3px solid var(--accent);
+      padding-left: 20px;
+    }
+    .founder-bold {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text);
+    }
+    .founder-name {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 4px;
+    }
+    .founder-title {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+    .founder-bio {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+
+    /* ===== Agents ===== */
+    .agents {
+      padding: 100px 24px;
+    }
+    .agents-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .agents-header .section-sub { margin: 0 auto; }
+    .agents-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-bottom: 0;
+    }
+    .agent-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 22px;
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+    }
+    .agent-card:hover, .agent-card.active {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+    .agent-card.active { border-width: 2px; }
+    .agent-card .agent-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-bottom: 14px;
+    }
+    .agent-card .agent-label {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .agent-card h4 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .agent-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+    .agent-detail {
+      margin-top: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px 32px;
+      display: none;
+      animation: fadeUp 0.35s ease;
+    }
+    .agent-detail.visible { display: block; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .agent-detail h4 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .agent-detail p {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+      max-width: 700px;
+    }
+
+    /* ===== Workflow ===== */
+    .workflow {
+      padding: 100px 24px;
+    }
+    .workflow-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .workflow-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+    .wf-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      text-align: center;
+      transition: all var(--transition);
+    }
+    .wf-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-light);
+      box-shadow: var(--shadow);
+    }
+    .wf-card .wf-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      background: var(--surface-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin: 0 auto 16px;
+    }
+    .wf-card h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .wf-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    /* ===== Vision / CTA ===== */
+    .vision {
+      padding: 100px 24px;
+      text-align: center;
+    }
+    .vision-inner {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 80px 40px;
+      max-width: 800px;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+    .vision-inner::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(245,158,11,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .vision .section-heading { margin-bottom: 32px; max-width: 600px; margin-left: auto; margin-right: auto; }
+
+    /* ===== Footer ===== */
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 24px;
+      text-align: center;
+    }
+    .footer p {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+    .footer a {
+      color: var(--text-muted);
+      transition: color var(--transition);
+    }
+    .footer a:hover { color: var(--accent); }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 1024px) {
+      .numbers-grid, .agents-grid, .workflow-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .platform-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 768px) {
+      .hero { padding: 72px 24px 56px; }
+      .hero h1 { font-size: 2rem; }
+      .problem-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+      .founder-inner {
+        flex-direction: column;
+        text-align: center;
+      }
+      .founder-quote {
+        border-left: none;
+        padding-left: 0;
+        border-top: 3px solid var(--accent);
+        padding-top: 16px;
+      }
+      .platform-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 600px) {
+      .numbers-grid, .agents-grid, .workflow-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero-ctas { flex-direction: column; align-items: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== NAV ===== -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="15" stroke="#F59E0B" stroke-width="2"/>
+          <path d="M20.5 10.5A7.5 7.5 0 0 0 9 16a7.5 7.5 0 0 0 11.5 6.33" stroke="#F59E0B" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <span>Carta<span class="os">OS</span></span>
+      </a>
+      <a href="https://cartaos.vercel.app/login" class="btn btn-primary">Try Live Demo</a>
+    </div>
+  </nav>
+
+  <!-- ===== HERO ===== -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-tag">Deal Intelligence &amp; Execution OS for Biotech</div>
+      <h1>
+        Biotech partnerships are the engine that turns scientific discoveries
+        <span class="rolling-wrapper">
+          <span class="rolling-text">
+            <span>into medicines.</span>
+            <span>into patient hopes.</span>
+            <span>into saving lives.</span>
+          </span>
+        </span>
+      </h1>
+      <p class="hero-sub">
+        Biotechs originate over 65% of new drugs &mdash; but big pharma launches 76% of them.
+        The partnership in between is where value is created or destroyed. We're on a mission to
+        give biotech teams the intelligence to master every deal.
+      </p>
+      <div class="hero-ctas">
+        <a href="https://cartaos.vercel.app/login" class="btn btn-primary">Try Live Demo &rarr;</a>
+        <a href="#how" class="btn btn-ghost">See How It Works</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== NUMBERS ===== -->
+  <section class="numbers">
+    <div class="container">
+      <div class="numbers-grid">
+        <div class="num-card">
+          <div class="number">$250B+</div>
+          <div class="label">in biotech licensing deals in 2025</div>
+          <div class="source">DealForma &middot; J.P. Morgan</div>
+        </div>
+        <div class="num-card">
+          <div class="number">65%</div>
+          <div class="label">of new drugs originate in biotech &amp; academia</div>
+          <div class="source">FDA &middot; Nature Reviews Drug Discovery</div>
+        </div>
+        <div class="num-card">
+          <div class="number">1 in 3</div>
+          <div class="label">pharma-biotech alliances fail</div>
+          <div class="source">Cutting Edge Information &middot; PMC</div>
+        </div>
+        <div class="num-card">
+          <div class="number">$138B</div>
+          <div class="label">in biopharma M&amp;A in 2025 across 129 deals</div>
+          <div class="source">J.P. Morgan Q4 2025</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PROBLEM / SOLUTION ===== -->
+  <section class="problem">
+    <div class="container">
+      <div style="text-align:center; margin-bottom:16px;">
+        <span class="tag">The Gap</span>
+      </div>
+      <h2 class="section-heading" style="text-align:center;">The intelligence layer is broken</h2>
+      <div class="problem-grid">
+        <!-- Breaks -->
+        <div class="problem-col breaks">
+          <h3>What breaks today</h3>
+          <div class="problem-item">
+            <div class="problem-icon">&times;</div>
+            <div class="problem-text"><strong>Scattered intelligence.</strong> Deal comps live in PDFs, inboxes, and analysts' heads &mdash; never in one place.</div>
+          </div>
+          <div class="problem-item">
+            <div class="problem-icon">&times;</div>
+            <div class="problem-text"><strong>Stale benchmarks.</strong> Teams negotiate billion-dollar terms using 18-month-old comparables.</div>
+          </div>
+          <div class="problem-item">
+            <div class="problem-icon">&times;</div>
+            <div class="problem-text"><strong>Translation gaps.</strong> R&amp;D, BD, Legal, and Finance speak different languages about the same deal.</div>
+          </div>
+          <div class="problem-item">
+            <div class="problem-icon">&times;</div>
+            <div class="problem-text"><strong>Relationship blind spots.</strong> Stakeholder dynamics and alliance health are tracked on gut feel, not data.</div>
+          </div>
+        </div>
+        <!-- Fixes -->
+        <div class="problem-col fixes">
+          <h3>What CartaOS changes</h3>
+          <div class="problem-item">
+            <div class="problem-icon">&check;</div>
+            <div class="problem-text"><strong>One deal graph.</strong> Every transaction, partner, and term mapped and queryable in real time.</div>
+          </div>
+          <div class="problem-item">
+            <div class="problem-icon">&check;</div>
+            <div class="problem-text"><strong>Live benchmarks.</strong> Continuously updated deal comps from SEC EDGAR and ClinicalTrials.gov.</div>
+          </div>
+          <div class="problem-item">
+            <div class="problem-icon">&check;</div>
+            <div class="problem-text"><strong>Communication Translator.</strong> Auto-translates deal language for every department in real time.</div>
+          </div>
+          <div class="problem-item">
+            <div class="problem-icon">&check;</div>
+            <div class="problem-text"><strong>Relationship Companion.</strong> Behavioral maps, sentiment timelines, and alliance health predictions.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PLATFORM (NOW LIVE) ===== -->
+  <section class="platform" id="platform">
+    <div class="container">
+      <div class="platform-header">
+        <span class="tag">Now Live</span>
+        <h2 class="section-heading">Real intelligence. Real data. Try it yourself.</h2>
+        <p class="section-sub">
+          The platform is live with a real database, SEC EDGAR integration, ClinicalTrials.gov feeds,
+          and AI-powered deal intelligence. No mockups &mdash; this is production software you can explore right now.
+        </p>
+      </div>
+      <div class="platform-grid">
+        <div class="plat-card">
+          <div class="card-icon">&#128269;</div>
+          <h4>Live Deal Search</h4>
+          <p>Search across SEC EDGAR filings, ClinicalTrials.gov, and your own database simultaneously. Click any result to go directly to the source document.</p>
+        </div>
+        <div class="plat-card">
+          <div class="card-icon">&#129504;</div>
+          <h4>AI Deal Conductor</h4>
+          <p>Three-tab intelligence hub: Deal Overview, Communication Translator, and Relationship Companion &mdash; all powered by behavioral analytics.</p>
+        </div>
+        <div class="plat-card">
+          <div class="card-icon">&#128172;</div>
+          <h4>Communication Translator</h4>
+          <p>Translate deal language across departments: R&amp;D, BD, Legal, and Finance. Each speaks differently &mdash; CartaOS bridges the gap.</p>
+        </div>
+        <div class="plat-card">
+          <div class="card-icon">&#129309;</div>
+          <h4>Relationship Companion</h4>
+          <p>Stakeholder behavioral maps, sentiment timelines, alliance health prediction, and accountability analytics for every partner.</p>
+        </div>
+        <div class="plat-card">
+          <div class="card-icon">&#128506;</div>
+          <h4>20+ Deal Routes</h4>
+          <p>Benchmarks, trends, partners, negotiations, term builder, workspaces &mdash; everything a BD team needs in one place.</p>
+        </div>
+        <div class="plat-card">
+          <div class="card-icon">&#128451;</div>
+          <h4>Real Database</h4>
+          <p>Connected to Supabase PostgreSQL with full authentication. Your data, your deals, your intelligence.</p>
+        </div>
+      </div>
+      <div class="platform-cta">
+        <a href="https://cartaos.vercel.app/login" class="btn btn-primary">Explore the Platform &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOUNDER ===== -->
+  <section class="founder">
+    <div class="container">
+      <div class="founder-inner">
+        <div class="founder-photo">AM</div>
+        <div class="founder-content">
+          <span class="tag">From One BD Professional to Another</span>
+          <blockquote class="founder-quote">
+            &ldquo;I spent years evaluating billion-dollar oncology deals at BioNTech. I saw how broken the
+            intelligence layer was &mdash; teams making transformative decisions on scattered PDFs, stale comps,
+            and gut feel.&rdquo;
+          </blockquote>
+          <p class="founder-bold">I built what I wished existed.</p>
+          <p class="founder-name">Anastasios Mastroanastasiou</p>
+          <p class="founder-title">Founder &amp; CEO, CartaOS</p>
+          <p class="founder-bio">
+            Former M&amp;A Due Diligence &amp; Competitive Intelligence at BioNTech SE &mdash; evaluated clinical-stage
+            oncology assets exceeding $1B. Educated at Karolinska Institutet and Stockholm School of Economics with
+            scientific research experience at Harvard Medical School and King Abdullah University of Science and
+            Technology (KAUST).
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== AGENTS ===== -->
+  <section class="agents" id="how">
+    <div class="container">
+      <div class="agents-header">
+        <span class="tag">How It Works</span>
+        <h2 class="section-heading">Four autonomous agents. One deal intelligence OS.</h2>
+        <p class="section-sub">
+          Each agent operates continuously, feeding intelligence into a unified graph that powers every decision your team makes.
+        </p>
+      </div>
+      <div class="agents-grid" id="agentsGrid">
+        <div class="agent-card active" data-agent="0" style="border-color: var(--accent);">
+          <div class="agent-dot" style="background: var(--accent);"></div>
+          <div class="agent-label">The Eyes</div>
+          <h4>Market Sentinel</h4>
+          <p>Monitors deals, pricing signals, and regulatory shifts 24/7.</p>
+        </div>
+        <div class="agent-card" data-agent="1">
+          <div class="agent-dot" style="background: var(--violet);"></div>
+          <div class="agent-label">The Memory</div>
+          <h4>Deal Graph Engine</h4>
+          <p>Maps the entire deal landscape into a queryable knowledge graph.</p>
+        </div>
+        <div class="agent-card" data-agent="2">
+          <div class="agent-dot" style="background: var(--accent2);"></div>
+          <div class="agent-label">The Judgment</div>
+          <h4>Strategy Analyst</h4>
+          <p>Models deal risks, pricing cascades, and negotiation leverage.</p>
+        </div>
+        <div class="agent-card" data-agent="3">
+          <div class="agent-dot" style="background: var(--teal);"></div>
+          <div class="agent-label">The Execution Layer</div>
+          <h4>Deal Advisor</h4>
+          <p>Turns intelligence into board-ready materials and action plans.</p>
+        </div>
+      </div>
+      <div class="agent-detail visible" id="agentDetail">
+        <!-- Content injected by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== WORKFLOW ===== -->
+  <section class="workflow">
+    <div class="container">
+      <div class="workflow-header">
+        <span class="tag">Your Deal Hub</span>
+        <h2 class="section-heading">One central repository for a smart BD team</h2>
+        <p class="section-sub" style="margin:0 auto;">
+          CartaOS integrates with the tools your team already uses &mdash; so intelligence flows where work happens.
+        </p>
+      </div>
+      <div class="workflow-grid">
+        <div class="wf-card">
+          <div class="wf-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20"/><path d="M10 12h4"/></svg>
+          </div>
+          <h4>Outlook</h4>
+          <p>Email threads and attachments automatically linked to deal records.</p>
+        </div>
+        <div class="wf-card">
+          <div class="wf-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h4>Teams</h4>
+          <p>Channel messages, meeting notes, and calls surfaced alongside deal context.</p>
+        </div>
+        <div class="wf-card">
+          <div class="wf-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+          </div>
+          <h4>Excel &amp; PowerPoint</h4>
+          <p>Models and decks sync bi-directionally with live deal data.</p>
+        </div>
+        <div class="wf-card">
+          <div class="wf-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M5 12l-3 3 3 3"/></svg>
+          </div>
+          <h4>SharePoint</h4>
+          <p>Document libraries and deal rooms connected to your intelligence graph.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== VISION / CTA ===== -->
+  <section class="vision">
+    <div class="container">
+      <div class="vision-inner">
+        <span class="tag">The Vision</span>
+        <h2 class="section-heading">The strategic decision infrastructure for the biotech industry.</h2>
+        <a href="https://cartaos.vercel.app/login" class="btn btn-primary">Try the Live Demo &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <div class="container">
+      <p>
+        &copy; 2026 Cartaos Ltd &middot; 71&ndash;75 Shelton Street, Covent Garden, London WC2H 9JQ, UK &middot; Company No. 17063322
+      </p>
+      <p style="margin-top:8px;">
+        <a href="mailto:info@cartaos.ai">info@cartaos.ai</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- ===== JavaScript ===== -->
+  <script>
+    (function() {
+      'use strict';
+
+      /* ----- Agent data ----- */
+      var agents = [
+        {
+          name: 'Market Sentinel',
+          color: '#F59E0B',
+          detail: 'Market Sentinel scans ClinicalTrials.gov registrations, AMNOG pricing decisions, SEC EDGAR filings, and deal announcements in real time. It detects pricing signals, regulatory shifts, and competitive moves before they hit the news cycle \u2014 giving your BD team a continuous early-warning system across every therapeutic area and geography you track.'
+        },
+        {
+          name: 'Deal Graph Engine',
+          color: '#A78BFA',
+          detail: 'Deal Graph Engine maps the entire transaction network \u2014 every licensor, licensee, asset, term sheet, and milestone \u2014 into a queryable knowledge graph. It identifies comparable deals, structural gaps, and relationship patterns that would take analysts weeks to surface manually. The graph updates continuously as new intelligence arrives from Market Sentinel.'
+        },
+        {
+          name: 'Strategy Analyst',
+          color: '#F97316',
+          detail: 'Strategy Analyst models deal risks, reference pricing cascades, and negotiation leverage using scenario analysis. It simulates how different deal structures affect value capture, identifies optimal negotiation ranges based on comparable transactions, and flags regulatory or market risks that could impact deal economics.'
+        },
+        {
+          name: 'Deal Advisor',
+          color: '#2DD4BF',
+          detail: 'Deal Advisor turns raw intelligence into board-ready materials. It generates due diligence reports, valuation models, competitive landscape analyses, and board decks \u2014 all pre-populated with live data from the Deal Graph. Every output is structured for the audience: concise for C-suite, detailed for diligence teams, visual for board presentations.'
+        }
+      ];
+
+      var activeIdx = 0;
+      var grid = document.getElementById('agentsGrid');
+      var detailEl = document.getElementById('agentDetail');
+      var cards = grid.querySelectorAll('.agent-card');
+
+      function render(idx) {
+        cards.forEach(function(c, i) {
+          c.classList.toggle('active', i === idx);
+          c.style.borderColor = i === idx ? agents[i].color : '';
+        });
+        detailEl.innerHTML =
+          '<h4 style="color:' + agents[idx].color + ';">' + agents[idx].name + '</h4>' +
+          '<p>' + agents[idx].detail + '</p>';
+        detailEl.style.borderColor = agents[idx].color;
+        detailEl.classList.remove('visible');
+        void detailEl.offsetWidth; /* reflow for animation */
+        detailEl.classList.add('visible');
+      }
+
+      cards.forEach(function(card, i) {
+        card.addEventListener('click', function() {
+          activeIdx = i;
+          render(i);
+        });
+      });
+
+      /* Initial render */
+      render(0);
+
+      /* ----- Smooth scroll for anchor links ----- */
+      document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+        a.addEventListener('click', function(e) {
+          var target = document.querySelector(this.getAttribute('href'));
+          if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+    })();
+  </script>
+
+</body>
+</html>
