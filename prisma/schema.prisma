@@ -1,0 +1,488 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum DealType {
+  OUT_LICENSE
+  IN_LICENSE
+  COLLABORATION
+  M_AND_A
+  OPTION
+}
+
+enum DealStatus {
+  ANNOUNCED
+  CLOSED
+  TERMINATED
+}
+
+enum Stage {
+  PRECLINICAL
+  PHASE_1
+  PHASE_2
+  PHASE_3
+  APPROVED
+}
+
+enum SourceType {
+  SEC_FILING
+  PRESS_RELEASE
+  EARNINGS_CALL
+  MANUAL
+}
+
+enum ClauseType {
+  TERMINATION
+  IP_OWNERSHIP
+  SUBLICENSING
+  DILIGENCE
+  MILESTONE_DEF
+  DEVELOPMENT_OBLIGATION
+  DISPUTE_RESOLUTION
+  ANTI_SHELVING
+  ROYALTY_STEP_DOWN
+  CHANGE_OF_CONTROL
+}
+
+enum CompanyType {
+  PHARMA
+  BIOTECH
+  CDMO
+  CRO
+  FINANCIAL
+}
+
+enum PartnerStatus {
+  IDENTIFIED
+  CONTACTED
+  IN_DISCUSSION
+  ACTIVE
+  DECLINED
+}
+
+enum NegotiationStatus {
+  INITIATED
+  TERM_SHEET_DRAFTING
+  TERM_SHEET_EXCHANGED
+  DUE_DILIGENCE
+  DEFINITIVE_AGREEMENT
+  CLOSED
+  DEAD
+}
+
+enum ActionStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+enum DocumentStatus {
+  PENDING
+  EXTRACTING
+  DONE
+  FAILED
+}
+
+// ─── NextAuth ────────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  orgId         String?
+  org           Org?      @relation(fields: [orgId], references: [id])
+  accounts      Account[]
+  sessions      Session[]
+  documents     Document[]
+  createdAt     DateTime  @default(now())
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Org {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Deal Precedent Data ─────────────────────────────────────────────────────
+
+model Deal {
+  id            String     @id @default(cuid())
+  title         String
+  dealType      DealType
+  announcedDate DateTime
+  closedDate    DateTime?
+  status        DealStatus
+
+  // Parties
+  licensorName String
+  licenseeName String
+  licensorId   String?
+  licenseeId   String?
+  licensor     Company?   @relation("licensor", fields: [licensorId], references: [id])
+  licensee     Company?   @relation("licensee", fields: [licenseeId], references: [id])
+
+  // Asset Info
+  assetName        String?
+  therapeuticArea  String
+  modality         String?
+  indication       String?
+  developmentStage Stage
+
+  // Financial Terms
+  upfrontPayment        Float?
+  totalDealValue        Float?
+  developmentMilestones Float?
+  commercialMilestones  Float?
+  royaltyRangeLow       Float?
+  royaltyRangeHigh      Float?
+  royaltyStepDowns      Json?
+  equityInvestment      Float?
+
+  // Structure & Governance
+  territoryScope              String?
+  exclusivity                 Boolean?
+  coDevRights                 Boolean?
+  coPromoteRights             Boolean?
+  optionStructure             String?
+  developmentResponsibilities Json?
+
+  // Contract Clauses
+  terminationClauses  Json?
+  diligenceObligations String?
+  sublicensingRights  String?
+  ipOwnership         String?
+  disputeResolution   String?
+  antiShelving        String?
+  governanceNotes     String?
+
+  // Source Tracking
+  sourceType      SourceType
+  sourceUrl       String?
+  sourceFilingId  String?
+  rawText         String?    @db.Text
+  embedding       Unsupported("vector(1536)")?
+  confidence      Float?
+  verified        Boolean    @default(false)
+
+  // Relations
+  comparisons DealComparison[]
+  clauses     ClauseExample[]
+  tags        DealTag[]
+  alliance    Alliance?
+  documents   Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DealTag {
+  id     String @id @default(cuid())
+  dealId String
+  deal   Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  tag    String
+
+  @@unique([dealId, tag])
+}
+
+model DealComparison {
+  id            String      @id @default(cuid())
+  dealId        String
+  deal          Deal        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  negotiationId String?
+  negotiation   Negotiation? @relation(fields: [negotiationId], references: [id])
+  relevanceScore Float?
+  notes         String?
+  createdAt     DateTime    @default(now())
+}
+
+// ─── Clause Intelligence Library ─────────────────────────────────────────────
+
+model ClauseExample {
+  id               String     @id @default(cuid())
+  dealId           String
+  deal             Deal       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  clauseType       ClauseType
+  clauseText       String     @db.Text
+  summary          String?
+  favorability     String?
+  negotiationNotes String?
+  embedding        Unsupported("vector(1536)")?
+  createdAt        DateTime   @default(now())
+}
+
+// ─── Company & Partner CRM ───────────────────────────────────────────────────
+
+model Company {
+  id               String      @id @default(cuid())
+  name             String
+  type             CompanyType
+  headquarters     String?
+  website          String?
+  marketCap        Float?
+  employeeCount    Int?
+  therapeuticFocus String[]
+  modalityFocus    String[]
+
+  // Deal Behavior Profile
+  avgDealCadenceDays  Int?
+  typicalUpfrontRange Json?
+  typicalRoyaltyRange Json?
+  dealActivityScore   Float?
+  lastDealDate        DateTime?
+
+  // CRM Fields
+  partnerScore    Float?
+  partnerStatus   PartnerStatus @default(IDENTIFIED)
+  notes           String?
+  lastContactDate DateTime?
+  nextAction      String?
+  nextActionDate  DateTime?
+  outlookThreadIds String[]
+  sharepointFolder String?
+
+  // Relations
+  contacts        Contact[]
+  dealsAsLicensor Deal[]    @relation("licensor")
+  dealsAsLicensee Deal[]    @relation("licensee")
+  pipelineAssets  PipelineAsset[]
+  negotiations    Negotiation[]
+  alliances       Alliance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  title     String?
+  email     String?
+  phone     String?
+  linkedIn  String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PipelineAsset {
+  id               String  @id @default(cuid())
+  companyId        String
+  company          Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assetName        String
+  indication       String?
+  modality         String?
+  developmentStage Stage?
+  notes            String?
+}
+
+// ─── Term Sheets ─────────────────────────────────────────────────────────────
+
+model TermSheet {
+  id          String  @id @default(cuid())
+  orgId       String
+  title       String
+  assetName   String
+  indication  String?
+  modality    String?
+  stage       Stage?
+
+  // Proposed Terms
+  proposedUpfront       Float?
+  proposedMilestones    Float?
+  proposedRoyaltyLow    Float?
+  proposedRoyaltyHigh   Float?
+  proposedTerritory     String?
+  proposedStructure     String?
+  milestoneSchedule     Json?
+  royaltyTiers          Json?
+  clauses               Json?
+
+  // Export tracking
+  lastExportedAt DateTime?
+  wordDocUrl     String?
+  pptxUrl        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Negotiation & Deal Workspace ────────────────────────────────────────────
+
+model Negotiation {
+  id        String  @id @default(cuid())
+  orgId     String
+  title     String
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+  status    NegotiationStatus @default(INITIATED)
+
+  // Key Terms
+  proposedUpfront      Float?
+  proposedMilestones   Float?
+  proposedRoyaltyLow   Float?
+  proposedRoyaltyHigh  Float?
+  proposedTerritory    String?
+  proposedStructure    String?
+
+  // Negotiation History
+  counterOfferHistory Json?
+  termEvolution       Json?
+
+  // Deal Conductor State
+  currentBlockers Json?
+  nextSteps       Json?
+  riskFlags       Json?
+
+  // MS 365 Links
+  outlookThreadIds  String[]
+  calendarEventIds  String[]
+  sharepointFiles   String[]
+
+  // Timeline
+  startDate       DateTime  @default(now())
+  targetCloseDate DateTime?
+
+  // Relations
+  benchmarkDeals DealComparison[]
+  activities     NegotiationActivity[]
+  actionItems    ActionItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NegotiationActivity {
+  id            String      @id @default(cuid())
+  negotiationId String
+  negotiation   Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  type          String      // EMAIL, MEETING, NOTE, OFFER, COUNTEROFFER, MILESTONE
+  title         String
+  description   String?     @db.Text
+  metadata      Json?
+  occurredAt    DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+}
+
+model ActionItem {
+  id            String      @id @default(cuid())
+  negotiationId String
+  negotiation   Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  assignedTo    String?
+  dueDate       DateTime?
+  status        ActionStatus @default(OPEN)
+  source        String?
+  sourceMessageId String?
+  createdAt     DateTime    @default(now())
+  completedAt   DateTime?
+}
+
+// ─── Alliance Management ─────────────────────────────────────────────────────
+
+model Alliance {
+  id               String  @id @default(cuid())
+  dealId           String  @unique
+  deal             Deal    @relation(fields: [dealId], references: [id])
+  partnerCompanyId String
+  partner          Company @relation(fields: [partnerCompanyId], references: [id])
+  allianceManager  String?
+
+  // Governance
+  jscSchedule     String?
+  nextJscDate     DateTime?
+  milestoneTracker Json?
+
+  // Health
+  healthScore    Float?
+  lastReviewDate DateTime?
+
+  obligations AllianceObligation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AllianceObligation {
+  id          String   @id @default(cuid())
+  allianceId  String
+  alliance    Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  owner       String?
+  dueDate     DateTime?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+// ─── Document Uploads ─────────────────────────────────────────────────────────
+
+model Document {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename        String
+  storageUrl      String
+  fileSize        Int
+  mimeType        String
+  status          DocumentStatus @default(PENDING)
+  extractedText   String?        @db.Text
+  extractedDealId String?
+  extractedDeal   Deal?          @relation(fields: [extractedDealId], references: [id])
+  errorMessage    String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
