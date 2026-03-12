@@ -606,7 +606,7 @@ export default function InsightsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#6B7280" }} />
                   <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} tickFormatter={(v) => `$${v >= 1000 ? `${v / 1000}B` : `${v}M`}`} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => formatCurrency(v)} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: any) => formatCurrency(Number(v))} />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
                   <Bar dataKey="Upfront" fill="#F97316" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="Milestones" fill="#10B981" radius={[4, 4, 0, 0]} />
@@ -622,7 +622,7 @@ export default function InsightsPage() {
           <div className="flex flex-wrap items-center gap-4">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Therapeutic Area</p>
-              <Select value={milestoneTA} onValueChange={setMilestoneTA}>
+              <Select value={milestoneTA} onValueChange={(v) => v && setMilestoneTA(v)}>
                 <SelectTrigger className="w-[200px] h-9 border-border/40 bg-white">
                   <SelectValue />
                 </SelectTrigger>
@@ -699,7 +699,7 @@ export default function InsightsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#6B7280" }} />
                   <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} tickFormatter={(v) => `$${v}M`} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => `$${v}M`} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: any) => `$${v}M`} />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
                   <Bar dataKey="Nominal" fill="#E5E7EB" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="Expected Value" fill="#F97316" radius={[4, 4, 0, 0]} />
@@ -713,7 +713,7 @@ export default function InsightsPage() {
         <TabsContent value="decomposition" className="space-y-6">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Select a deal to decompose</p>
-            <Select value={decompDealId} onValueChange={setDecompDealId}>
+            <Select value={decompDealId} onValueChange={(v) => v && setDecompDealId(v)}>
               <SelectTrigger className="w-[400px] h-9 border-border/40 bg-white">
                 <SelectValue placeholder="Custom values (or select a deal)" />
               </SelectTrigger>
@@ -741,7 +741,7 @@ export default function InsightsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#6B7280" }} />
                     <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} tickFormatter={(v) => formatCurrency(v)} />
-                    <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, name: string) => name === "base" ? null : formatCurrency(v)} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: any, name: any) => name === "base" ? null : formatCurrency(Number(v))} />
                     <Bar dataKey="base" stackId="a" fill="transparent" />
                     <Bar dataKey="value" stackId="a" radius={[4, 4, 0, 0]}>
                       {decompData.waterfall.map((entry, i) => (
@@ -762,12 +762,12 @@ export default function InsightsPage() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
-                    <Pie data={decompData.components} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                    <Pie data={decompData.components} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" label={({ name, percent }: any) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
                       {decompData.components.map((c, i) => (
                         <Cell key={i} fill={c.color} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => formatCurrency(v)} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: any) => formatCurrency(Number(v))} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="space-y-2 mt-4">
@@ -831,7 +831,7 @@ export default function InsightsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#6B7280" }} label={{ value: "Year", position: "insideBottom", offset: -5, fontSize: 11, fill: "#6B7280" }} />
                   <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} tickFormatter={(v) => `$${v}M`} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, name: string) => [`$${v}M`, name]} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: any, name: any) => [`$${v}M`, name]} />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
                   <Area type="monotone" dataKey="royalty" name="Nominal Royalty" stroke="#F97316" fill="url(#royaltyGrad)" strokeWidth={2} />
                   <Area type="monotone" dataKey="pv" name="Present Value" stroke="#10B981" fill="url(#pvGrad)" strokeWidth={2} />
@@ -942,7 +942,7 @@ export default function InsightsPage() {
                           <Cell key={i} fill={d.color} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => formatCurrency(v)} />
+                      <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: any) => formatCurrency(Number(v))} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="flex items-center justify-center gap-6 -mt-2">
