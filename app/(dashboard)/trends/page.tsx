@@ -217,7 +217,7 @@ export default function TrendsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Trends</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">Market Trends</h1>
         <p className="text-sm text-muted-foreground">
           Market trends and deal activity analysis across time periods
         </p>

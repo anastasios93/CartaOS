@@ -52,24 +52,31 @@ export async function searchEdgarForDeals(
   const hits = data?.hits?.hits ?? [];
 
   return hits.map((h: any) => {
+    const src = h._source ?? {};
     const id: string = h._id ?? "";
-    const cik: string = h._source?.entity_id ?? "";
-    // _id format is typically "accession:filename"
+    // ciks is an array; strip leading zeros for the URL path
+    const rawCik: string = src.ciks?.[0] ?? "";
+    const cik = rawCik.replace(/^0+/, "") || rawCik;
+    // display_names is like "COMPANY NAME  (TICKER)  (CIK 0001234567)" — strip all trailing parenthetical groups
+    const companyName: string =
+      (src.display_names?.[0] ?? "").replace(/(\s*\([^)]*\))+\s*$/g, "").trim() || "";
+    const form: string = src.form ?? src.root_forms?.[0] ?? "";
+    // _id format is "accession:filename"
     const [accPart, filename] = id.includes(":") ? id.split(":") : [id, ""];
     const accNoDashes = accPart.replace(/-/g, "");
     const documentUrl =
       cik && accPart && filename
         ? `${EDGAR_BASE}/Archives/edgar/data/${cik}/${accNoDashes}/${filename}`
         : cik
-          ? `${EDGAR_BASE}/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=${h._source?.form_type ?? ""}&dateb=&owner=include&count=10`
+          ? `${EDGAR_BASE}/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=${form}&dateb=&owner=include&count=10`
           : "";
     return {
       accessionNumber: id,
-      filingDate: h._source?.file_date,
-      form: h._source?.form_type,
-      companyName: h._source?.entity_name,
-      cik,
-      description: h._source?.file_description ?? "",
+      filingDate: src.file_date,
+      form,
+      companyName,
+      cik: rawCik,
+      description: src.file_description ?? "",
       documentUrl,
     };
   });

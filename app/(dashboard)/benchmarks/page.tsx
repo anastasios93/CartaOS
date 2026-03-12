@@ -168,11 +168,11 @@ export default function BenchmarksPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Benchmarks</h1>
-          <p className="text-sm text-muted-foreground">
-            Statistical analysis of deal terms across precedents
+          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">Comparable Deals</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Benchmark and analyze deal terms across precedent transactions
           </p>
         </div>
         <div className="flex items-center gap-2">

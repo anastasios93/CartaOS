@@ -491,18 +491,18 @@ export default function DealsPage() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Deal Library
+          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">
+            Deal Twin Library
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Browse and search precedent transactions
+          <p className="text-sm text-muted-foreground mt-0.5">
+            AI-generated deal structures and precedent transactions
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="gap-2 bg-[#F97316] hover:bg-[#EA580C] text-white">
           <Link href="/deals/new">
-            <Plus className="mr-1.5 h-4 w-4" /> Add Deal
+            <Plus className="h-4 w-4" /> New Deal Twin
           </Link>
         </Button>
       </div>

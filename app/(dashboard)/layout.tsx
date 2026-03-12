@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Separator } from "@/components/ui/separator";
-import { Bell, Search, Upload, Loader2 } from "lucide-react";
+import { Bell, Search, Plus, Loader2, Command } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function DashboardLayout({
   children,
@@ -24,10 +25,12 @@ export default function DashboardLayout({
 
   if (status === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-[#F97316]" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F97316] to-[#EA580C] shadow-lg shadow-[#F97316]/20">
+            <Loader2 className="h-5 w-5 animate-spin text-white" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Loading CartaOS...</p>
         </div>
       </div>
     );
@@ -39,30 +42,45 @@ export default function DashboardLayout({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/50 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <div className="flex-1 flex items-center">
-            <div className="relative max-w-md flex-1">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search deals, partners, clauses..."
-                className="h-8 w-full rounded-md border border-border/50 bg-secondary/50 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-              />
-            </div>
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/40 bg-white/80 backdrop-blur-xl px-4">
+          <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
+
+          {/* Search bar */}
+          <div className="flex-1 flex items-center justify-center">
+            <button className="flex items-center gap-2 h-9 w-full max-w-md rounded-lg border border-border/60 bg-[#F8F9FA] px-3 text-sm text-muted-foreground hover:border-border hover:bg-[#F3F4F6] transition-all">
+              <Search className="h-3.5 w-3.5" />
+              <span className="flex-1 text-left">Search deals, partners, assets...</span>
+              <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border/60 bg-white px-1.5 text-[10px] font-medium text-muted-foreground/70">
+                <Command className="h-2.5 w-2.5" />K
+              </kbd>
+            </button>
           </div>
-          <div className="flex items-center gap-1">
-            <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-              <Upload className="h-4 w-4" />
-            </button>
-            <button className="relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+
+          {/* Right actions */}
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              asChild
+            >
+              <Link href="/deals/new">
+                <Plus className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="relative h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+            >
               <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#F97316]" />
-            </button>
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#F97316] ring-2 ring-white" />
+            </Button>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto bg-[#FAFAFA]">
+          <div className="mx-auto max-w-[1400px] p-6">{children}</div>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );
