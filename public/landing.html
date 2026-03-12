@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CartaOS - Deal Intelligence & Execution OS for Biotech</title>
-  <meta name="description" content="CartaOS is the deal intelligence and execution operating system for biotech BD teams. Real data, real intelligence, live platform." />
+  <title>CartaOS - The Deal Intelligence OS for Biotech</title>
+  <meta name="description" content="CartaOS is the deal intelligence operating system for biotech. Every biotech partnership is a billion-dollar decision. We give them the intelligence to get it right." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -72,7 +72,7 @@
     .section-sub {
       font-size: 1.05rem;
       color: var(--text-muted);
-      max-width: 640px;
+      max-width: 720px;
       line-height: 1.7;
     }
 
@@ -175,38 +175,25 @@
       max-width: 860px;
       margin: 0 auto 12px;
     }
-    .hero h1 .rolling-wrapper {
-      display: inline-block;
-      position: relative;
-      height: 1.18em;
-      overflow: hidden;
-      vertical-align: bottom;
-    }
-    .hero h1 .rolling-text {
-      display: block;
-      animation: roll 9s cubic-bezier(0.4,0,0.2,1) infinite;
-    }
-    .hero h1 .rolling-text span {
-      display: block;
-      height: 1.18em;
-      line-height: 1.18;
-      background: linear-gradient(135deg, var(--accent), var(--accent2), var(--coral));
+    .hero h1 .accent-text {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    @keyframes roll {
-      0%, 28%   { transform: translateY(0); }
-      33%, 61%  { transform: translateY(-33.333%); }
-      66%, 94%  { transform: translateY(-66.666%); }
-      100%      { transform: translateY(0); }
-    }
     .hero-sub {
-      font-size: 1.1rem;
+      font-size: 1.15rem;
       color: var(--text-muted);
-      max-width: 700px;
-      margin: 24px auto 40px;
+      max-width: 600px;
+      margin: 16px auto 8px;
       line-height: 1.75;
+    }
+    .hero-subtitle {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      margin-bottom: 40px;
     }
     .hero-ctas {
       display: flex;
@@ -215,30 +202,482 @@
       flex-wrap: wrap;
     }
 
-    /* ===== Numbers ===== */
-    .numbers {
-      padding: 60px 24px 80px;
+    /* ===== Section Common ===== */
+    .section {
+      padding: 100px 24px;
     }
-    .numbers-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
+    .section-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .section-header .section-sub {
+      margin: 0 auto;
+    }
+
+    /* ===== Problem Section ===== */
+    .problem-stack {
+      display: flex;
+      flex-direction: column;
       gap: 24px;
+      margin-top: 48px;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
     }
-    .num-card {
+    .problem-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      padding: 32px 28px 32px 32px;
+      display: flex;
+      gap: 24px;
+      transition: all var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+    .problem-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow);
+      border-color: var(--border-light);
+    }
+    .problem-card .accent-bar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+    }
+    .problem-card .problem-stat {
+      flex-shrink: 0;
+      min-width: 180px;
+    }
+    .problem-card .problem-stat .stat-value {
+      font-size: 1.6rem;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .problem-card .problem-stat .stat-label {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .problem-card .problem-desc {
+      flex: 1;
+    }
+    .problem-card .problem-desc p {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+    .callout {
+      text-align: center;
       padding: 32px 24px;
+      margin-top: 40px;
+      font-size: 1.05rem;
+      font-weight: 600;
+      line-height: 1.6;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ===== Solution Section ===== */
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-top: 48px;
+      max-width: 960px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .comparison-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px 28px;
+      transition: all var(--transition);
+    }
+    .comparison-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+    .comparison-card h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .comparison-card ul {
+      list-style: none;
+      padding: 0;
+    }
+    .comparison-card ul li {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .comparison-card ul li:last-child { border-bottom: none; }
+    .comparison-card ul li .icon {
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-top: 48px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 22px;
       text-align: center;
       transition: all var(--transition);
     }
-    .num-card:hover {
+    .feature-card:hover {
       transform: translateY(-4px);
-      border-color: var(--border-light);
       box-shadow: var(--shadow);
+      border-color: var(--border-light);
     }
-    .num-card .number {
-      font-size: 2.4rem;
+    .feature-card .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 14px;
+    }
+    .feature-card h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ===== How It Works ===== */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 0;
+      align-items: center;
+      margin-top: 48px;
+      max-width: 1000px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px 28px;
+      text-align: center;
+      transition: all var(--transition);
+      position: relative;
+    }
+    .step-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+      border-color: var(--border-light);
+    }
+    .step-number {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #000;
+      font-weight: 800;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px;
+    }
+    .step-card h4 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .step-card p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+    .step-arrow {
+      font-size: 1.8rem;
+      color: var(--text-dim);
+      padding: 0 12px;
+      user-select: none;
+    }
+
+    /* ===== Why Now ===== */
+    .whynow-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 48px;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .whynow-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      transition: all var(--transition);
+    }
+    .whynow-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+      border-color: var(--border-light);
+    }
+    .whynow-card .wn-value {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .whynow-card .wn-label {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .whynow-card p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ===== Market Opportunity ===== */
+    .market-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 48px;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .market-bar {
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      transition: all var(--transition);
+    }
+    .market-bar:hover {
+      transform: translateX(6px);
+    }
+    .market-bar .mb-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .market-bar .mb-label {
+      font-size: 0.95rem;
+      color: var(--text);
+      opacity: 0.9;
+    }
+    .market-bar.tam {
+      background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(249,115,22,0.08));
+      border: 1px solid rgba(245,158,11,0.3);
+    }
+    .market-bar.tam .mb-value { color: var(--accent); }
+    .market-bar.sam {
+      background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(45,212,191,0.05));
+      border: 1px solid rgba(45,212,191,0.25);
+      margin-left: 60px;
+    }
+    .market-bar.sam .mb-value { color: var(--teal); }
+    .market-bar.som {
+      background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(56,189,248,0.05));
+      border: 1px solid rgba(56,189,248,0.25);
+      margin-left: 120px;
+    }
+    .market-bar.som .mb-value { color: var(--sky); }
+    .market-bottom-bar {
+      margin-top: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 28px;
+      text-align: center;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ===== Business Model ===== */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+    .pricing-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 0;
+      overflow: hidden;
+      transition: all var(--transition);
+    }
+    .pricing-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    }
+    .pricing-card .pricing-top {
+      height: 4px;
+    }
+    .pricing-card .pricing-body {
+      padding: 32px 28px;
+    }
+    .pricing-card .pricing-tier {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .pricing-card .pricing-price {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .pricing-card .pricing-unit {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .pricing-card .pricing-audience {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin: 16px 0 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pricing-card .pricing-features {
+      list-style: none;
+      padding: 0;
+    }
+    .pricing-card .pricing-features li {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      padding: 7px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .pricing-card .pricing-features li::before {
+      content: '\2713';
+      color: var(--teal);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .pricing-card.enterprise .pricing-features li::before {
+      color: var(--coral);
+    }
+
+    /* ===== Competitive Landscape ===== */
+    .comp-table-wrapper {
+      margin-top: 48px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .comp-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      min-width: 700px;
+    }
+    .comp-table th,
+    .comp-table td {
+      padding: 16px 18px;
+      text-align: center;
+      font-size: 0.9rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .comp-table th {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+    }
+    .comp-table th:first-child {
+      text-align: left;
+    }
+    .comp-table td:first-child {
+      text-align: left;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .comp-table td {
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .comp-table .col-highlight th,
+    .comp-table .col-highlight td {
+      /* handled per cell */
+    }
+    .comp-table td.highlight-cell {
+      background: rgba(245,158,11,0.06);
+    }
+    .comp-table th.highlight-cell {
+      background: rgba(245,158,11,0.12);
+      color: var(--accent);
+      font-size: 0.9rem;
+    }
+    .comp-table tbody tr {
+      transition: background var(--transition);
+    }
+    .comp-table tbody tr:hover td {
+      background: rgba(255,255,255,0.02);
+    }
+    .comp-table tbody tr:hover td.highlight-cell {
+      background: rgba(245,158,11,0.1);
+    }
+    .sym-yes { color: var(--teal); font-weight: 700; }
+    .sym-no { color: var(--coral); font-weight: 700; }
+    .sym-partial { color: var(--accent); font-weight: 700; }
+
+    /* ===== Traction ===== */
+    .traction-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-top: 48px;
+    }
+    .traction-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 22px;
+      text-align: center;
+      transition: all var(--transition);
+    }
+    .traction-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+      border-color: var(--border-light);
+    }
+    .traction-card .tc-value {
+      font-size: 2rem;
       font-weight: 800;
       background: linear-gradient(135deg, var(--accent), var(--accent2));
       -webkit-background-clip: text;
@@ -246,324 +685,127 @@
       background-clip: text;
       margin-bottom: 8px;
     }
-    .num-card .label {
-      font-size: 0.92rem;
+    .traction-card .tc-label {
+      font-size: 0.88rem;
       color: var(--text-muted);
-      margin-bottom: 12px;
       line-height: 1.5;
     }
-    .num-card .source {
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      color: var(--text-dim);
-      letter-spacing: 0.02em;
-    }
-
-    /* ===== Problem / Solution ===== */
-    .problem {
-      padding: 80px 24px;
-    }
-    .problem-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 48px;
-      margin-top: 48px;
-    }
-    .problem-col h3 {
-      font-size: 1.4rem;
-      font-weight: 700;
-      margin-bottom: 28px;
-    }
-    .problem-col.breaks h3 { color: var(--coral); }
-    .problem-col.fixes h3 { color: var(--teal); }
-    .problem-item {
+    .testimonials {
       display: flex;
-      gap: 14px;
-      align-items: flex-start;
-      margin-bottom: 20px;
+      flex-direction: column;
+      gap: 20px;
+      margin-top: 40px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
     }
-    .problem-icon {
-      flex-shrink: 0;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.85rem;
-      font-weight: 700;
-      margin-top: 2px;
+    .testimonial {
+      border-left: 3px solid var(--accent);
+      padding: 20px 24px;
+      background: var(--surface);
+      border-radius: 0 var(--radius) var(--radius) 0;
     }
-    .problem-col.breaks .problem-icon {
-      background: rgba(251,113,133,0.12);
-      color: var(--coral);
-    }
-    .problem-col.fixes .problem-icon {
-      background: rgba(45,212,191,0.12);
-      color: var(--teal);
-    }
-    .problem-text {
+    .testimonial p {
       font-size: 0.95rem;
       color: var(--text-muted);
-      line-height: 1.6;
+      line-height: 1.7;
+      font-style: italic;
     }
-    .problem-text strong {
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    /* ===== Platform (Now Live) ===== */
-    .platform {
-      padding: 100px 24px;
-    }
-    .platform-header {
-      text-align: center;
-      margin-bottom: 56px;
-    }
-    .platform-header .section-sub {
-      margin: 0 auto;
-    }
-    .platform-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
-      margin-bottom: 48px;
-    }
-    .plat-card {
-      position: relative;
-      background: var(--surface);
-      border-radius: var(--radius-lg);
-      padding: 32px 28px;
-      transition: all var(--transition);
-      overflow: hidden;
-    }
-    .plat-card::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: var(--radius-lg);
-      padding: 1px;
-      background: linear-gradient(135deg, rgba(245,158,11,0.25), rgba(167,139,250,0.15), rgba(45,212,191,0.15));
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      pointer-events: none;
-    }
-    .plat-card:hover {
-      transform: translateY(-6px);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
-    }
-    .plat-card .card-icon {
-      font-size: 1.8rem;
-      margin-bottom: 16px;
-    }
-    .plat-card h4 {
-      font-size: 1.1rem;
-      font-weight: 700;
-      margin-bottom: 10px;
-    }
-    .plat-card p {
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      line-height: 1.65;
-    }
-    .platform-cta {
-      text-align: center;
+    .testimonial .t-source {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-top: 10px;
+      font-style: normal;
     }
 
     /* ===== Founder ===== */
     .founder {
       padding: 100px 24px;
     }
-    .founder-inner {
+    .founder-card {
+      max-width: 860px;
+      margin: 48px auto 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 48px 40px;
       display: flex;
-      gap: 56px;
-      align-items: center;
-      max-width: 960px;
-      margin: 0 auto;
+      gap: 40px;
+      align-items: flex-start;
+      transition: all var(--transition);
+    }
+    .founder-card:hover {
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
     }
     .founder-photo {
       flex-shrink: 0;
-      width: 180px;
-      height: 180px;
+      width: 140px;
+      height: 140px;
       border-radius: 50%;
-      background: linear-gradient(135deg, var(--surface-light), var(--surface));
+      background: linear-gradient(135deg, var(--surface-light), var(--bg));
       border: 2px solid var(--border-light);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 2.4rem;
+      font-size: 2.2rem;
       font-weight: 700;
       color: var(--accent);
       letter-spacing: 0.04em;
     }
-    .founder-content .tag { margin-bottom: 16px; }
-    .founder-quote {
-      font-size: 1.12rem;
-      font-style: italic;
-      color: var(--text-muted);
-      line-height: 1.75;
-      margin-bottom: 16px;
-      border-left: 3px solid var(--accent);
-      padding-left: 20px;
-    }
-    .founder-bold {
-      font-size: 1.2rem;
-      font-weight: 700;
-      margin-bottom: 20px;
-      color: var(--text);
-    }
+    .founder-info { flex: 1; }
     .founder-name {
+      font-size: 1.3rem;
       font-weight: 700;
-      font-size: 1rem;
       margin-bottom: 4px;
     }
     .founder-title {
       font-family: var(--font-mono);
-      font-size: 0.82rem;
-      color: var(--text-dim);
-      margin-bottom: 12px;
-    }
-    .founder-bio {
-      font-size: 0.88rem;
-      color: var(--text-muted);
-      line-height: 1.65;
-    }
-
-    /* ===== Agents ===== */
-    .agents {
-      padding: 100px 24px;
-    }
-    .agents-header {
-      text-align: center;
-      margin-bottom: 56px;
-    }
-    .agents-header .section-sub { margin: 0 auto; }
-    .agents-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      margin-bottom: 0;
-    }
-    .agent-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px 22px;
-      cursor: pointer;
-      transition: all var(--transition);
-      position: relative;
-    }
-    .agent-card:hover, .agent-card.active {
-      transform: translateY(-4px);
-      box-shadow: var(--shadow);
-    }
-    .agent-card.active { border-width: 2px; }
-    .agent-card .agent-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-bottom: 14px;
-    }
-    .agent-card .agent-label {
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 6px;
-    }
-    .agent-card h4 {
-      font-size: 1.05rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .agent-card p {
       font-size: 0.85rem;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+    .founder-bullets {
+      list-style: none;
+      padding: 0;
+    }
+    .founder-bullets li {
+      font-size: 0.9rem;
       color: var(--text-muted);
-      line-height: 1.55;
-    }
-    .agent-detail {
-      margin-top: 24px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 36px 32px;
-      display: none;
-      animation: fadeUp 0.35s ease;
-    }
-    .agent-detail.visible { display: block; }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .agent-detail h4 {
-      font-size: 1.2rem;
-      font-weight: 700;
-      margin-bottom: 12px;
-    }
-    .agent-detail p {
-      font-size: 0.95rem;
-      color: var(--text-muted);
-      line-height: 1.7;
-      max-width: 700px;
-    }
-
-    /* ===== Workflow ===== */
-    .workflow {
-      padding: 100px 24px;
-    }
-    .workflow-header {
-      text-align: center;
-      margin-bottom: 56px;
-    }
-    .workflow-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 24px;
-    }
-    .wf-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 32px 24px;
-      text-align: center;
-      transition: all var(--transition);
-    }
-    .wf-card:hover {
-      transform: translateY(-4px);
-      border-color: var(--border-light);
-      box-shadow: var(--shadow);
-    }
-    .wf-card .wf-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: 14px;
-      background: var(--surface-light);
+      line-height: 1.6;
+      padding: 6px 0;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      margin: 0 auto 16px;
+      align-items: flex-start;
+      gap: 10px;
     }
-    .wf-card h4 {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 8px;
+    .founder-bullets li::before {
+      content: '\25B8';
+      color: var(--accent);
+      flex-shrink: 0;
+      margin-top: 1px;
     }
-    .wf-card p {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      line-height: 1.55;
+    .hiring-callout {
+      margin-top: 32px;
+      padding: 20px 24px;
+      background: rgba(251,113,133,0.06);
+      border: 1px solid rgba(251,113,133,0.2);
+      border-radius: var(--radius);
+      color: var(--coral);
+      font-size: 0.92rem;
+      font-weight: 600;
+      line-height: 1.6;
+      max-width: 860px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
     }
 
-    /* ===== Vision / CTA ===== */
-    .vision {
+    /* ===== Closing / CTA ===== */
+    .closing {
       padding: 100px 24px;
       text-align: center;
     }
-    .vision-inner {
+    .closing-inner {
       position: relative;
       background: var(--surface);
       border: 1px solid var(--border);
@@ -573,7 +815,7 @@
       margin: 0 auto;
       overflow: hidden;
     }
-    .vision-inner::before {
+    .closing-inner::before {
       content: '';
       position: absolute;
       top: -50%;
@@ -584,7 +826,38 @@
       background: radial-gradient(circle, rgba(245,158,11,0.06) 0%, transparent 70%);
       pointer-events: none;
     }
-    .vision .section-heading { margin-bottom: 32px; max-width: 600px; margin-left: auto; margin-right: auto; }
+    .closing-inner h2 {
+      font-size: clamp(1.4rem, 3.5vw, 2rem);
+      font-weight: 700;
+      line-height: 1.35;
+      max-width: 600px;
+      margin: 0 auto 12px;
+      position: relative;
+    }
+    .closing-inner .closing-accent {
+      font-size: clamp(1.4rem, 3.5vw, 2rem);
+      font-weight: 700;
+      line-height: 1.35;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: block;
+      margin-bottom: 32px;
+      position: relative;
+    }
+    .closing-inner .btn { position: relative; }
+    .closing-email {
+      margin-top: 20px;
+      position: relative;
+    }
+    .closing-email a {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      transition: color var(--transition);
+    }
+    .closing-email a:hover { color: var(--accent); }
 
     /* ===== Footer ===== */
     .footer {
@@ -603,38 +876,77 @@
     }
     .footer a:hover { color: var(--accent); }
 
+    /* ===== Scroll Reveal Animation ===== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     /* ===== Responsive ===== */
     @media (max-width: 1024px) {
-      .numbers-grid, .agents-grid, .workflow-grid {
+      .feature-grid {
         grid-template-columns: repeat(2, 1fr);
       }
-      .platform-grid {
+      .pricing-grid {
         grid-template-columns: repeat(2, 1fr);
       }
+      .traction-metrics {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .steps-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .step-arrow {
+        transform: rotate(90deg);
+        padding: 4px 0;
+        text-align: center;
+      }
+      .market-bar.sam { margin-left: 30px; }
+      .market-bar.som { margin-left: 60px; }
     }
     @media (max-width: 768px) {
       .hero { padding: 72px 24px 56px; }
       .hero h1 { font-size: 2rem; }
-      .problem-grid {
+      .comparison-grid {
         grid-template-columns: 1fr;
-        gap: 40px;
+        gap: 24px;
       }
-      .founder-inner {
+      .whynow-grid {
+        grid-template-columns: 1fr;
+      }
+      .pricing-grid {
+        grid-template-columns: 1fr;
+      }
+      .founder-card {
         flex-direction: column;
+        align-items: center;
         text-align: center;
+        padding: 36px 28px;
       }
-      .founder-quote {
-        border-left: none;
-        padding-left: 0;
-        border-top: 3px solid var(--accent);
-        padding-top: 16px;
+      .founder-bullets li {
+        text-align: left;
       }
-      .platform-grid {
-        grid-template-columns: 1fr;
+      .problem-card {
+        flex-direction: column;
+        gap: 12px;
       }
+      .problem-card .problem-stat {
+        min-width: unset;
+      }
+      .market-bar.sam { margin-left: 0; }
+      .market-bar.som { margin-left: 0; }
     }
     @media (max-width: 600px) {
-      .numbers-grid, .agents-grid, .workflow-grid {
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+      .traction-metrics {
         grid-template-columns: 1fr;
       }
       .hero-ctas { flex-direction: column; align-items: center; }
@@ -643,7 +955,7 @@
 </head>
 <body>
 
-  <!-- ===== NAV ===== -->
+  <!-- ===== 1. NAV ===== -->
   <nav class="nav">
     <div class="nav-inner">
       <a href="#" class="nav-logo">
@@ -657,25 +969,17 @@
     </div>
   </nav>
 
-  <!-- ===== HERO ===== -->
+  <!-- ===== 2. HERO ===== -->
   <section class="hero">
     <div class="container">
-      <div class="hero-tag">Deal Intelligence &amp; Execution OS for Biotech</div>
+      <div class="hero-tag">The Deal Intelligence OS for Biotech</div>
       <h1>
-        Biotech partnerships are the engine that turns scientific discoveries
-        <span class="rolling-wrapper">
-          <span class="rolling-text">
-            <span>into medicines.</span>
-            <span>into patient hopes.</span>
-            <span>into saving lives.</span>
-          </span>
-        </span>
+        Every biotech partnership is a <span class="accent-text">billion-dollar decision.</span>
       </h1>
       <p class="hero-sub">
-        Biotechs originate over 65% of new drugs &mdash; but big pharma launches 76% of them.
-        The partnership in between is where value is created or destroyed. We're on a mission to
-        give biotech teams the intelligence to master every deal.
+        We give them the intelligence to get it right.
       </p>
+      <p class="hero-subtitle">Pre-Seed Fundraise &middot; 2026 &middot; Confidential</p>
       <div class="hero-ctas">
         <a href="https://cartaos.vercel.app/login" class="btn btn-primary">Try Live Demo &rarr;</a>
         <a href="#how" class="btn btn-ghost">See How It Works</a>
@@ -683,253 +987,431 @@
     </div>
   </section>
 
-  <!-- ===== NUMBERS ===== -->
-  <section class="numbers">
+  <!-- ===== 3. THE PROBLEM ===== -->
+  <section class="section" id="problem">
     <div class="container">
-      <div class="numbers-grid">
-        <div class="num-card">
-          <div class="number">$250B+</div>
-          <div class="label">in biotech licensing deals in 2025</div>
-          <div class="source">DealForma &middot; J.P. Morgan</div>
+      <div class="section-header">
+        <span class="tag">The Problem</span>
+        <h2 class="section-heading">The Problem</h2>
+        <p class="section-sub">$250B+ in licensing deals signed in 2025 alone. Running on spreadsheets and guesswork.</p>
+      </div>
+      <div class="problem-stack">
+        <!-- Card 1 -->
+        <div class="problem-card reveal">
+          <div class="accent-bar" style="background: var(--teal);"></div>
+          <div class="problem-stat">
+            <div class="stat-value" style="color: var(--teal);">$2&ndash;5B per deal</div>
+            <div class="stat-label">Biotech discovers a breakthrough therapy</div>
+          </div>
+          <div class="problem-desc">
+            <p>65% of new drugs originate in small biotech labs. To commercialize, they must partner with pharma.</p>
+          </div>
         </div>
-        <div class="num-card">
-          <div class="number">65%</div>
-          <div class="label">of new drugs originate in biotech &amp; academia</div>
-          <div class="source">FDA &middot; Nature Reviews Drug Discovery</div>
+        <!-- Card 2 -->
+        <div class="problem-card reveal">
+          <div class="accent-bar" style="background: var(--accent);"></div>
+          <div class="problem-stat">
+            <div class="stat-value" style="color: var(--accent);">$200K&ndash;500K</div>
+            <div class="stat-label">In deal advisory costs</div>
+          </div>
+          <div class="problem-desc">
+            <p>They negotiate blind against pharma giants. No benchmarking tools. No deal comps. No partner intel. Retainer + success fees for boutique advisors at $300&ndash;$500/hr.</p>
+          </div>
         </div>
-        <div class="num-card">
-          <div class="number">1 in 3</div>
-          <div class="label">pharma-biotech alliances fail</div>
-          <div class="source">Cutting Edge Information &middot; PMC</div>
+        <!-- Card 3 -->
+        <div class="problem-card reveal">
+          <div class="accent-bar" style="background: var(--coral);"></div>
+          <div class="problem-stat">
+            <div class="stat-value" style="color: var(--coral);">$100M+ left on the table</div>
+            <div class="stat-label">Deals collapse or get massively undervalued</div>
+          </div>
+          <div class="problem-desc">
+            <p>Wrong upfronts, bad milestones, missed partners. Therapies stuck in the valley of death. Patients wait.</p>
+          </div>
         </div>
-        <div class="num-card">
-          <div class="number">$138B</div>
-          <div class="label">in biopharma M&amp;A in 2025 across 129 deals</div>
-          <div class="source">J.P. Morgan Q4 2025</div>
+      </div>
+      <div class="callout" style="color: var(--coral);">
+        Information asymmetry costs small biotechs billions every year. No purpose-built tool exists to fix it.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 4. THE SOLUTION: DEAL TWIN ===== -->
+  <section class="section" id="solution">
+    <div class="container">
+      <div class="section-header">
+        <span class="tag">The Solution</span>
+        <h2 class="section-heading">The Solution: Deal Twin</h2>
+        <p class="section-sub" style="color: var(--teal);">Input your therapeutic asset. Get a predictive model of your entire deal landscape.</p>
+      </div>
+      <div class="comparison-grid">
+        <!-- Today -->
+        <div class="comparison-card" style="border-color: var(--coral);">
+          <h3 style="color: var(--coral);">Today</h3>
+          <ul>
+            <li><span class="icon" style="color: var(--coral);">&times;</span> 6&ndash;12 months of manual prep</li>
+            <li><span class="icon" style="color: var(--coral);">&times;</span> $200K&ndash;$500K in advisory fees</li>
+            <li><span class="icon" style="color: var(--coral);">&times;</span> Still negotiating blind</li>
+            <li><span class="icon" style="color: var(--coral);">&times;</span> Excel vs. pharma's BD infrastructure</li>
+          </ul>
+        </div>
+        <!-- With CartaOS -->
+        <div class="comparison-card" style="border-color: var(--teal);">
+          <h3 style="color: var(--teal);">With CartaOS</h3>
+          <ul>
+            <li><span class="icon" style="color: var(--teal);">&check;</span> Input your asset, Deal Twin in minutes</li>
+            <li><span class="icon" style="color: var(--teal);">&check;</span> Full benchmarks, partner rankings, term strategy</li>
+            <li><span class="icon" style="color: var(--teal);">&check;</span> $60K/yr vs. $200K&ndash;$500K</li>
+            <li><span class="icon" style="color: var(--teal);">&check;</span> Negotiate from strength, not guesswork</li>
+          </ul>
+        </div>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card reveal">
+          <div class="feature-icon">&#128269;</div>
+          <h4>Deal Benchmarking</h4>
+          <p>5,000+ biopharma agreements. Comps, upfronts, milestones, royalties.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">&#129309;</div>
+          <h4>Partner Matching</h4>
+          <p>Pharma ranked by deal history, therapeutic fit, pipeline gaps.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">&#129504;</div>
+          <h4>AI Deal Companion</h4>
+          <p>Agentic analyst: sense-checks structures, preps briefs, flags risks.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">&#128187;</div>
+          <h4>Deal Workspace</h4>
+          <p>M365/Google integrated. Term sheets, comms.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===== PROBLEM / SOLUTION ===== -->
-  <section class="problem">
+  <!-- ===== 5. HOW IT WORKS ===== -->
+  <section class="section" id="how">
     <div class="container">
-      <div style="text-align:center; margin-bottom:16px;">
-        <span class="tag">The Gap</span>
-      </div>
-      <h2 class="section-heading" style="text-align:center;">The intelligence layer is broken</h2>
-      <div class="problem-grid">
-        <!-- Breaks -->
-        <div class="problem-col breaks">
-          <h3>What breaks today</h3>
-          <div class="problem-item">
-            <div class="problem-icon">&times;</div>
-            <div class="problem-text"><strong>Scattered intelligence.</strong> Deal comps live in PDFs, inboxes, and analysts' heads &mdash; never in one place.</div>
-          </div>
-          <div class="problem-item">
-            <div class="problem-icon">&times;</div>
-            <div class="problem-text"><strong>Stale benchmarks.</strong> Teams negotiate billion-dollar terms using 18-month-old comparables.</div>
-          </div>
-          <div class="problem-item">
-            <div class="problem-icon">&times;</div>
-            <div class="problem-text"><strong>Translation gaps.</strong> R&amp;D, BD, Legal, and Finance speak different languages about the same deal.</div>
-          </div>
-          <div class="problem-item">
-            <div class="problem-icon">&times;</div>
-            <div class="problem-text"><strong>Relationship blind spots.</strong> Stakeholder dynamics and alliance health are tracked on gut feel, not data.</div>
-          </div>
-        </div>
-        <!-- Fixes -->
-        <div class="problem-col fixes">
-          <h3>What CartaOS changes</h3>
-          <div class="problem-item">
-            <div class="problem-icon">&check;</div>
-            <div class="problem-text"><strong>One deal graph.</strong> Every transaction, partner, and term mapped and queryable in real time.</div>
-          </div>
-          <div class="problem-item">
-            <div class="problem-icon">&check;</div>
-            <div class="problem-text"><strong>Live benchmarks.</strong> Continuously updated deal comps from SEC EDGAR and ClinicalTrials.gov.</div>
-          </div>
-          <div class="problem-item">
-            <div class="problem-icon">&check;</div>
-            <div class="problem-text"><strong>Communication Translator.</strong> Auto-translates deal language for every department in real time.</div>
-          </div>
-          <div class="problem-item">
-            <div class="problem-icon">&check;</div>
-            <div class="problem-text"><strong>Relationship Companion.</strong> Behavioral maps, sentiment timelines, and alliance health predictions.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== PLATFORM (NOW LIVE) ===== -->
-  <section class="platform" id="platform">
-    <div class="container">
-      <div class="platform-header">
-        <span class="tag">Now Live</span>
-        <h2 class="section-heading">Real intelligence. Real data. Try it yourself.</h2>
-        <p class="section-sub">
-          The platform is live with a real database, SEC EDGAR integration, ClinicalTrials.gov feeds,
-          and AI-powered deal intelligence. No mockups &mdash; this is production software you can explore right now.
-        </p>
-      </div>
-      <div class="platform-grid">
-        <div class="plat-card">
-          <div class="card-icon">&#128269;</div>
-          <h4>Live Deal Search</h4>
-          <p>Search across SEC EDGAR filings, ClinicalTrials.gov, and your own database simultaneously. Click any result to go directly to the source document.</p>
-        </div>
-        <div class="plat-card">
-          <div class="card-icon">&#129504;</div>
-          <h4>AI Deal Conductor</h4>
-          <p>Three-tab intelligence hub: Deal Overview, Communication Translator, and Relationship Companion &mdash; all powered by behavioral analytics.</p>
-        </div>
-        <div class="plat-card">
-          <div class="card-icon">&#128172;</div>
-          <h4>Communication Translator</h4>
-          <p>Translate deal language across departments: R&amp;D, BD, Legal, and Finance. Each speaks differently &mdash; CartaOS bridges the gap.</p>
-        </div>
-        <div class="plat-card">
-          <div class="card-icon">&#129309;</div>
-          <h4>Relationship Companion</h4>
-          <p>Stakeholder behavioral maps, sentiment timelines, alliance health prediction, and accountability analytics for every partner.</p>
-        </div>
-        <div class="plat-card">
-          <div class="card-icon">&#128506;</div>
-          <h4>20+ Deal Routes</h4>
-          <p>Benchmarks, trends, partners, negotiations, term builder, workspaces &mdash; everything a BD team needs in one place.</p>
-        </div>
-        <div class="plat-card">
-          <div class="card-icon">&#128451;</div>
-          <h4>Real Database</h4>
-          <p>Connected to Supabase PostgreSQL with full authentication. Your data, your deals, your intelligence.</p>
-        </div>
-      </div>
-      <div class="platform-cta">
-        <a href="https://cartaos.vercel.app/login" class="btn btn-primary">Explore the Platform &rarr;</a>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== FOUNDER ===== -->
-  <section class="founder">
-    <div class="container">
-      <div class="founder-inner">
-        <div class="founder-photo">AM</div>
-        <div class="founder-content">
-          <span class="tag">From One BD Professional to Another</span>
-          <blockquote class="founder-quote">
-            &ldquo;I spent years evaluating billion-dollar oncology deals at BioNTech. I saw how broken the
-            intelligence layer was &mdash; teams making transformative decisions on scattered PDFs, stale comps,
-            and gut feel.&rdquo;
-          </blockquote>
-          <p class="founder-bold">I built what I wished existed.</p>
-          <p class="founder-name">Anastasios Mastroanastasiou</p>
-          <p class="founder-title">Founder &amp; CEO, CartaOS</p>
-          <p class="founder-bio">
-            Former M&amp;A Due Diligence &amp; Competitive Intelligence at BioNTech SE &mdash; evaluated clinical-stage
-            oncology assets exceeding $1B. Educated at Karolinska Institutet and Stockholm School of Economics with
-            scientific research experience at Harvard Medical School and King Abdullah University of Science and
-            Technology (KAUST).
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== AGENTS ===== -->
-  <section class="agents" id="how">
-    <div class="container">
-      <div class="agents-header">
+      <div class="section-header">
         <span class="tag">How It Works</span>
-        <h2 class="section-heading">Four autonomous agents. One deal intelligence OS.</h2>
-        <p class="section-sub">
-          Each agent operates continuously, feeding intelligence into a unified graph that powers every decision your team makes.
-        </p>
+        <h2 class="section-heading">How It Works</h2>
+        <p class="section-sub">From therapeutic asset to full deal intelligence in three steps.</p>
       </div>
-      <div class="agents-grid" id="agentsGrid">
-        <div class="agent-card active" data-agent="0" style="border-color: var(--accent);">
-          <div class="agent-dot" style="background: var(--accent);"></div>
-          <div class="agent-label">The Eyes</div>
-          <h4>Market Sentinel</h4>
-          <p>Monitors deals, pricing signals, and regulatory shifts 24/7.</p>
+      <div class="steps-grid">
+        <div class="step-card reveal">
+          <div class="step-number">1</div>
+          <h4>Input Your Asset</h4>
+          <p>Upload your therapeutic asset profile: indication, phase, mechanism, partnership goals.</p>
         </div>
-        <div class="agent-card" data-agent="1">
-          <div class="agent-dot" style="background: var(--violet);"></div>
-          <div class="agent-label">The Memory</div>
-          <h4>Deal Graph Engine</h4>
-          <p>Maps the entire deal landscape into a queryable knowledge graph.</p>
+        <div class="step-arrow">&rarr;</div>
+        <div class="step-card reveal">
+          <div class="step-number">2</div>
+          <h4>Deal Twin Generated</h4>
+          <p>CartaOS builds a living network model: comparable deals, ranked partners, optimal term structures, risk flags.</p>
         </div>
-        <div class="agent-card" data-agent="2">
-          <div class="agent-dot" style="background: var(--accent2);"></div>
-          <div class="agent-label">The Judgment</div>
-          <h4>Strategy Analyst</h4>
-          <p>Models deal risks, pricing cascades, and negotiation leverage.</p>
-        </div>
-        <div class="agent-card" data-agent="3">
-          <div class="agent-dot" style="background: var(--teal);"></div>
-          <div class="agent-label">The Execution Layer</div>
-          <h4>Deal Advisor</h4>
-          <p>Turns intelligence into board-ready materials and action plans.</p>
+        <div class="step-arrow">&rarr;</div>
+        <div class="step-card reveal">
+          <div class="step-number">3</div>
+          <h4>Negotiate From Strength</h4>
+          <p>AI companion preps briefs, benchmarks every term, and monitors the market, so you never miss a signal.</p>
         </div>
       </div>
-      <div class="agent-detail visible" id="agentDetail">
-        <!-- Content injected by JS -->
+      <div class="callout" style="color: var(--accent);">
+        What used to take 6&ndash;12 months and $200K&ndash;$500K in deal advisory, delivered in minutes for $5K/month.
       </div>
     </div>
   </section>
 
-  <!-- ===== WORKFLOW ===== -->
-  <section class="workflow">
+  <!-- ===== 6. WHY NOW ===== -->
+  <section class="section" id="whynow">
     <div class="container">
-      <div class="workflow-header">
-        <span class="tag">Your Deal Hub</span>
-        <h2 class="section-heading">One central repository for a smart BD team</h2>
-        <p class="section-sub" style="margin:0 auto;">
-          CartaOS integrates with the tools your team already uses &mdash; so intelligence flows where work happens.
-        </p>
+      <div class="section-header">
+        <span class="tag">Why Now</span>
+        <h2 class="section-heading">Why Now</h2>
+        <p class="section-sub">Four converging forces make this the right moment.</p>
       </div>
-      <div class="workflow-grid">
-        <div class="wf-card">
-          <div class="wf-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20"/><path d="M10 12h4"/></svg>
-          </div>
-          <h4>Outlook</h4>
-          <p>Email threads and attachments automatically linked to deal records.</p>
+      <div class="whynow-grid">
+        <div class="whynow-card reveal">
+          <div class="wn-value" style="color: var(--accent);">$250B+</div>
+          <div class="wn-label">Record licensing year</div>
+          <p>516 biopharma licensing deals in 2025. The most active year on record. (JP Morgan / DealForma)</p>
         </div>
-        <div class="wf-card">
-          <div class="wf-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </div>
-          <h4>Teams</h4>
-          <p>Channel messages, meeting notes, and calls surfaced alongside deal context.</p>
+        <div class="whynow-card reveal">
+          <div class="wn-value" style="color: var(--coral);">$300B</div>
+          <div class="wn-label">Patent cliff looming</div>
+          <p>Pharma's biggest drugs lose patent protection by 2030. They must acquire or license, urgently.</p>
         </div>
-        <div class="wf-card">
-          <div class="wf-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
-          </div>
-          <h4>Excel &amp; PowerPoint</h4>
-          <p>Models and decks sync bi-directionally with live deal data.</p>
+        <div class="whynow-card reveal">
+          <div class="wn-value" style="color: var(--teal);">$138B</div>
+          <div class="wn-label">M&amp;A surge</div>
+          <p>129 biopharma M&amp;A deals in 2025. Avg. deal size in early 2026 up 76% vs. 2025. (JP Morgan)</p>
         </div>
-        <div class="wf-card">
-          <div class="wf-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M5 12l-3 3 3 3"/></svg>
-          </div>
-          <h4>SharePoint</h4>
-          <p>Document libraries and deal rooms connected to your intelligence graph.</p>
+        <div class="whynow-card reveal">
+          <div class="wn-value" style="color: var(--accent);">AI-Ready</div>
+          <div class="wn-label">LLMs unlock deal intelligence</div>
+          <p>For the first time, AI can parse contracts, benchmark terms, and map counterparties at scale.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===== VISION / CTA ===== -->
-  <section class="vision">
+  <!-- ===== 7. MARKET OPPORTUNITY ===== -->
+  <section class="section" id="market">
     <div class="container">
-      <div class="vision-inner">
-        <span class="tag">The Vision</span>
-        <h2 class="section-heading">The strategic decision infrastructure for the biotech industry.</h2>
+      <div class="section-header">
+        <span class="tag">Market</span>
+        <h2 class="section-heading">Market Opportunity</h2>
+      </div>
+      <div class="market-bars">
+        <div class="market-bar tam reveal">
+          <div>
+            <div class="mb-value">TAM $12B+</div>
+            <div class="mb-label">Global pharma analytics, intelligence &amp; advisory spend</div>
+          </div>
+        </div>
+        <div class="market-bar sam reveal">
+          <div>
+            <div class="mb-value">SAM $2.5B</div>
+            <div class="mb-label">Deal intelligence &amp; execution SaaS for biopharma BD teams</div>
+          </div>
+        </div>
+        <div class="market-bar som reveal">
+          <div>
+            <div class="mb-value">SOM $150M</div>
+            <div class="mb-label">Reachable market: Year 3 target via direct + channel sales</div>
+          </div>
+        </div>
+      </div>
+      <div class="market-bottom-bar">
+        65% of new drugs originate in small biotech &middot; $250B+ in licensing deals in 2025 (JP Morgan) &middot; Avg. upfront $77.7M in 2026
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 8. BUSINESS MODEL ===== -->
+  <section class="section" id="pricing">
+    <div class="container">
+      <div class="section-header">
+        <span class="tag">Business Model</span>
+        <h2 class="section-heading">Business Model</h2>
+      </div>
+      <div class="pricing-grid">
+        <!-- Growth -->
+        <div class="pricing-card reveal">
+          <div class="pricing-top" style="background: var(--teal);"></div>
+          <div class="pricing-body">
+            <div class="pricing-tier">Growth</div>
+            <div class="pricing-price" style="color: var(--teal);">$60K</div>
+            <div class="pricing-unit">/year</div>
+            <div class="pricing-audience">Clinical-stage biotechs</div>
+            <ul class="pricing-features">
+              <li>AI deal benchmarking</li>
+              <li>10 Deal Twin reports/yr</li>
+              <li>Partner matching engine</li>
+              <li>Basic workspace</li>
+            </ul>
+          </div>
+        </div>
+        <!-- Scale -->
+        <div class="pricing-card reveal">
+          <div class="pricing-top" style="background: var(--teal);"></div>
+          <div class="pricing-body">
+            <div class="pricing-tier">Scale</div>
+            <div class="pricing-price" style="color: var(--teal);">$180K</div>
+            <div class="pricing-unit">/year</div>
+            <div class="pricing-audience">Multi-asset biotech BD teams</div>
+            <ul class="pricing-features">
+              <li>Unlimited Deal Twins</li>
+              <li>AI negotiation companion</li>
+              <li>Contract clause analysis</li>
+              <li>Full M365/Google integration</li>
+            </ul>
+          </div>
+        </div>
+        <!-- Enterprise -->
+        <div class="pricing-card enterprise reveal">
+          <div class="pricing-top" style="background: var(--coral);"></div>
+          <div class="pricing-body">
+            <div class="pricing-tier">Enterprise</div>
+            <div class="pricing-price" style="color: var(--coral);">$350K+</div>
+            <div class="pricing-unit">/year</div>
+            <div class="pricing-audience">Mid-size pharma &amp; advisories</div>
+            <ul class="pricing-features">
+              <li>Portfolio-wide analytics</li>
+              <li>Custom data feeds &amp; API</li>
+              <li>CI monitoring agents</li>
+              <li>Dedicated success team</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 9. COMPETITIVE LANDSCAPE ===== -->
+  <section class="section" id="landscape">
+    <div class="container">
+      <div class="section-header">
+        <span class="tag">Landscape</span>
+        <h2 class="section-heading">Competitive Landscape</h2>
+        <p class="section-sub">No player combines AI benchmarking + contract analysis + deal execution for biotech.</p>
+      </div>
+      <div class="comp-table-wrapper">
+        <table class="comp-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>DealForma</th>
+              <th>Evaluate</th>
+              <th>BioSciDB</th>
+              <th>AlphaSense</th>
+              <th class="highlight-cell">CartaOS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Deal Comps</td>
+              <td><span class="sym-yes">&#10003;</span></td>
+              <td><span class="sym-partial">~</span></td>
+              <td><span class="sym-yes">&#10003;</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td class="highlight-cell"><span class="sym-yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td>AI / NLP Search</td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-partial">~</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-yes">&#10003;</span></td>
+              <td class="highlight-cell"><span class="sym-yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td>Contract Analysis</td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-partial">~</span></td>
+              <td class="highlight-cell"><span class="sym-yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td>CI / Pipeline Mon.</td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-yes">&#10003;</span></td>
+              <td><span class="sym-partial">~</span></td>
+              <td><span class="sym-yes">&#10003;</span></td>
+              <td class="highlight-cell"><span class="sym-yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td>Deal Execution</td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td class="highlight-cell"><span class="sym-yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td>Biotech BD Focus</td>
+              <td><span class="sym-yes">&#10003;</span></td>
+              <td><span class="sym-partial">~</span></td>
+              <td><span class="sym-yes">&#10003;</span></td>
+              <td><span class="sym-no">&times;</span></td>
+              <td class="highlight-cell"><span class="sym-yes">&#10003;</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout" style="color: var(--accent); font-family: var(--font-mono); font-size: 0.92rem; letter-spacing: 0.03em;">
+        HIGH AI SOPHISTICATION &times; HIGH BIOTECH DEAL SPECIFICITY = WHITE SPACE
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 10. TRACTION & VALIDATION ===== -->
+  <section class="section" id="traction">
+    <div class="container">
+      <div class="section-header">
+        <span class="tag">Traction</span>
+        <h2 class="section-heading">Traction &amp; Validation</h2>
+        <p class="section-sub">Early signals that the market is pulling us in.</p>
+      </div>
+      <div class="traction-metrics">
+        <div class="traction-card reveal">
+          <div class="tc-value">10+</div>
+          <div class="tc-label">Customer discovery interviews</div>
+        </div>
+        <div class="traction-card reveal">
+          <div class="tc-value">1</div>
+          <div class="tc-label">Working prototype, fully interactive</div>
+        </div>
+        <div class="traction-card reveal">
+          <div class="tc-value">UK Ltd</div>
+          <div class="tc-label">Company incorporated &amp; ICO registered</div>
+        </div>
+        <div class="traction-card reveal">
+          <div class="tc-value">Live</div>
+          <div class="tc-label">Website &amp; brand cartaos.ai deployed</div>
+        </div>
+      </div>
+      <div class="testimonials">
+        <div class="testimonial reveal">
+          <p>&ldquo;Deal benchmarking is the first thing every BD team needs, and nobody does it well today.&rdquo;</p>
+          <div class="t-source">&mdash; VP, Business Development, Clinical-stage Biotech</div>
+        </div>
+        <div class="testimonial reveal">
+          <p>&ldquo;We spend months pulling comps manually. If you can automate that, we would pay immediately.&rdquo;</p>
+          <div class="t-source">&mdash; Director, Licensing &amp; Partnerships, Mid-size Pharma</div>
+        </div>
+        <div class="testimonial reveal">
+          <p>&ldquo;The partner-matching angle is what makes this different from a database. That is real intelligence.&rdquo;</p>
+          <div class="t-source">&mdash; Managing Director, Life Sciences Advisory</div>
+        </div>
+      </div>
+      <div class="callout" style="color: var(--accent);">
+        Deal benchmarking validated as the #1 product wedge. Targeting 3&ndash;5 design partners for co-development.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 11. FOUNDER ===== -->
+  <section class="founder" id="team">
+    <div class="container">
+      <div class="section-header">
+        <span class="tag">Team</span>
+        <h2 class="section-heading">Founding Team</h2>
+      </div>
+      <div class="founder-card reveal">
+        <div class="founder-photo">AM</div>
+        <div class="founder-info">
+          <div class="founder-name">Anastasios Mastroanastasiou</div>
+          <div class="founder-title">Founder &amp; CEO</div>
+          <ul class="founder-bullets">
+            <li>BD &amp; Licensing Due Diligence Lead at BioNTech SE with over $1B+ in transactions</li>
+            <li>Earlybird Venture Capital, Visiting Analyst</li>
+            <li>Co-founded digital health platform in China, scaled to 300K users in two weeks</li>
+            <li>Karolinska Institutet &amp; Stockholm School of Economics</li>
+            <li>Biomedical Research: Harvard Medical School, DLR, KAUST</li>
+            <li>Cross-border: US, China, MENA, India, Europe</li>
+          </ul>
+        </div>
+      </div>
+      <div class="hiring-callout reveal">
+        Now hiring: CTO / Technical Co-Founder &mdash; AI/ML + full-stack &mdash; to co-build the Deal Twin engine with me.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 12. CLOSING / CTA ===== -->
+  <section class="closing">
+    <div class="container">
+      <div class="closing-inner">
+        <h2>Discoveries only become medicines when the right partnerships form.</h2>
+        <span class="closing-accent">Let's build the operating system that makes it happen.</span>
         <a href="https://cartaos.vercel.app/login" class="btn btn-primary">Try the Live Demo &rarr;</a>
+        <div class="closing-email">
+          <a href="mailto:info@cartaos.ai">info@cartaos.ai</a>
+        </div>
       </div>
     </div>
   </section>
@@ -938,10 +1420,7 @@
   <footer class="footer">
     <div class="container">
       <p>
-        &copy; 2026 Cartaos Ltd &middot; 71&ndash;75 Shelton Street, Covent Garden, London WC2H 9JQ, UK &middot; Company No. 17063322
-      </p>
-      <p style="margin-top:8px;">
-        <a href="mailto:info@cartaos.ai">info@cartaos.ai</a>
+        &copy; 2026 Cartaos Ltd &middot; 71&ndash;75 Shelton Street, Covent Garden, London WC2H 9JQ &middot; Company No. 17063322
       </p>
     </div>
   </footer>
@@ -951,58 +1430,19 @@
     (function() {
       'use strict';
 
-      /* ----- Agent data ----- */
-      var agents = [
-        {
-          name: 'Market Sentinel',
-          color: '#F59E0B',
-          detail: 'Market Sentinel scans ClinicalTrials.gov registrations, AMNOG pricing decisions, SEC EDGAR filings, and deal announcements in real time. It detects pricing signals, regulatory shifts, and competitive moves before they hit the news cycle \u2014 giving your BD team a continuous early-warning system across every therapeutic area and geography you track.'
-        },
-        {
-          name: 'Deal Graph Engine',
-          color: '#A78BFA',
-          detail: 'Deal Graph Engine maps the entire transaction network \u2014 every licensor, licensee, asset, term sheet, and milestone \u2014 into a queryable knowledge graph. It identifies comparable deals, structural gaps, and relationship patterns that would take analysts weeks to surface manually. The graph updates continuously as new intelligence arrives from Market Sentinel.'
-        },
-        {
-          name: 'Strategy Analyst',
-          color: '#F97316',
-          detail: 'Strategy Analyst models deal risks, reference pricing cascades, and negotiation leverage using scenario analysis. It simulates how different deal structures affect value capture, identifies optimal negotiation ranges based on comparable transactions, and flags regulatory or market risks that could impact deal economics.'
-        },
-        {
-          name: 'Deal Advisor',
-          color: '#2DD4BF',
-          detail: 'Deal Advisor turns raw intelligence into board-ready materials. It generates due diligence reports, valuation models, competitive landscape analyses, and board decks \u2014 all pre-populated with live data from the Deal Graph. Every output is structured for the audience: concise for C-suite, detailed for diligence teams, visual for board presentations.'
-        }
-      ];
-
-      var activeIdx = 0;
-      var grid = document.getElementById('agentsGrid');
-      var detailEl = document.getElementById('agentDetail');
-      var cards = grid.querySelectorAll('.agent-card');
-
-      function render(idx) {
-        cards.forEach(function(c, i) {
-          c.classList.toggle('active', i === idx);
-          c.style.borderColor = i === idx ? agents[i].color : '';
+      /* ----- Scroll Reveal ----- */
+      var revealEls = document.querySelectorAll('.reveal');
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+          }
         });
-        detailEl.innerHTML =
-          '<h4 style="color:' + agents[idx].color + ';">' + agents[idx].name + '</h4>' +
-          '<p>' + agents[idx].detail + '</p>';
-        detailEl.style.borderColor = agents[idx].color;
-        detailEl.classList.remove('visible');
-        void detailEl.offsetWidth; /* reflow for animation */
-        detailEl.classList.add('visible');
-      }
-
-      cards.forEach(function(card, i) {
-        card.addEventListener('click', function() {
-          activeIdx = i;
-          render(i);
-        });
+      }, {
+        threshold: 0.12,
+        rootMargin: '0px 0px -40px 0px'
       });
-
-      /* Initial render */
-      render(0);
+      revealEls.forEach(function(el) { observer.observe(el); });
 
       /* ----- Smooth scroll for anchor links ----- */
       document.querySelectorAll('a[href^="#"]').forEach(function(a) {
@@ -1013,6 +1453,16 @@
             target.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         });
+      });
+
+      /* ----- Nav background on scroll ----- */
+      var nav = document.querySelector('.nav');
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 40) {
+          nav.style.background = 'rgba(12,15,26,0.95)';
+        } else {
+          nav.style.background = 'rgba(12,15,26,0.8)';
+        }
       });
     })();
   </script>
