@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
+import { trpc } from "@/lib/trpc";
 import {
   Card,
   CardContent,
@@ -28,10 +30,12 @@ import {
   Moon,
   Save,
   Loader2,
+  Pencil,
+  X,
 } from "lucide-react";
 
 /* -------------------------------------------------------------------------- */
-/*  Toggle Switch (inline — no separate component file needed)                */
+/*  Toggle Switch                                                              */
 /* -------------------------------------------------------------------------- */
 
 function Switch({
@@ -73,14 +77,41 @@ function Switch({
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { update: updateSession } = useSession();
 
-  // Profile (read-only mock data matching sidebar user)
-  const profile = {
-    name: "Alex Kim",
-    email: "alex.kim@cartaos.io",
-    role: "Chief Business Officer",
-    company: "CartaOS, Inc.",
-  };
+  // Fetch profile from DB
+  const { data: profile, isLoading: profileLoading } = trpc.user.me.useQuery();
+  const utils = trpc.useUtils();
+
+  // Editable profile state
+  const [editing, setEditing] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formRole, setFormRole] = useState("");
+  const [formCompany, setFormCompany] = useState("");
+  const [formDepartment, setFormDepartment] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+
+  // Sync form when profile loads
+  useEffect(() => {
+    if (profile) {
+      setFormName(profile.name || "");
+      setFormRole(profile.role || "");
+      setFormCompany(profile.company || "");
+      setFormDepartment(profile.department || "");
+      setFormPhone(profile.phone || "");
+    }
+  }, [profile]);
+
+  // Update mutation
+  const updateProfile = trpc.user.updateProfile.useMutation({
+    onSuccess: () => {
+      utils.user.me.invalidate();
+      updateSession(); // refresh JWT with new profile data
+      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    },
+  });
 
   // Microsoft 365 integration
   const [msConnected, setMsConnected] = useState(false);
@@ -100,7 +131,6 @@ export default function SettingsPage() {
   const [weeklyDigest, setWeeklyDigest] = useState(false);
 
   // Save
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   async function handleConnectMs() {
@@ -115,12 +145,25 @@ export default function SettingsPage() {
     setTimeout(() => setKeyCopied(false), 2000);
   }
 
-  async function handleSave() {
-    setSaving(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  function handleSaveProfile() {
+    updateProfile.mutate({
+      name: formName,
+      role: formRole,
+      company: formCompany,
+      department: formDepartment,
+      phone: formPhone,
+    });
+  }
+
+  function handleCancelEdit() {
+    if (profile) {
+      setFormName(profile.name || "");
+      setFormRole(profile.role || "");
+      setFormCompany(profile.company || "");
+      setFormDepartment(profile.department || "");
+      setFormPhone(profile.phone || "");
+    }
+    setEditing(false);
   }
 
   return (
@@ -142,18 +185,71 @@ export default function SettingsPage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F97316]/10 text-[#F97316]">
               <User className="h-4 w-4" />
             </div>
-            <div>
+            <div className="flex-1">
               <CardTitle className="text-base">Profile</CardTitle>
               <CardDescription>Your account information</CardDescription>
             </div>
+            {!editing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditing(true)}
+                className="gap-1.5"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ReadOnlyField label="Name" value={profile.name} />
-              <ReadOnlyField label="Email" value={profile.email} />
-              <ReadOnlyField label="Role" value={profile.role} />
-              <ReadOnlyField label="Company" value={profile.company} />
-            </div>
+            {profileLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : editing ? (
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <EditableField label="Full Name" value={formName} onChange={setFormName} />
+                  <EditableField label="Company" value={formCompany} onChange={setFormCompany} />
+                  <EditableField label="Role / Title" value={formRole} onChange={setFormRole} />
+                  <EditableField label="Department" value={formDepartment} onChange={setFormDepartment} />
+                  <EditableField label="Phone" value={formPhone} onChange={setFormPhone} />
+                  <ReadOnlyField label="Email" value={profile?.email || ""} />
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  <Button
+                    onClick={handleSaveProfile}
+                    disabled={updateProfile.isPending}
+                    className="bg-[#F97316] text-white hover:bg-[#F97316]/90"
+                  >
+                    {updateProfile.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Profile
+                      </>
+                    )}
+                  </Button>
+                  <Button variant="ghost" onClick={handleCancelEdit}>
+                    <X className="mr-2 h-4 w-4" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ReadOnlyField label="Name" value={profile?.name || "—"} />
+                <ReadOnlyField label="Email" value={profile?.email || "—"} />
+                <ReadOnlyField label="Role" value={profile?.role || "—"} />
+                <ReadOnlyField label="Company" value={profile?.company || "—"} />
+                <ReadOnlyField label="Department" value={profile?.department || "—"} />
+                <ReadOnlyField label="Phone" value={profile?.phone || "—"} />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -358,34 +454,13 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/*  Save button                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="flex items-center justify-end gap-3 pb-6">
-        {saved && (
-          <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-            <Check className="h-3.5 w-3.5" />
-            Settings saved
-          </span>
-        )}
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-          className="min-w-[120px] bg-[#F97316] text-white hover:bg-[#F97316]/90"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Save Settings
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Success banner */}
+      {saved && (
+        <div className="fixed bottom-6 right-6 flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg animate-in slide-in-from-bottom-4">
+          <Check className="h-4 w-4" />
+          Profile saved successfully
+        </div>
+      )}
     </div>
   );
 }
@@ -401,6 +476,27 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
       <div className="flex h-9 items-center rounded-lg border border-border/50 bg-secondary/30 px-3 text-sm">
         {value}
       </div>
+    </div>
+  );
+}
+
+function EditableField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9"
+      />
     </div>
   );
 }

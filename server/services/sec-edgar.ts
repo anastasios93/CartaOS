@@ -29,19 +29,22 @@ export interface SecFilingResult {
  */
 export async function searchEdgarForDeals(
   query: string,
-  forms: string[] = ["8-K", "10-K"],
+  forms: string[] = ["8-K", "8-K/A", "10-K", "S-1", "6-K"],
   startDate?: string,
   endDate?: string,
-  limit = 20
-): Promise<SecFilingResult[]> {
+  limit = 20,
+  from = 0
+): Promise<{ results: SecFilingResult[]; nextToken: string | null; totalCount: number }> {
   const params = new URLSearchParams({
     q: query,
     forms: forms.join(","),
-    dateRange: startDate || endDate ? "custom" : "",
-    startdt: startDate ?? "",
-    enddt: endDate ?? "",
   });
-  params.set("from", "0");
+  if (startDate || endDate) {
+    params.set("dateRange", "custom");
+    if (startDate) params.set("startdt", startDate);
+    if (endDate) params.set("enddt", endDate);
+  }
+  params.set("from", String(from));
   params.set("size", String(limit));
 
   const url = `${BASE_URL}/LATEST/search-index?${params}`;
@@ -50,8 +53,9 @@ export async function searchEdgarForDeals(
 
   const data = await res.json();
   const hits = data?.hits?.hits ?? [];
+  const totalCount: number = data?.hits?.total?.value ?? 0;
 
-  return hits.map((h: any) => {
+  const results: SecFilingResult[] = hits.map((h: any) => {
     const src = h._source ?? {};
     const id: string = h._id ?? "";
     // ciks is an array; strip leading zeros for the URL path
@@ -80,6 +84,11 @@ export async function searchEdgarForDeals(
       documentUrl,
     };
   });
+
+  const nextFrom = from + hits.length;
+  const nextToken = nextFrom < totalCount ? String(nextFrom) : null;
+
+  return { results, nextToken, totalCount };
 }
 
 /**

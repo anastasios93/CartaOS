@@ -104,13 +104,42 @@ export function useCompanies() {
 }
 
 /**
- * Negotiations — mock data only for now (no tRPC router yet).
+ * Load negotiations from database via tRPC, falling back to mock data.
  */
 export function useNegotiations() {
+  const query = trpc.negotiation.list.useQuery(
+    { limit: 50 },
+    { retry: false, refetchOnWindowFocus: false }
+  );
+
+  const negotiations: MockNegotiation[] = query.data?.items
+    ? query.data.items.map((n) => ({
+        id: n.id,
+        title: n.title,
+        companyId: n.companyId,
+        companyName: n.company?.name ?? "",
+        status: n.status,
+        proposedUpfront: n.proposedUpfront,
+        proposedMilestones: n.proposedMilestones,
+        proposedRoyaltyLow: n.proposedRoyaltyLow,
+        proposedRoyaltyHigh: n.proposedRoyaltyHigh,
+        proposedTerritory: n.proposedTerritory ?? "TBD",
+        startDate: new Date(n.startDate).toISOString().split("T")[0],
+        targetCloseDate: n.targetCloseDate
+          ? new Date(n.targetCloseDate).toISOString().split("T")[0]
+          : null,
+        healthScore: 70,
+        blockers: Array.isArray(n.currentBlockers) ? (n.currentBlockers as MockNegotiation["blockers"]) : [],
+        nextSteps: Array.isArray(n.nextSteps) ? (n.nextSteps as MockNegotiation["nextSteps"]) : [],
+        riskFlags: Array.isArray(n.riskFlags) ? (n.riskFlags as string[]) : [],
+      }))
+    : MOCK_NEGOTIATIONS;
+
   return {
-    negotiations: MOCK_NEGOTIATIONS,
-    isLoading: false,
-    isFromDb: false,
+    negotiations,
+    isLoading: query.isLoading,
+    isFromDb: !!query.data?.items,
+    error: query.error,
   };
 }
 

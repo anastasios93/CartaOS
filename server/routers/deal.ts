@@ -85,6 +85,45 @@ export const dealRouter = router({
       return ctx.db.deal.create({ data: input });
     }),
 
+  filterOptions: publicProcedure.query(async ({ ctx }) => {
+    const [indications, territories, licensors, licensees] = await Promise.all([
+      ctx.db.deal.findMany({
+        select: { indication: true },
+        distinct: ["indication"],
+        where: { indication: { not: null } },
+      }),
+      ctx.db.deal.findMany({
+        select: { territoryScope: true },
+        distinct: ["territoryScope"],
+        where: { territoryScope: { not: null } },
+      }),
+      ctx.db.deal.findMany({
+        select: { licensorName: true },
+        distinct: ["licensorName"],
+      }),
+      ctx.db.deal.findMany({
+        select: { licenseeName: true },
+        distinct: ["licenseeName"],
+      }),
+    ]);
+
+    const companySet = new Set<string>();
+    licensors.forEach((r) => companySet.add(r.licensorName));
+    licensees.forEach((r) => companySet.add(r.licenseeName));
+
+    return {
+      indications: indications
+        .map((i) => i.indication)
+        .filter(Boolean)
+        .sort() as string[],
+      territories: territories
+        .map((t) => t.territoryScope)
+        .filter(Boolean)
+        .sort() as string[],
+      companies: [...companySet].sort(),
+    };
+  }),
+
   stats: publicProcedure.query(async ({ ctx }) => {
     const [totalDeals, dealsByType, dealsByStage, recentDeals] = await Promise.all([
       ctx.db.deal.count(),

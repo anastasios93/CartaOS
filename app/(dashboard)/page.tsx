@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   Card,
@@ -79,6 +80,7 @@ const COLORS = {
 };
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
   const { deals } = useDeals();
   const { companies } = useCompanies();
   const { negotiations } = useNegotiations();
@@ -133,7 +135,7 @@ export default function DashboardPage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">
-            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, Alex
+            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {session?.user?.name?.split(" ")[0] || "there"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Here&apos;s what&apos;s happening with your deal portfolio
@@ -141,15 +143,15 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <Link href="/deals">
-              <Sparkles className="h-3.5 w-3.5 text-[#F97316]" />
-              View Deal Twins
+            <Link href="/benchmarks">
+              <BarChart3 className="h-3.5 w-3.5 text-[#F97316]" />
+              Comparables
             </Link>
           </Button>
           <Button size="sm" className="h-8 text-xs gap-1.5 bg-[#F97316] hover:bg-[#EA580C] text-white" asChild>
-            <Link href="/deals/new">
-              <FileInput className="h-3.5 w-3.5" />
-              New Asset
+            <Link href="/hub">
+              <Zap className="h-3.5 w-3.5" />
+              New Analysis
             </Link>
           </Button>
         </div>
@@ -194,10 +196,10 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <QuickAction
-          title="Intake Asset"
-          description="Upload docs or enter deal terms"
-          icon={<FileInput className="h-5 w-5" />}
-          href="/deals/new"
+          title="Intelligence Hub"
+          description="Deploy 4 AI agents on any deal"
+          icon={<Zap className="h-5 w-5" />}
+          href="/hub"
           color={COLORS.orange}
         />
         <QuickAction

@@ -24,12 +24,14 @@ export interface ClinicalTrialResult {
  * @param query      Free-text search term (mapped to `query.term`)
  * @param status     Optional overall status filter (e.g. "RECRUITING", "COMPLETED")
  * @param limit      Max results to return (default 20, max 1000)
+ * @param pageToken  Optional page token for pagination
  */
 export async function searchClinicalTrials(
   query: string,
   status?: string,
-  limit = 20
-): Promise<ClinicalTrialResult[]> {
+  limit = 20,
+  pageToken?: string
+): Promise<{ results: ClinicalTrialResult[]; nextToken: string | null; totalCount: number }> {
   const params = new URLSearchParams({
     "query.term": query,
     pageSize: String(Math.min(limit, 1000)),
@@ -37,6 +39,10 @@ export async function searchClinicalTrials(
 
   if (status) {
     params.set("filter.overallStatus", status);
+  }
+
+  if (pageToken) {
+    params.set("pageToken", pageToken);
   }
 
   const url = `${BASE_URL}?${params}`;
@@ -50,8 +56,16 @@ export async function searchClinicalTrials(
 
   const data = await res.json();
   const studies: any[] = data.studies ?? [];
+  const totalCount: number = data.totalCount ?? 0;
+  const nextPageToken: string | undefined = data.nextPageToken;
 
-  return studies.map(parseStudy);
+  const results = studies.map(parseStudy);
+
+  return {
+    results,
+    nextToken: nextPageToken ?? null,
+    totalCount,
+  };
 }
 
 /**

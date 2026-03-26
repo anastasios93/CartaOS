@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard,
-  FileInput,
-  Sparkles,
   BarChart3,
   Users,
   MessageSquare,
@@ -16,7 +14,7 @@ import {
   Lightbulb,
   Settings,
   LogOut,
-  ChevronRight,
+  Zap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,18 +39,12 @@ const mainNav = [
   },
 ];
 
-const dealFlow = [
+const dealIntelligence = [
   {
-    title: "Asset Intake",
-    href: "/deals/new",
-    icon: FileInput,
-    description: "Upload & analyze assets",
-  },
-  {
-    title: "Deal Twin",
-    href: "/deals",
-    icon: Sparkles,
-    description: "AI-generated deal structures",
+    title: "Intelligence Hub",
+    href: "/hub",
+    icon: Zap,
+    description: "4-agent deal analysis",
     badge: "AI",
   },
   {
@@ -105,8 +97,21 @@ const tools = [
   },
 ];
 
+/** Get initials from a name string, e.g. "Jane Smith" -> "JS" */
+function getInitials(name?: string | null): string {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export function AppSidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const userName = session?.user?.name || "User";
+  const userRole = session?.user?.role || session?.user?.company || "Member";
+  const initials = getInitials(session?.user?.name);
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -157,14 +162,14 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Deal Flow */}
+        {/* Deal Intelligence */}
         <SidebarGroup className="py-1">
           <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 px-3 mb-1">
-            Deal Flow
+            Deal Intelligence
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {dealFlow.map((item) => (
+              {dealIntelligence.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     isActive={isActive(item.href)}
@@ -246,11 +251,11 @@ export function AppSidebar() {
         </SidebarMenu>
         <div className="flex items-center gap-3 px-3 py-2 mt-1 rounded-lg hover:bg-sidebar-accent/50 transition-colors cursor-pointer group">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#F97316] to-[#EA580C] text-[11px] font-bold text-white shadow-sm">
-            AK
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium leading-none truncate">Alex Kim</p>
-            <p className="text-[10px] text-muted-foreground truncate mt-0.5">CBO</p>
+            <p className="text-[13px] font-medium leading-none truncate">{userName}</p>
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">{userRole}</p>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}

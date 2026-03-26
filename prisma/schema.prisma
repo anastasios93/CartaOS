@@ -129,12 +129,18 @@ model User {
   emailVerified DateTime?
   image         String?
   passwordHash  String?
+  role          String?
+  company       String?
+  department    String?
+  phone         String?
   orgId         String?
   org           Org?      @relation(fields: [orgId], references: [id])
   accounts      Account[]
   sessions      Session[]
   documents     Document[]
+  hubRequests   HubRequest[]
   createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt @default(now())
 }
 
 model VerificationToken {
@@ -485,4 +491,46 @@ model Document {
   errorMessage    String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+}
+
+// ─── Intelligence Hub ───────────────────────────────────────────────────────
+
+model HubRequest {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetName       String
+  therapeuticArea String
+  stage           String
+  dealDirection   String
+  geographies     String[]
+  context         String?     @db.Text
+  status          String      @default("running")
+  results         HubResult[]
+  createdAt       DateTime    @default(now())
+  completedAt     DateTime?
+}
+
+model HubResult {
+  id         String     @id @default(cuid())
+  requestId  String
+  request    HubRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  agentId    String
+  status     String
+  sources    Json
+  result     Json?
+  error      String?
+  durationMs Int?
+  createdAt  DateTime   @default(now())
+}
+
+model CachedAPIResponse {
+  id        String   @id @default(cuid())
+  sourceKey String
+  query     String
+  response  Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([sourceKey, expiresAt])
 }

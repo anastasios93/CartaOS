@@ -15,11 +15,29 @@ import {
 } from "@/components/ui/card";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
+const ROLE_OPTIONS = [
+  "Chief Business Officer",
+  "Chief Executive Officer",
+  "Chief Scientific Officer",
+  "VP Business Development",
+  "VP Strategy & Partnerships",
+  "Director, Business Development",
+  "Director, Licensing",
+  "Director, Alliance Management",
+  "Associate Director",
+  "Analyst",
+  "Consultant",
+  "Other",
+];
+
 export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
+  const [department, setDepartment] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -33,7 +51,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, company, role, department }),
       });
 
       const data = await res.json();
@@ -52,12 +70,12 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-white px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-white px-4 py-12">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-orange-50 via-white to-white" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md">
+      <div className="relative z-10 w-full max-w-lg">
         {/* Logo + tagline */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F97316] to-[#C2410C] shadow-lg shadow-[#F97316]/20">
@@ -94,17 +112,67 @@ export default function SignupPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-[#1A1A2E]">Full Name</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Alex Kim"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="h-10"
-                />
+              {/* Row: Name + Company */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-[#1A1A2E]">Full Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Jane Smith"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="company" className="text-[#1A1A2E]">Company</Label>
+                  <Input
+                    id="company"
+                    type="text"
+                    placeholder="Acme Therapeutics"
+                    required
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+
+              {/* Row: Role + Department */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="role" className="text-[#1A1A2E]">Role / Title</Label>
+                  <div className="relative">
+                    <Input
+                      id="role"
+                      type="text"
+                      list="role-options"
+                      placeholder="VP Business Development"
+                      required
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="h-10"
+                    />
+                    <datalist id="role-options">
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r} value={r} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department" className="text-[#1A1A2E]">Department</Label>
+                  <Input
+                    id="department"
+                    type="text"
+                    placeholder="Business Development"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">

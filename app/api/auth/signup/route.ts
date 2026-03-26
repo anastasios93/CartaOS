@@ -4,7 +4,7 @@ import { db } from "@/server/db";
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password } = await req.json();
+    const { name, email, password, company, role, department } = await req.json();
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -35,6 +35,9 @@ export async function POST(req: Request) {
         name,
         email,
         passwordHash,
+        company: company || null,
+        role: role || null,
+        department: department || null,
       },
     });
 

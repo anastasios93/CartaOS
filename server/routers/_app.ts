@@ -5,6 +5,7 @@ import { negotiationRouter } from "./negotiation";
 import { aiRouter } from "./ai";
 import { searchRouter } from "./search";
 import { documentRouter } from "./document";
+import { userRouter } from "./user";
 
 export const appRouter = router({
   deal: dealRouter,
@@ -13,6 +14,7 @@ export const appRouter = router({
   ai: aiRouter,
   search: searchRouter,
   document: documentRouter,
+  user: userRouter,
 });
 
 export type AppRouter = typeof appRouter;

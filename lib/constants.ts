@@ -1,37 +1,108 @@
 export const THERAPEUTIC_AREAS = [
   "Oncology",
   "Immunology",
-  "Neurology",
+  "Neuroscience",
   "Cardiovascular",
   "Rare Disease",
   "Infectious Disease",
-  "Metabolic / Endocrinology",
+  "Metabolic",
   "Respiratory",
   "Ophthalmology",
   "Dermatology",
   "Gastroenterology",
   "Hematology",
-  "Gene Therapy",
-  "Cell Therapy",
+  "Multi-therapeutic",
   "Other",
 ] as const;
+
+/**
+ * Maps a therapeutic area filter value to all equivalent names across DB and worldwide datasets.
+ * Allows a single dropdown selection to match deals regardless of naming convention.
+ */
+export const TA_ALIASES: Record<string, string[]> = {
+  "Oncology": ["Oncology"],
+  "Immunology": ["Immunology"],
+  "Neuroscience": ["Neuroscience", "Neurology", "CNS"],
+  "Cardiovascular": ["Cardiovascular"],
+  "Rare Disease": ["Rare Disease"],
+  "Infectious Disease": ["Infectious Disease"],
+  "Metabolic": ["Metabolic", "Metabolic / Endocrinology", "Endocrinology"],
+  "Respiratory": ["Respiratory"],
+  "Ophthalmology": ["Ophthalmology"],
+  "Dermatology": ["Dermatology"],
+  "Gastroenterology": ["Gastroenterology"],
+  "Hematology": ["Hematology"],
+  "Multi-therapeutic": ["Multi-therapeutic"],
+  "Other": ["Other"],
+};
+
+/** Check if a deal's TA matches the selected filter TA (considering aliases) */
+export function matchesTA(dealTA: string, filterTA: string): boolean {
+  const aliases = TA_ALIASES[filterTA];
+  if (!aliases) return dealTA.toLowerCase().includes(filterTA.toLowerCase());
+  return aliases.some(alias => dealTA.toLowerCase().includes(alias.toLowerCase()));
+}
+
+/**
+ * Maps a modality filter value to matching patterns across DB and worldwide datasets.
+ * Each alias must be specific enough to avoid false positives.
+ */
+export const MODALITY_ALIASES: Record<string, string[]> = {
+  "Small Molecule": ["Small Molecule", "PROTAC", "Molecular Glue", "Macrocycle", "Long-acting Injectable"],
+  "Monoclonal Antibody (mAb)": ["Monoclonal Antibody", "mAb", "Checkpoint Inhibitor", "Immunotherapy"],
+  "Antibody-Drug Conjugate (ADC)": ["ADC", "Antibody-Drug Conjugate", "AOC"],
+  "Bispecific / Multispecific": ["Bispecific", "Trispecific", "Multi-specific", "Bispecific Platform", "T-cell Engager"],
+  "Cell Therapy (CAR-T/NK)": ["CAR-T", "Cell Therapy", "TCR-T", "In Vivo CAR-T"],
+  "Gene Therapy / Editing": ["Gene Therapy", "Gene Editing"],
+  "mRNA": ["mRNA"],
+  "RNA Therapeutics": ["siRNA", "ASO", "RNAi", "RNA/RNAi", "RNA Splice", "RNA (Circular)", "RNA"],
+  "Vaccine": ["Vaccine"],
+  "Peptide": ["Peptide", "Oral Peptide", "Peptide Platform"],
+  "Protein / Biologic": ["Protein", "Enzyme", "Biologic", "Recombinant", "Tolerogenic"],
+  "Radiopharmaceutical": ["Radiopharmaceutical"],
+  "Other": ["Other", "AI Platform", "Nanoparticle", "Mixed"],
+};
+
+/** All named modality aliases (for "Other" catch-all logic) */
+const ALL_NAMED_MODALITY_PATTERNS = Object.entries(MODALITY_ALIASES)
+  .filter(([key]) => key !== "Other")
+  .flatMap(([, aliases]) => aliases.map(a => a.toLowerCase()));
+
+/** Check if a deal's modality matches the selected filter modality */
+export function matchesModality(dealModality: string, filterModality: string): boolean {
+  const aliases = MODALITY_ALIASES[filterModality];
+  if (!aliases) return dealModality.toLowerCase().includes(filterModality.toLowerCase());
+
+  // "Other" = catch-all for modalities that don't match any named category
+  if (filterModality === "Other") {
+    const dm = dealModality.toLowerCase();
+    // If the deal modality matches ANY named alias, it's NOT "Other"
+    const matchesNamed = ALL_NAMED_MODALITY_PATTERNS.some(p => dm.includes(p));
+    if (matchesNamed) return false;
+    return true; // Truly unmatched = "Other"
+  }
+
+  return aliases.some(alias => dealModality.toLowerCase().includes(alias.toLowerCase()));
+}
 
 export const MODALITIES = [
   "Small Molecule",
   "Monoclonal Antibody (mAb)",
   "Antibody-Drug Conjugate (ADC)",
-  "Bispecific Antibody",
+  "Bispecific / Multispecific",
   "Cell Therapy (CAR-T/NK)",
-  "Gene Therapy",
+  "Gene Therapy / Editing",
   "mRNA",
-  "siRNA / ASO",
+  "RNA Therapeutics",
+  "Vaccine",
   "Peptide",
-  "Protein / Enzyme",
+  "Protein / Biologic",
   "Radiopharmaceutical",
   "Other",
 ] as const;
 
 export const DEAL_STAGES = [
+  "DISCOVERY",
   "PRECLINICAL",
   "PHASE_1",
   "PHASE_2",
@@ -48,6 +119,7 @@ export const DEAL_TYPES = [
 ] as const;
 
 export const STAGE_LABELS: Record<string, string> = {
+  DISCOVERY: "Discovery",
   PRECLINICAL: "Preclinical",
   PHASE_1: "Phase 1",
   PHASE_2: "Phase 2",

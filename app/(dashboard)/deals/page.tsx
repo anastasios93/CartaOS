@@ -52,6 +52,9 @@ import {
   ExternalLink,
   FlaskConical,
   Building2,
+  Scale,
+  BookOpen,
+  Newspaper,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -78,6 +81,42 @@ interface ClinicalTrialResult {
   phase: string;
   startDate: string;
   studyType: string;
+}
+
+interface PatentResult {
+  patentNumber: string;
+  title: string;
+  abstract: string;
+  inventorNames: string[];
+  assigneeOrganization: string;
+  applicationDate: string;
+  grantDate: string;
+  expiryDate: string;
+  patentType: string;
+  cpcCodes: string[];
+  patentUrl: string;
+  wipoSearchUrl: string;
+}
+
+interface PubMedResult {
+  pmid: string;
+  title: string;
+  authors: string[];
+  journal: string;
+  publicationDate: string;
+  abstract: string;
+  doi: string | null;
+  pubmedUrl: string;
+  source: "pubmed" | "europepmc";
+  isPreprint: boolean;
+}
+
+interface NewsResult {
+  title: string;
+  link: string;
+  source: string;
+  publishedDate: string;
+  snippet: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +362,154 @@ function ClinicalTrialCard({ trial }: { trial: ClinicalTrialResult }) {
   );
 }
 
+function PatentCard({ patent }: { patent: PatentResult }) {
+  const yearsRemaining = patent.expiryDate
+    ? Math.max(0, Math.round((new Date(patent.expiryDate).getTime() - Date.now()) / (365.25 * 24 * 60 * 60 * 1000)))
+    : null;
+  const expiryColor =
+    yearsRemaining === null ? "" :
+    yearsRemaining > 5 ? "text-green-700 bg-green-50 border-green-200" :
+    yearsRemaining > 2 ? "text-yellow-700 bg-yellow-50 border-yellow-200" :
+    "text-red-700 bg-red-50 border-red-200";
+
+  return (
+    <a
+      href={patent.patentUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group block rounded-lg border bg-card p-4 transition-colors hover:border-[#8B5CF6]/40 hover:bg-purple-50/30 dark:hover:bg-purple-950/10"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium leading-snug text-foreground group-hover:text-[#8B5CF6] transition-colors">
+            {patent.title}
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            {patent.assigneeOrganization && (
+              <span className="flex items-center gap-1">
+                <Building2 className="h-3 w-3" />
+                {patent.assigneeOrganization}
+              </span>
+            )}
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+              US{patent.patentNumber}
+            </Badge>
+            {patent.grantDate && (
+              <span>Granted: {new Date(patent.grantDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+            )}
+            {yearsRemaining !== null && (
+              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${expiryColor}`}>
+                {yearsRemaining > 0 ? `Expires in ${yearsRemaining}y` : "Expired"}
+              </span>
+            )}
+          </div>
+          {patent.abstract && (
+            <p className="mt-2 text-xs text-muted-foreground/70 line-clamp-2">
+              {patent.abstract}
+            </p>
+          )}
+          {patent.cpcCodes.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {patent.cpcCodes.slice(0, 3).map((c) => (
+                <Badge key={c} variant="secondary" className="text-[10px] px-1.5 py-0">{c}</Badge>
+              ))}
+            </div>
+          )}
+        </div>
+        <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-[#8B5CF6] transition-colors" />
+      </div>
+    </a>
+  );
+}
+
+function PubMedCard({ article }: { article: PubMedResult }) {
+  return (
+    <a
+      href={article.pubmedUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group block rounded-lg border bg-card p-4 transition-colors hover:border-[#EC4899]/40 hover:bg-pink-50/30 dark:hover:bg-pink-950/10"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium leading-snug text-foreground group-hover:text-[#EC4899] transition-colors">
+            {article.title}
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            {article.authors.length > 0 && (
+              <span>
+                {article.authors.join(", ")}
+                {article.authors.length >= 3 && " et al."}
+              </span>
+            )}
+            {article.journal && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                {article.journal}
+              </Badge>
+            )}
+            {article.isPreprint && (
+              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                Preprint
+              </span>
+            )}
+            {article.publicationDate && (
+              <span>{article.publicationDate}</span>
+            )}
+          </div>
+          {article.doi && (
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground/50">
+              DOI: {article.doi}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-[#EC4899] transition-colors" />
+          {article.pmid && (
+            <span className="font-mono text-[10px] text-muted-foreground opacity-60">
+              PMID: {article.pmid}
+            </span>
+          )}
+        </div>
+      </div>
+    </a>
+  );
+}
+
+function NewsCard({ item }: { item: NewsResult }) {
+  return (
+    <a
+      href={item.link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group block rounded-lg border bg-card p-4 transition-colors hover:border-[#06B6D4]/40 hover:bg-cyan-50/30 dark:hover:bg-cyan-950/10"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium leading-snug text-foreground group-hover:text-[#06B6D4] transition-colors">
+            {item.title}
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            {item.source && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                {item.source}
+              </Badge>
+            )}
+            {item.publishedDate && (
+              <span>{new Date(item.publishedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+            )}
+          </div>
+          {item.snippet && (
+            <p className="mt-2 text-xs text-muted-foreground/70 line-clamp-2">
+              {item.snippet}
+            </p>
+          )}
+        </div>
+        <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-[#06B6D4] transition-colors" />
+      </div>
+    </a>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main page component
 // ---------------------------------------------------------------------------
@@ -348,13 +535,22 @@ export default function DealsPage() {
   const [dbOpen, setDbOpen] = useState(true);
   const [secOpen, setSecOpen] = useState(true);
   const [ctOpen, setCtOpen] = useState(true);
+  const [patentsOpen, setPatentsOpen] = useState(true);
+  const [pubmedOpen, setPubmedOpen] = useState(true);
+  const [newsOpen, setNewsOpen] = useState(true);
+
+  // -- Load More pagination state --
+  const [extraResults, setExtraResults] = useState<Record<string, any[]>>({});
+  const [nextTokens, setNextTokens] = useState<Record<string, string | null>>({});
+  const [totalCounts, setTotalCounts] = useState<Record<string, number | null>>({});
+  const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
 
   // -- Live search query via tRPC --
   const liveSearchEnabled =
     searchMode === "live" && debouncedQuery.length >= 2;
 
   const liveSearch = trpc.search.unified.useQuery(
-    { query: debouncedQuery, limit: 20 },
+    { query: debouncedQuery, limit: 200 },
     {
       enabled: liveSearchEnabled,
       refetchOnWindowFocus: false,
@@ -362,6 +558,51 @@ export default function DealsPage() {
       placeholderData: keepPreviousData,
     }
   );
+
+  const loadMoreQuery = trpc.search.loadMore.useMutation();
+
+  // -- Initialize nextTokens/totalCounts from liveSearch response --
+  useEffect(() => {
+    if (!liveSearch.data) return;
+    const tokens: Record<string, string | null> = {};
+    const counts: Record<string, number | null> = {};
+    for (const [key, camelKey] of [
+      ["sec_edgar", "secEdgar"], ["clinical_trials", "clinicalTrials"],
+      ["patents", "patents"], ["pubmed", "pubmed"], ["news", "news"]
+    ] as const) {
+      const src = (liveSearch.data as any)[camelKey];
+      tokens[key] = src?.nextToken ?? null;
+      counts[key] = src?.totalCount ?? null;
+    }
+    setNextTokens(tokens);
+    setTotalCounts(counts);
+    setExtraResults({});
+  }, [liveSearch.data]);
+
+  // -- Load More handler --
+  const handleLoadMore = async (source: string) => {
+    const token = nextTokens[source];
+    if (!token || loadingMore[source]) return;
+    setLoadingMore(prev => ({ ...prev, [source]: true }));
+    try {
+      const result = await loadMoreQuery.mutateAsync({
+        source: source as any,
+        query: debouncedQuery,
+        nextToken: token,
+        limit: 200,
+      });
+      setExtraResults(prev => ({
+        ...prev,
+        [source]: [...(prev[source] ?? []), ...result.data],
+      }));
+      setNextTokens(prev => ({ ...prev, [source]: result.nextToken }));
+      if (result.totalCount != null) {
+        setTotalCounts(prev => ({ ...prev, [source]: result.totalCount }));
+      }
+    } finally {
+      setLoadingMore(prev => ({ ...prev, [source]: false }));
+    }
+  };
 
   // -- Sorting for local DB table --
   const handleSort = (key: SortKey) => {
@@ -476,17 +717,23 @@ export default function DealsPage() {
     );
   }
 
-  // -- Live search result data --
+  // -- Live search result data (merged with extra paginated results) --
   const dbResults = (liveSearch.data?.database?.data ?? []) as typeof deals;
-  const secResults = (liveSearch.data?.secEdgar?.data ?? []) as SecFilingResult[];
-  const ctResults = (liveSearch.data?.clinicalTrials?.data ?? []) as ClinicalTrialResult[];
+  const secResults = [...((liveSearch.data?.secEdgar?.data ?? []) as SecFilingResult[]), ...((extraResults.sec_edgar ?? []) as SecFilingResult[])];
+  const ctResults = [...((liveSearch.data?.clinicalTrials?.data ?? []) as ClinicalTrialResult[]), ...((extraResults.clinical_trials ?? []) as ClinicalTrialResult[])];
+  const patentResults = [...((liveSearch.data?.patents?.data ?? []) as PatentResult[]), ...((extraResults.patents ?? []) as PatentResult[])];
+  const pubmedResults = [...((liveSearch.data?.pubmed?.data ?? []) as PubMedResult[]), ...((extraResults.pubmed ?? []) as PubMedResult[])];
+  const newsResults = (liveSearch.data?.news?.data ?? []) as NewsResult[];
 
   const dbError = liveSearch.data?.database?.error ?? null;
   const secError = liveSearch.data?.secEdgar?.error ?? null;
   const ctError = liveSearch.data?.clinicalTrials?.error ?? null;
+  const patentError = liveSearch.data?.patents?.error ?? null;
+  const pubmedError = liveSearch.data?.pubmed?.error ?? null;
+  const newsError = liveSearch.data?.news?.error ?? null;
 
   const isSearching = liveSearch.isFetching;
-  const totalResults = dbResults.length + secResults.length + ctResults.length;
+  const totalResults = dbResults.length + secResults.length + ctResults.length + patentResults.length + pubmedResults.length + newsResults.length;
 
   return (
     <div className="space-y-6">
@@ -833,7 +1080,7 @@ export default function DealsPage() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Search across database, SEC EDGAR filings, and ClinicalTrials.gov..."
+                    placeholder="Search across database, SEC EDGAR, ClinicalTrials.gov, patents, PubMed, and news..."
                     value={liveQuery}
                     onChange={(e) => setLiveQuery(e.target.value)}
                     className="pl-9 h-9"
@@ -856,7 +1103,7 @@ export default function DealsPage() {
                 )}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Searches your database, SEC EDGAR filings, and ClinicalTrials.gov simultaneously. Minimum 2 characters.
+                Searches your database, SEC EDGAR, ClinicalTrials.gov, USPTO patents, PubMed/bioRxiv, and pharma news simultaneously. Minimum 2 characters.
               </p>
             </CardContent>
           </Card>
@@ -869,7 +1116,7 @@ export default function DealsPage() {
                 Search Public Sources
               </p>
               <p className="mt-1 max-w-sm text-center text-xs text-muted-foreground/70">
-                Type at least 2 characters to search across your deal database, SEC EDGAR filings, and ClinicalTrials.gov in real time.
+                Type at least 2 characters to search across your deal database, SEC EDGAR, ClinicalTrials.gov, USPTO patents, PubMed/bioRxiv, and pharma news in real time.
               </p>
             </div>
           )}
@@ -885,12 +1132,12 @@ export default function DealsPage() {
                     <span className="font-medium text-foreground">
                       {totalResults}
                     </span>{" "}
-                    results across 3 sources
+                    results across 6 sources
                   </span>
-                  {(dbError || secError || ctError) && (
+                  {(dbError || secError || ctError || patentError || pubmedError || newsError) && (
                     <span className="flex items-center gap-1 text-red-500">
                       <AlertCircle className="h-3 w-3" />
-                      {[dbError, secError, ctError].filter(Boolean).length} source(s) had errors
+                      {[dbError, secError, ctError, patentError, pubmedError, newsError].filter(Boolean).length} source(s) had errors
                     </span>
                   )}
                 </div>
@@ -1010,6 +1257,17 @@ export default function DealsPage() {
                     {secResults.map((filing, idx) => (
                       <SecEdgarCard key={`${filing.accessionNumber}-${idx}`} filing={filing} />
                     ))}
+                    {nextTokens.sec_edgar && (
+                      <button
+                        onClick={() => handleLoadMore("sec_edgar")}
+                        disabled={loadingMore.sec_edgar}
+                        className="w-full mt-3 py-2 px-4 text-sm font-medium text-[#F97316] border border-[#F97316]/30 rounded-lg hover:bg-[#F97316]/5 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {loadingMore.sec_edgar && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Load More SEC Filings
+                        {` (showing ${secResults.length}${totalCounts.sec_edgar ? ` of ${totalCounts.sec_edgar}` : ""})`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1036,6 +1294,120 @@ export default function DealsPage() {
                     )}
                     {ctResults.map((trial, idx) => (
                       <ClinicalTrialCard key={`${trial.nctId}-${idx}`} trial={trial} />
+                    ))}
+                    {nextTokens.clinical_trials && (
+                      <button
+                        onClick={() => handleLoadMore("clinical_trials")}
+                        disabled={loadingMore.clinical_trials}
+                        className="w-full mt-3 py-2 px-4 text-sm font-medium text-[#10B981] border border-[#10B981]/30 rounded-lg hover:bg-[#10B981]/5 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {loadingMore.clinical_trials && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Load More Clinical Trials
+                        {` (showing ${ctResults.length}${totalCounts.clinical_trials ? ` of ${totalCounts.clinical_trials}` : ""})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* -------- Patent Results -------- */}
+              <div>
+                <SourceSectionHeader
+                  title="USPTO Patents"
+                  icon={<Scale className="h-4 w-4 text-[#8B5CF6]" />}
+                  count={patentResults.length}
+                  isLoading={isSearching}
+                  hasError={!!patentError}
+                  isOpen={patentsOpen}
+                  onToggle={() => setPatentsOpen((p) => !p)}
+                />
+                {patentsOpen && (
+                  <div className="mt-2 space-y-2 pl-7">
+                    {isSearching && !liveSearch.data && <LoadingSkeleton />}
+                    {patentError && <ErrorMessage message={patentError} />}
+                    {!isSearching && !patentError && patentResults.length === 0 && liveSearch.data && (
+                      <p className="py-4 text-center text-sm text-muted-foreground">
+                        No patent results found
+                      </p>
+                    )}
+                    {patentResults.map((patent, idx) => (
+                      <PatentCard key={`${patent.patentNumber}-${idx}`} patent={patent} />
+                    ))}
+                    {nextTokens.patents && (
+                      <button
+                        onClick={() => handleLoadMore("patents")}
+                        disabled={loadingMore.patents}
+                        className="w-full mt-3 py-2 px-4 text-sm font-medium text-[#8B5CF6] border border-[#8B5CF6]/30 rounded-lg hover:bg-[#8B5CF6]/5 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {loadingMore.patents && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Load More Patents
+                        {` (showing ${patentResults.length}${totalCounts.patents ? ` of ${totalCounts.patents}` : ""})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* -------- Scientific Literature Results -------- */}
+              <div>
+                <SourceSectionHeader
+                  title="Scientific Literature"
+                  icon={<BookOpen className="h-4 w-4 text-[#EC4899]" />}
+                  count={pubmedResults.length}
+                  isLoading={isSearching}
+                  hasError={!!pubmedError}
+                  isOpen={pubmedOpen}
+                  onToggle={() => setPubmedOpen((p) => !p)}
+                />
+                {pubmedOpen && (
+                  <div className="mt-2 space-y-2 pl-7">
+                    {isSearching && !liveSearch.data && <LoadingSkeleton />}
+                    {pubmedError && <ErrorMessage message={pubmedError} />}
+                    {!isSearching && !pubmedError && pubmedResults.length === 0 && liveSearch.data && (
+                      <p className="py-4 text-center text-sm text-muted-foreground">
+                        No scientific literature results found
+                      </p>
+                    )}
+                    {pubmedResults.map((article, idx) => (
+                      <PubMedCard key={`${article.pmid}-${idx}`} article={article} />
+                    ))}
+                    {nextTokens.pubmed && (
+                      <button
+                        onClick={() => handleLoadMore("pubmed")}
+                        disabled={loadingMore.pubmed}
+                        className="w-full mt-3 py-2 px-4 text-sm font-medium text-[#EC4899] border border-[#EC4899]/30 rounded-lg hover:bg-[#EC4899]/5 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {loadingMore.pubmed && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Load More Publications
+                        {` (showing ${pubmedResults.length}${totalCounts.pubmed ? ` of ${totalCounts.pubmed}` : ""})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* -------- News & Press Releases -------- */}
+              <div>
+                <SourceSectionHeader
+                  title="News & Press Releases"
+                  icon={<Newspaper className="h-4 w-4 text-[#06B6D4]" />}
+                  count={newsResults.length}
+                  isLoading={isSearching}
+                  hasError={!!newsError}
+                  isOpen={newsOpen}
+                  onToggle={() => setNewsOpen((p) => !p)}
+                />
+                {newsOpen && (
+                  <div className="mt-2 space-y-2 pl-7">
+                    {isSearching && !liveSearch.data && <LoadingSkeleton />}
+                    {newsError && <ErrorMessage message={newsError} />}
+                    {!isSearching && !newsError && newsResults.length === 0 && liveSearch.data && (
+                      <p className="py-4 text-center text-sm text-muted-foreground">
+                        No news results found
+                      </p>
+                    )}
+                    {newsResults.map((item, idx) => (
+                      <NewsCard key={`${item.link}-${idx}`} item={item} />
                     ))}
                   </div>
                 )}
