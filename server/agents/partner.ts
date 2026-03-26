@@ -12,8 +12,7 @@ import { searchEdgarForDeals } from "@/server/services/sec-edgar";
 import { searchDrugApplications } from "@/server/services/openfda";
 import { searchLiterature } from "@/server/services/pubmed";
 import { PARTNER_AGENT_PROMPT } from "@/server/services/hub-prompts";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { extractJSON } from "./utils";
 
 export async function runPartnerAgent(
   intake: HubIntakeForm,
@@ -22,6 +21,11 @@ export async function runPartnerAgent(
   const agentId = "partner" as const;
 
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured. Please add your API key in environment variables.");
+    }
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
     write({ agent: agentId, type: "status", status: "scraping", message: "Scanning ClinicalTrials.gov for active sponsors..." });
 
     const indication = intake.context?.split(" ").slice(0, 3).join(" ") || intake.therapeuticArea;
@@ -92,8 +96,8 @@ Identify and score the top potential licensing partners.`,
       }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-    const partners: PartnerScore[] = JSON.parse(text);
+    const text = response.content.find(b => b.type === "text")?.text ?? "";
+    const partners: PartnerScore[] = extractJSON(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "partner", partners } });
     write({ agent: agentId, type: "status", status: "complete", message: `Identified ${partners.length} potential partners` });

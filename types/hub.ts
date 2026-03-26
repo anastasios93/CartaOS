@@ -34,7 +34,7 @@ export const GEOGRAPHY_COLORS: Record<Geography, string> = {
 
 // ─── Agent IDs & Status ─────────────────────────────────────────────────────
 
-export type AgentId = "benchmarking" | "partner" | "negotiation" | "termsheet";
+export type AgentId = "benchmarking" | "partner" | "negotiation" | "termsheet" | "synthesis";
 
 export type AgentStatus = "idle" | "scraping" | "analyzing" | "complete" | "error";
 
@@ -43,6 +43,7 @@ export const AGENT_META: Record<AgentId, { label: string; description: string; c
   partner:      { label: "Partner Identification", description: "Multi-source scan → Ranked partners", color: "#10B981", icon: "Users" },
   negotiation:  { label: "Negotiation Intelligence", description: "Deal terms + leverage analysis", color: "#F59E0B", icon: "Scale" },
   termsheet:    { label: "Term Sheet Drafting", description: "All sources → Draft term sheet", color: "#A855F7", icon: "FileText" },
+  synthesis:    { label: "Deal Package", description: "Contract, DD, data room & intelligence", color: "#EC4899", icon: "Briefcase" },
 };
 
 // ─── SSE Events ─────────────────────────────────────────────────────────────
@@ -66,7 +67,28 @@ export type AgentResult =
   | { agentId: "benchmarking"; comparables: DealComparable[] }
   | { agentId: "partner"; partners: PartnerScore[] }
   | { agentId: "negotiation"; leveragePoints: NegotiationLeverage[] }
-  | { agentId: "termsheet"; clauses: TermSheetClause[]; termSheet: string };
+  | { agentId: "termsheet"; clauses: TermSheetClause[]; termSheet: string }
+  | { agentId: "synthesis"; contract: string; dueDiligence: DDSection[]; dataPackage: DataPackageItem[]; intelligence: IntelSection[] };
+
+// ─── Synthesis Output Types ────────────────────────────────────────────────
+
+export interface DDSection {
+  category: string;
+  questions: { question: string; priority: "Critical" | "High" | "Medium"; rationale: string }[];
+}
+
+export interface DataPackageItem {
+  category: string;
+  items: { document: string; status: "Required" | "Recommended" | "Optional"; notes: string }[];
+}
+
+export interface IntelSection {
+  title: string;
+  insight: string;
+  confidence: "High" | "Medium" | "Low";
+  action: string;
+  sources: string[];
+}
 
 export interface DealComparable {
   dealName: string;

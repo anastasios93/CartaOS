@@ -10,8 +10,7 @@ import type { AgentWriter } from "./index";
 import { searchEdgarForDeals } from "@/server/services/sec-edgar";
 import { searchClinicalTrials } from "@/server/services/clinical-trials";
 import { BENCHMARKING_AGENT_PROMPT } from "@/server/services/hub-prompts";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { extractJSON } from "./utils";
 
 export async function runBenchmarkingAgent(
   intake: HubIntakeForm,
@@ -20,6 +19,11 @@ export async function runBenchmarkingAgent(
   const agentId = "benchmarking" as const;
 
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured. Please add your API key in environment variables.");
+    }
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
     // Step 1: Query data sources
     write({ agent: agentId, type: "status", status: "scraping", message: "Querying SEC EDGAR for licensing agreements..." });
 
@@ -77,8 +81,8 @@ Analyze these sources and return a JSON array of comparable deals ranked by rele
       }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-    const comparables: DealComparable[] = JSON.parse(text);
+    const text = response.content.find(b => b.type === "text")?.text ?? "";
+    const comparables: DealComparable[] = extractJSON(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "benchmarking", comparables } });
     write({ agent: agentId, type: "status", status: "complete", message: `Found ${comparables.length} comparable deals` });

@@ -12,8 +12,7 @@ import { searchClinicalTrials } from "@/server/services/clinical-trials";
 import { searchLiterature } from "@/server/services/pubmed";
 import { searchDrugApplications } from "@/server/services/openfda";
 import { TERMSHEET_AGENT_PROMPT } from "@/server/services/hub-prompts";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { extractJSON } from "./utils";
 
 export async function runTermSheetAgent(
   intake: HubIntakeForm,
@@ -22,6 +21,11 @@ export async function runTermSheetAgent(
   const agentId = "termsheet" as const;
 
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured. Please add your API key in environment variables.");
+    }
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
     write({ agent: agentId, type: "status", status: "scraping", message: "Gathering data from all sources for term sheet drafting..." });
 
     const edgarQuery = `"license agreement" AND "${intake.therapeuticArea}" AND ("upfront" OR "milestone" OR "royalt")`;
@@ -91,8 +95,8 @@ Include specific dollar amounts based on comparable deals and flag any non-stand
       }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-    const parsed = JSON.parse(text) as { clauses: TermSheetClause[]; termSheet: string };
+    const text = response.content.find(b => b.type === "text")?.text ?? "";
+    const parsed = extractJSON<{ clauses: TermSheetClause[]; termSheet: string }>(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "termsheet", clauses: parsed.clauses, termSheet: parsed.termSheet } });
     write({ agent: agentId, type: "status", status: "complete", message: `Drafted ${parsed.clauses.length} term sheet clauses` });

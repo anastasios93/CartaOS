@@ -2,7 +2,7 @@
 
 import type { AgentId, AgentState } from "@/types/hub";
 import { AGENT_META } from "@/types/hub";
-import { BarChart3, Users, Scale, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { BarChart3, Users, Scale, FileText, Briefcase, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { BenchmarkingResults } from "./results/benchmarking-results";
 import { PartnerResults } from "./results/partner-results";
 import { NegotiationResults } from "./results/negotiation-results";
@@ -13,6 +13,7 @@ const ICONS: Record<AgentId, React.ElementType> = {
   partner: Users,
   negotiation: Scale,
   termsheet: FileText,
+  synthesis: Briefcase,
 };
 
 export function AgentCard({ agentId, state }: { agentId: AgentId; state: AgentState }) {

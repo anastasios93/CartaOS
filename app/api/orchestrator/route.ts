@@ -1,12 +1,12 @@
 /**
  * POST /api/orchestrator
- * SSE endpoint: deploys 4 AI agents in parallel, streams events back to client.
+ * SSE endpoint: deploys 4 AI agents in parallel, then runs synthesis agent.
  */
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { z } from "zod";
-import type { SSEEvent, AgentId } from "@/types/hub";
+import type { SSEEvent, AgentId, AgentResult } from "@/types/hub";
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
@@ -55,12 +55,16 @@ export async function POST(req: Request) {
         { runPartnerAgent },
         { runNegotiationAgent },
         { runTermSheetAgent },
+        { runSynthesisAgent },
       ] = await Promise.all([
         import("@/server/agents/benchmarking"),
         import("@/server/agents/partner"),
         import("@/server/agents/negotiation"),
         import("@/server/agents/termsheet"),
+        import("@/server/agents/synthesis"),
       ]);
+
+      const CORE_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "termsheet"];
 
       const agents: { id: AgentId; run: (intake: any, write: (e: SSEEvent) => void) => Promise<void> }[] = [
         { id: "benchmarking", run: runBenchmarkingAgent },
@@ -69,15 +73,34 @@ export async function POST(req: Request) {
         { id: "termsheet", run: runTermSheetAgent },
       ];
 
-      // Send initial status for all agents
-      for (const agent of agents) {
-        sendEvent({ agent: agent.id, type: "status", status: "idle", message: "Queued..." });
+      // Send initial status for all agents (including synthesis)
+      for (const id of [...CORE_IDS, "synthesis" as AgentId]) {
+        sendEvent({ agent: id, type: "status", status: "idle", message: id === "synthesis" ? "Waiting for agents to complete..." : "Queued..." });
       }
 
-      // Run all 4 in parallel
+      // Collect results from the 4 core agents
+      const collectedResults: AgentResult[] = [];
+      const originalSendEvent = sendEvent;
+      const capturingSendEvent = (event: SSEEvent | { type: "done" }) => {
+        // Capture result events to pass to synthesis
+        if ("type" in event && event.type === "result" && "data" in event) {
+          collectedResults.push((event as Extract<SSEEvent, { type: "result" }>).data);
+        }
+        originalSendEvent(event);
+      };
+
+      // Run all 4 core agents in parallel
       await Promise.allSettled(
-        agents.map(agent => agent.run(intake, sendEvent))
+        agents.map(agent => agent.run(intake, capturingSendEvent))
       );
+
+      // Run synthesis agent with collected results
+      if (collectedResults.length > 0) {
+        await runSynthesisAgent(intake, collectedResults, sendEvent);
+      } else {
+        sendEvent({ agent: "synthesis", type: "error", error: "No agent results to synthesize — all agents failed." });
+        sendEvent({ agent: "synthesis", type: "status", status: "error", message: "No agent results to synthesize" });
+      }
 
       sendEvent({ type: "done" });
     } catch (err) {

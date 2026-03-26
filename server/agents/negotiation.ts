@@ -10,8 +10,7 @@ import type { AgentWriter } from "./index";
 import { searchEdgarForDeals } from "@/server/services/sec-edgar";
 import { searchClinicalTrials } from "@/server/services/clinical-trials";
 import { NEGOTIATION_AGENT_PROMPT } from "@/server/services/hub-prompts";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { extractJSON } from "./utils";
 
 export async function runNegotiationAgent(
   intake: HubIntakeForm,
@@ -20,6 +19,11 @@ export async function runNegotiationAgent(
   const agentId = "negotiation" as const;
 
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured. Please add your API key in environment variables.");
+    }
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
     write({ agent: agentId, type: "status", status: "scraping", message: "Searching SEC EDGAR for deal term precedents..." });
 
     const edgarQuery = `"upfront payment" OR "milestone payment" OR "royalt" AND "${intake.therapeuticArea}" AND "license"`;
@@ -49,7 +53,6 @@ export async function runNegotiationAgent(
       `[${h.nctId}] ${h.title} | Phase: ${h.phase} | Status: ${h.status} | Sponsor: ${h.sponsor}`
     ).join("\n");
 
-    // Count competitors for leverage assessment
     const uniqueSponsors = new Set(ctHits.map(h => h.sponsor));
     const competitorCount = uniqueSponsors.size;
 
@@ -80,8 +83,8 @@ Analyze the negotiating position and produce leverage assessment for key deal te
       }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-    const leveragePoints: NegotiationLeverage[] = JSON.parse(text);
+    const text = response.content.find(b => b.type === "text")?.text ?? "";
+    const leveragePoints: NegotiationLeverage[] = extractJSON(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "negotiation", leveragePoints } });
     write({ agent: agentId, type: "status", status: "complete", message: `Assessed leverage on ${leveragePoints.length} deal terms` });
