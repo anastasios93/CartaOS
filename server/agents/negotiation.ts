@@ -10,7 +10,7 @@ import type { AgentWriter } from "./index";
 import { searchEdgarForDeals } from "@/server/services/sec-edgar";
 import { searchClinicalTrials } from "@/server/services/clinical-trials";
 import { NEGOTIATION_AGENT_PROMPT } from "@/server/services/hub-prompts";
-import { extractJSON } from "./utils";
+import { extractJSON, cleanError } from "./utils";
 
 export async function runNegotiationAgent(
   intake: HubIntakeForm,
@@ -89,7 +89,7 @@ Analyze the negotiating position and produce leverage assessment for key deal te
     write({ agent: agentId, type: "result", data: { agentId: "negotiation", leveragePoints } });
     write({ agent: agentId, type: "status", status: "complete", message: `Assessed leverage on ${leveragePoints.length} deal terms` });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });
     write({ agent: agentId, type: "status", status: "error", message: msg });
   }

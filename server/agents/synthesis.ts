@@ -6,7 +6,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { HubIntakeForm, AgentResult } from "@/types/hub";
 import type { AgentWriter } from "./index";
-import { extractJSON } from "./utils";
+import { extractJSON, cleanError } from "./utils";
 
 export interface SynthesisOutput {
   contract: string;           // Full contract draft in markdown
@@ -163,7 +163,7 @@ Generate the complete deal package: contract, due diligence questions, data room
 
     return output;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });
     write({ agent: agentId, type: "status", status: "error", message: msg });
     return null;

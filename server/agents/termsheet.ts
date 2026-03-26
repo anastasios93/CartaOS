@@ -12,7 +12,7 @@ import { searchClinicalTrials } from "@/server/services/clinical-trials";
 import { searchLiterature } from "@/server/services/pubmed";
 import { searchDrugApplications } from "@/server/services/openfda";
 import { TERMSHEET_AGENT_PROMPT } from "@/server/services/hub-prompts";
-import { extractJSON } from "./utils";
+import { extractJSON, cleanError } from "./utils";
 
 export async function runTermSheetAgent(
   intake: HubIntakeForm,
@@ -101,7 +101,7 @@ Include specific dollar amounts based on comparable deals and flag any non-stand
     write({ agent: agentId, type: "result", data: { agentId: "termsheet", clauses: parsed.clauses, termSheet: parsed.termSheet } });
     write({ agent: agentId, type: "status", status: "complete", message: `Drafted ${parsed.clauses.length} term sheet clauses` });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });
     write({ agent: agentId, type: "status", status: "error", message: msg });
   }

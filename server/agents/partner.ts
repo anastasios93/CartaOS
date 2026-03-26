@@ -12,7 +12,7 @@ import { searchEdgarForDeals } from "@/server/services/sec-edgar";
 import { searchDrugApplications } from "@/server/services/openfda";
 import { searchLiterature } from "@/server/services/pubmed";
 import { PARTNER_AGENT_PROMPT } from "@/server/services/hub-prompts";
-import { extractJSON } from "./utils";
+import { extractJSON, cleanError } from "./utils";
 
 export async function runPartnerAgent(
   intake: HubIntakeForm,
@@ -102,7 +102,7 @@ Identify and score the top potential licensing partners.`,
     write({ agent: agentId, type: "result", data: { agentId: "partner", partners } });
     write({ agent: agentId, type: "status", status: "complete", message: `Identified ${partners.length} potential partners` });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });
     write({ agent: agentId, type: "status", status: "error", message: msg });
   }

@@ -10,7 +10,7 @@ import type { AgentWriter } from "./index";
 import { searchEdgarForDeals } from "@/server/services/sec-edgar";
 import { searchClinicalTrials } from "@/server/services/clinical-trials";
 import { BENCHMARKING_AGENT_PROMPT } from "@/server/services/hub-prompts";
-import { extractJSON } from "./utils";
+import { extractJSON, cleanError } from "./utils";
 
 export async function runBenchmarkingAgent(
   intake: HubIntakeForm,
@@ -87,7 +87,7 @@ Analyze these sources and return a JSON array of comparable deals ranked by rele
     write({ agent: agentId, type: "result", data: { agentId: "benchmarking", comparables } });
     write({ agent: agentId, type: "status", status: "complete", message: `Found ${comparables.length} comparable deals` });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });
     write({ agent: agentId, type: "status", status: "error", message: msg });
   }
