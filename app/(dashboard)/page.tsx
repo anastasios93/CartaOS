@@ -24,7 +24,6 @@ import {
   DollarSign,
   ArrowRight,
   ArrowUpRight,
-  FileInput,
   Sparkles,
   BarChart3,
   Users,
@@ -33,6 +32,10 @@ import {
   Clock,
   Target,
   Zap,
+  Shield,
+  AlertTriangle,
+  Gem,
+  Rocket,
 } from "lucide-react";
 import {
   BarChart,
@@ -43,19 +46,15 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
 function formatCurrency(value: number | null | undefined) {
   if (value == null) return "\u2014";
   if (value >= 1000) return `$${(value / 1000).toFixed(1)}B`;
   return `$${value.toFixed(0)}M`;
-}
-
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function timeAgo(date: Date | string) {
@@ -77,6 +76,7 @@ const COLORS = {
   pink: "#EC4899",
   amber: "#F59E0B",
   cyan: "#06B6D4",
+  red: "#EF4444",
 };
 
 export default function DashboardPage() {
@@ -93,9 +93,18 @@ export default function DashboardPage() {
             new Date(b.announcedDate).getTime() -
             new Date(a.announcedDate).getTime()
         )
-        .slice(0, 6),
+        .slice(0, 5),
     [deals]
   );
+
+  const totalPortfolioValue = useMemo(() => {
+    const values = deals.filter((d) => d.totalDealValue != null).map(
+      (d) => d.totalDealValue!
+    );
+    return values.length
+      ? values.reduce((a, b) => a + b, 0)
+      : 0;
+  }, [deals]);
 
   const avgDealValue = useMemo(() => {
     const values = deals.filter((d) => d.totalDealValue != null).map(
@@ -113,13 +122,21 @@ export default function DashboardPage() {
     }));
   }, []);
 
-  const taData = useMemo(() => getDealsByTherapeuticArea().slice(0, 5), []);
+  const taData = useMemo(() => getDealsByTherapeuticArea().slice(0, 6), []);
 
   const activeNegotiations = negotiations.filter(
     (n) => n.status !== "CLOSED" && n.status !== "DEAD"
   ).length;
 
-  // Generate mock sparkline data
+  // Portfolio health breakdown (simulated)
+  const portfolioHealth = useMemo(() => [
+    { name: "Hidden Champions", value: Math.round(deals.length * 0.15), color: COLORS.green },
+    { name: "Performing", value: Math.round(deals.length * 0.45), color: COLORS.blue },
+    { name: "Underperforming", value: Math.round(deals.length * 0.25), color: COLORS.amber },
+    { name: "LOE Exposed", value: Math.round(deals.length * 0.15), color: COLORS.red },
+  ], [deals.length]);
+
+  // Sparkline for deal volume
   const sparkline = useMemo(
     () =>
       Array.from({ length: 12 }, (_, i) => ({
@@ -131,103 +148,152 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Greeting */}
+      {/* Greeting + PIV Banner */}
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {session?.user?.name?.split(" ")[0] || "there"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Here&apos;s what&apos;s happening with your deal portfolio
+            Unlock hidden value in your portfolio — diagnostic, strategy, execution
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
             <Link href="/benchmarks">
               <BarChart3 className="h-3.5 w-3.5 text-[#F97316]" />
-              Comparables
+              Market Potential
             </Link>
           </Button>
           <Button size="sm" className="h-8 text-xs gap-1.5 bg-[#F97316] hover:bg-[#EA580C] text-white" asChild>
             <Link href="/hub">
               <Zap className="h-3.5 w-3.5" />
-              New Analysis
+              Run Diagnostic
             </Link>
           </Button>
         </div>
       </div>
 
-      {/* Stat cards */}
+      {/* P-I-V Pipeline Strip */}
+      <div className="grid grid-cols-3 gap-3">
+        <PIVCard
+          phase={1}
+          title="Diagnostic"
+          description="Identify hidden champions & unrealized value"
+          icon={<Target className="h-4 w-4" />}
+          href="/hub"
+          color={COLORS.blue}
+          stat={`${deals.length} assets analyzed`}
+        />
+        <PIVCard
+          phase={2}
+          title="Strategy"
+          description="Optimize positioning & maximize financial output"
+          icon={<Gem className="h-4 w-4" />}
+          href="/partners"
+          color={COLORS.green}
+          stat={`${companies.length} partners tracked`}
+        />
+        <PIVCard
+          phase={3}
+          title="Execution"
+          description="Lean go-to-market with cost savings"
+          icon={<Rocket className="h-4 w-4" />}
+          href="/workspace"
+          color={COLORS.violet}
+          stat={`${activeNegotiations} active deals`}
+        />
+      </div>
+
+      {/* Top stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Active Deals"
-          value={deals.length.toString()}
-          change="+3 this quarter"
-          changeType="positive"
-          icon={<FileText className="h-4 w-4" />}
+          title="Portfolio Value"
+          value={formatCurrency(totalPortfolioValue)}
+          change={`${deals.length} active deals tracked`}
+          changeType="neutral"
+          icon={<DollarSign className="h-4 w-4" />}
           color={COLORS.orange}
         />
         <StatCard
-          title="Partners Tracked"
-          value={companies.length.toString()}
-          change="2 new this month"
+          title="Unrealized Value"
+          value={formatCurrency(Math.round(totalPortfolioValue * 0.22))}
+          change="22% of portfolio untapped"
           changeType="positive"
-          icon={<Building2 className="h-4 w-4" />}
-          color={COLORS.blue}
+          icon={<Gem className="h-4 w-4" />}
+          color={COLORS.green}
         />
         <StatCard
-          title="Negotiations"
-          value={activeNegotiations.toString()}
-          change="1 term sheet sent"
-          changeType="neutral"
-          icon={<Handshake className="h-4 w-4" />}
-          color={COLORS.green}
+          title="LOE Exposure"
+          value={formatCurrency(Math.round(totalPortfolioValue * 0.15))}
+          change={`${Math.round(deals.length * 0.15)} assets at risk by 2030`}
+          changeType="negative"
+          icon={<AlertTriangle className="h-4 w-4" />}
+          color={COLORS.red}
         />
         <StatCard
           title="Avg Deal Value"
           value={formatCurrency(avgDealValue)}
           change="Median $3.1B"
           changeType="neutral"
-          icon={<DollarSign className="h-4 w-4" />}
-          color={COLORS.violet}
-        />
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <QuickAction
-          title="Intelligence Hub"
-          description="Deploy 4 AI agents on any deal"
-          icon={<Zap className="h-5 w-5" />}
-          href="/hub"
-          color={COLORS.orange}
-        />
-        <QuickAction
-          title="Run Benchmark"
-          description="Compare against precedent deals"
-          icon={<BarChart3 className="h-5 w-5" />}
-          href="/benchmarks"
+          icon={<BarChart3 className="h-4 w-4" />}
           color={COLORS.blue}
-        />
-        <QuickAction
-          title="Match Partners"
-          description="Find ideal licensing partners"
-          icon={<Users className="h-5 w-5" />}
-          href="/partners"
-          color={COLORS.green}
-        />
-        <QuickAction
-          title="Ask AI Companion"
-          description="Get instant deal insights"
-          icon={<MessageSquare className="h-5 w-5" />}
-          href="/conductor"
-          color={COLORS.violet}
         />
       </div>
 
       {/* Main grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Recent Activity */}
+        {/* Portfolio Health */}
+        <Card className="border-border/40 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold">Portfolio Health</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="h-[160px] flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={portfolioHealth}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={70}
+                    paddingAngle={3}
+                    dataKey="value"
+                    strokeWidth={0}
+                  >
+                    {portfolioHealth.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#fff",
+                      border: "1px solid #E5E7EB",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      boxShadow: "0 4px 6px -1px rgba(0,0,0,.06)",
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2 mt-2">
+              {portfolioHealth.map((item) => (
+                <div key={item.name} className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                  <span className="text-[12px] text-muted-foreground flex-1">{item.name}</span>
+                  <span className="text-[12px] font-medium font-mono">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Deal Activity */}
         <Card className="lg:col-span-2 border-border/40 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div className="flex items-center gap-2">
@@ -277,13 +343,16 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        {/* Deal Pipeline */}
+      {/* Bottom grid */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Deal Pipeline by Stage */}
         <Card className="border-border/40 shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Target className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-semibold">Deal Pipeline</CardTitle>
+              <CardTitle className="text-sm font-semibold">Pipeline by Stage</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
@@ -318,7 +387,7 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            {/* TA breakdown below chart */}
+            {/* TA breakdown below */}
             <div className="mt-4 space-y-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
                 Top Therapeutic Areas
@@ -327,7 +396,7 @@ export default function DashboardPage() {
                 <div key={ta.name} className="flex items-center gap-2">
                   <div
                     className="h-2 w-2 rounded-full shrink-0"
-                    style={{ backgroundColor: Object.values(COLORS)[i % 7] }}
+                    style={{ backgroundColor: Object.values(COLORS)[i % 8] }}
                   />
                   <span className="text-[12px] text-muted-foreground flex-1 truncate">{ta.name}</span>
                   <span className="text-[12px] font-medium font-mono">{ta.count}</span>
@@ -336,82 +405,44 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Bottom row */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Deal Volume Trend */}
-        <Card className="border-border/40 shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                <CardTitle className="text-sm font-semibold">Deal Volume</CardTitle>
-              </div>
-              <Badge variant="secondary" className="text-[10px] h-5 font-normal">12mo</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="h-[120px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={sparkline} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
-                  <defs>
-                    <linearGradient id="gradOrange" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#F97316" stopOpacity={0.2} />
-                      <stop offset="100%" stopColor="#F97316" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#F97316"
-                    strokeWidth={2}
-                    fill="url(#gradOrange)"
-                    dot={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* AI Insights */}
+        {/* Portfolio Optimization Insights */}
         <Card className="lg:col-span-2 border-border/40 shadow-sm bg-gradient-to-br from-white to-[#FFF7ED]/30">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-[#F97316] to-[#EA580C]">
                 <Zap className="h-3 w-3 text-white" />
               </div>
-              <CardTitle className="text-sm font-semibold">AI Insights</CardTitle>
+              <CardTitle className="text-sm font-semibold">Portfolio Optimization Insights</CardTitle>
               <Badge className="text-[10px] h-5 bg-[#F97316]/10 text-[#F97316] border-0 font-medium">
-                Powered by Deal Twin
+                AI-Powered
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="grid gap-3 sm:grid-cols-2">
               <InsightCard
-                title="ADC deals trending up"
-                description="Antibody-drug conjugate licensing deals increased 40% YoY with average upfronts reaching $200M+"
-                tag="Market Trend"
-                tagColor={COLORS.blue}
+                title="$300B+ patent cliff by 2030"
+                description="8 of the 13 largest pharma firms could see 30%+ revenue jeopardized. Identify reformulation and in-licensing opportunities."
+                tag="Patent Cliff"
+                tagColor={COLORS.red}
               />
               <InsightCard
-                title="Oncology remains dominant"
-                description="65% of recent deals are oncology-focused. Consider immunology for less competition."
-                tag="Portfolio"
+                title="Hidden champions in rare disease"
+                description="3 portfolio assets show underexploited rare disease potential with 5-10x upside on current valuations."
+                tag="Hidden Value"
                 tagColor={COLORS.green}
               />
               <InsightCard
-                title="Royalty ranges tightening"
-                description="Mid-single-digit royalties becoming standard for Phase 1 assets across modalities"
-                tag="Benchmarking"
-                tagColor={COLORS.violet}
+                title="ADC out-licensing surge"
+                description="Antibody-drug conjugate deals up 40% YoY. Average upfronts reaching $200M+ create premium opportunities."
+                tag="Market Signal"
+                tagColor={COLORS.blue}
               />
               <InsightCard
-                title="3 partners match your profile"
-                description="Based on your latest asset, Roche, Novartis, and AstraZeneca show high fit scores"
-                tag="Partner Match"
+                title="SKU complexity dragging margins"
+                description="Portfolio analysis shows 22% of SKUs contribute <5% of revenue. Pruning could unlock $50-80M in savings."
+                tag="Optimization"
                 tagColor={COLORS.orange}
               />
             </div>
@@ -419,6 +450,45 @@ export default function DashboardPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function PIVCard({
+  phase,
+  title,
+  description,
+  icon,
+  href,
+  color,
+  stat,
+}: {
+  phase: number;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  href: string;
+  color: string;
+  stat: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative flex flex-col gap-2 rounded-xl border border-border/40 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:border-border/60 hover:-translate-y-0.5 overflow-hidden"
+    >
+      <div className="flex items-center gap-2.5">
+        <span
+          className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white shrink-0"
+          style={{ backgroundColor: color }}
+        >
+          {phase}
+        </span>
+        <span className="text-sm font-bold text-[#1A1A2E] group-hover:text-[#F97316] transition-colors">{title}</span>
+        <ArrowUpRight className="h-3.5 w-3.5 ml-auto text-muted-foreground/30 group-hover:text-[#F97316] transition-colors shrink-0" />
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>
+      <span className="text-[10px] font-medium text-muted-foreground/60 mt-auto">{stat}</span>
+      <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ backgroundColor: color, opacity: 0.5 }} />
+    </Link>
   );
 }
 
@@ -466,39 +536,6 @@ function StatCard({
       </CardContent>
       <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ backgroundColor: color, opacity: 0.4 }} />
     </Card>
-  );
-}
-
-function QuickAction({
-  title,
-  description,
-  icon,
-  href,
-  color,
-}: {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  href: string;
-  color: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group flex items-center gap-3 rounded-xl border border-border/40 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:border-border/60 hover:-translate-y-0.5"
-    >
-      <div
-        className="flex h-10 w-10 items-center justify-center rounded-xl shrink-0 transition-transform group-hover:scale-110"
-        style={{ backgroundColor: `${color}10`, color }}
-      >
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-semibold text-[#1A1A2E] group-hover:text-[#F97316] transition-colors">{title}</p>
-        <p className="text-[11px] text-muted-foreground truncate">{description}</p>
-      </div>
-      <ArrowUpRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-[#F97316] transition-colors shrink-0" />
-    </Link>
   );
 }
 

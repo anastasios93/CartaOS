@@ -15,6 +15,9 @@ import {
   Settings,
   LogOut,
   Zap,
+  Target,
+  Briefcase,
+  Rocket,
 } from "lucide-react";
 import {
   Sidebar,
@@ -32,43 +35,58 @@ import { Badge } from "@/components/ui/badge";
 
 const mainNav = [
   {
-    title: "Dashboard",
+    title: "Portfolio Overview",
     href: "/",
     icon: LayoutDashboard,
-    description: "Portfolio overview",
+    description: "Portfolio health & unrealized value",
   },
 ];
 
-const dealIntelligence = [
+const diagnosticPhase = [
   {
     title: "Intelligence Hub",
     href: "/hub",
     icon: Zap,
-    description: "4-agent deal analysis",
+    description: "AI portfolio diagnostic",
     badge: "AI",
   },
   {
     title: "Comparable Deals",
     href: "/benchmarks",
     icon: BarChart3,
-    description: "Benchmark & explore",
+    description: "Benchmark & market potential",
   },
+  {
+    title: "Market Trends",
+    href: "/trends",
+    icon: TrendingUp,
+    description: "Patent cliff & market signals",
+  },
+];
+
+const strategyPhase = [
   {
     title: "Partner Matching",
     href: "/partners",
     icon: Users,
-    description: "Find ideal partners",
+    description: "Strategic fit & positioning",
+  },
+  {
+    title: "Deal Insights",
+    href: "/insights",
+    icon: Lightbulb,
+    description: "Value optimization strategy",
+    badge: "New",
+  },
+  {
+    title: "AI Advisor",
+    href: "/conductor",
+    icon: MessageSquare,
+    description: "Ask anything about your portfolio",
   },
 ];
 
-const tools = [
-  {
-    title: "AI Companion",
-    href: "/conductor",
-    icon: MessageSquare,
-    description: "Ask anything about deals",
-    badge: "New",
-  },
+const executionPhase = [
   {
     title: "Deal Workspace",
     href: "/workspace",
@@ -77,23 +95,10 @@ const tools = [
     badge: "3",
   },
   {
-    title: "Market Trends",
-    href: "/trends",
-    icon: TrendingUp,
-    description: "Industry insights",
-  },
-  {
-    title: "Deal Insights",
-    href: "/insights",
-    icon: Lightbulb,
-    description: "Structure & value analysis",
-    badge: "New",
-  },
-  {
     title: "Live Search",
     href: "/search",
     icon: Search,
-    description: "SEC & ClinicalTrials",
+    description: "SEC, ClinicalTrials, Patents",
   },
 ];
 
@@ -103,6 +108,62 @@ function getInitials(name?: string | null): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0][0].toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function NavGroup({
+  label,
+  phaseNumber,
+  items,
+  isActive,
+}: {
+  label: string;
+  phaseNumber?: number;
+  items: { title: string; href: string; icon: React.ComponentType<{ className?: string }>; description: string; badge?: string }[];
+  isActive: (href: string) => boolean;
+}) {
+  return (
+    <SidebarGroup className="py-1">
+      <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 px-3 mb-1 flex items-center gap-2">
+        {phaseNumber && (
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#F97316]/15 text-[9px] font-bold text-[#F97316]">
+            {phaseNumber}
+          </span>
+        )}
+        {label}
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <SidebarMenuButton
+                isActive={isActive(item.href)}
+                className="h-9 rounded-lg px-3 transition-all duration-150"
+              >
+                <Link href={item.href} className="flex items-center gap-3 w-full">
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span className="text-[13px] font-medium flex-1">{item.title}</span>
+                  {"badge" in item && item.badge && (
+                    <Badge
+                      variant="secondary"
+                      className={`h-5 px-1.5 text-[10px] font-semibold ${
+                        item.badge === "AI"
+                          ? "bg-gradient-to-r from-[#F97316]/15 to-[#F59E0B]/15 text-[#F97316] border-0"
+                          : item.badge === "New"
+                          ? "bg-[#10B981]/10 text-[#10B981] border-0"
+                          : ""
+                      }`}
+                    >
+                      {item.badge}
+                    </Badge>
+                  )}
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
 }
 
 export function AppSidebar() {
@@ -134,7 +195,7 @@ export function AppSidebar() {
           <div>
             <p className="text-[15px] font-bold leading-none tracking-tight">CartaOS</p>
             <p className="text-[10px] font-medium text-muted-foreground/70 tracking-widest uppercase mt-0.5">
-              Deal Intelligence
+              Portfolio Intelligence
             </p>
           </div>
         </Link>
@@ -162,77 +223,29 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Deal Intelligence */}
-        <SidebarGroup className="py-1">
-          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 px-3 mb-1">
-            Deal Intelligence
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {dealIntelligence.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={isActive(item.href)}
-                    className="h-9 rounded-lg px-3 transition-all duration-150"
-                  >
-                    <Link href={item.href} className="flex items-center gap-3 w-full">
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span className="text-[13px] font-medium flex-1">{item.title}</span>
-                      {"badge" in item && item.badge && (
-                        <Badge
-                          variant="secondary"
-                          className={`h-5 px-1.5 text-[10px] font-semibold ${
-                            item.badge === "AI"
-                              ? "bg-gradient-to-r from-[#F97316]/15 to-[#F59E0B]/15 text-[#F97316] border-0"
-                              : ""
-                          }`}
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Phase 1: Diagnostic */}
+        <NavGroup
+          label="Diagnostic"
+          phaseNumber={1}
+          items={diagnosticPhase}
+          isActive={isActive}
+        />
 
-        {/* Tools */}
-        <SidebarGroup className="py-1">
-          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 px-3 mb-1">
-            Tools
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {tools.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={isActive(item.href)}
-                    className="h-9 rounded-lg px-3 transition-all duration-150"
-                  >
-                    <Link href={item.href} className="flex items-center gap-3 w-full">
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span className="text-[13px] font-medium flex-1">{item.title}</span>
-                      {"badge" in item && item.badge && (
-                        <Badge
-                          variant="secondary"
-                          className={`h-5 px-1.5 text-[10px] font-semibold ${
-                            item.badge === "New"
-                              ? "bg-[#10B981]/10 text-[#10B981] border-0"
-                              : ""
-                          }`}
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Phase 2: Strategy */}
+        <NavGroup
+          label="Strategy"
+          phaseNumber={2}
+          items={strategyPhase}
+          isActive={isActive}
+        />
+
+        {/* Phase 3: Execution */}
+        <NavGroup
+          label="Execution"
+          phaseNumber={3}
+          items={executionPhase}
+          isActive={isActive}
+        />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/50 p-3">
