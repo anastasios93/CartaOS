@@ -1,16 +1,13 @@
 /**
- * Agent 4: Term Sheet Drafting
- * Sources: All (SEC EDGAR, ClinicalTrials, PubMed, OpenFDA)
+ * Agent 4: Term Sheet & Contract Drafting
+ * Sources: ALL — SEC EDGAR, ClinicalTrials, PubMed, OpenFDA, Orange Book, FAERS, DailyMed, RxNorm, EMA, Health Canada, ChEMBL, Patents, News
  * Output: { clauses: TermSheetClause[], termSheet: string }
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { HubIntakeForm, SourceHit, TermSheetClause } from "@/types/hub";
 import type { AgentWriter } from "./index";
-import { searchEdgarForDeals } from "@/server/services/sec-edgar";
-import { searchClinicalTrials } from "@/server/services/clinical-trials";
-import { searchLiterature } from "@/server/services/pubmed";
-import { searchDrugApplications } from "@/server/services/openfda";
+import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
 import { TERMSHEET_AGENT_PROMPT } from "@/server/services/hub-prompts";
 import { extractJSON, cleanError } from "./utils";
 
@@ -26,45 +23,42 @@ export async function runTermSheetAgent(
     }
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    write({ agent: agentId, type: "status", status: "scraping", message: "Gathering data from all sources for term sheet drafting..." });
+    write({ agent: agentId, type: "status", status: "scraping", message: "Querying ALL 12+ global databases: FDA, EMA, Health Canada, FAERS, Orange Book, DailyMed, ChEMBL, RxNorm, ClinicalTrials, PubMed, SEC EDGAR, Patents, News..." });
 
-    const edgarQuery = `"license agreement" AND "${intake.therapeuticArea}" AND ("upfront" OR "milestone" OR "royalt")`;
-    const ctQuery = `${intake.assetName} ${intake.therapeuticArea}`;
+    // Use the global aggregator to pull from EVERY source
+    const assetBase = intake.assetName.split("(")[0].trim();
+    const globalData = await aggregateGlobalData(assetBase, intake.therapeuticArea, {
+      includeNews: true,
+      includePatents: true,
+      maxPerSource: 12,
+    });
 
-    const [edgarResult, ctResult, pubmedResult, fdaResult] = await Promise.allSettled([
-      searchEdgarForDeals(edgarQuery, ["8-K", "10-K"], "2021-01-01", undefined, 15),
-      searchClinicalTrials(ctQuery, undefined, 10),
-      searchLiterature(`${intake.therapeuticArea} deal structure licensing terms`, 5),
-      searchDrugApplications(intake.therapeuticArea, 10),
-    ]);
-
-    const edgarHits = edgarResult.status === "fulfilled" ? edgarResult.value.results : [];
-    const ctHits = ctResult.status === "fulfilled" ? ctResult.value.results : [];
-    const pubmedHits = pubmedResult.status === "fulfilled" ? pubmedResult.value.results : [];
-    const fdaHits = fdaResult.status === "fulfilled" ? fdaResult.value.results : [];
-
-    const sources: SourceHit[] = [
-      ...edgarHits.slice(0, 5).map(h => ({ source: "SEC EDGAR", title: `${h.companyName} — ${h.form}`, url: h.documentUrl, date: h.filingDate })),
-      ...ctHits.slice(0, 3).map(h => ({ source: "ClinicalTrials.gov", title: h.title, url: `https://clinicaltrials.gov/study/${h.nctId}` })),
-      ...pubmedHits.slice(0, 2).map(h => ({ source: "PubMed", title: h.title, url: h.pubmedUrl })),
-      ...fdaHits.slice(0, 2).map(h => ({ source: "OpenFDA", title: `${h.sponsorName}: ${h.brandName}` })),
-    ];
+    // Build source hits for UI from every source that returned data
+    const sources: SourceHit[] = [];
+    for (const s of globalData.sources) {
+      if (s.count > 0) {
+        sources.push({ source: s.name, title: `${s.count} records found` });
+      }
+    }
+    // Add specific entries
+    globalData.fdaApprovals.slice(0, 3).forEach(h => sources.push({
+      source: "OpenFDA", title: `${h.brandName || h.genericName} (${h.applicationNumber})`
+    }));
+    globalData.clinicalTrials.slice(0, 3).forEach(h => sources.push({
+      source: "ClinicalTrials.gov", title: h.title, url: `https://clinicaltrials.gov/study/${h.nctId}`
+    }));
+    globalData.secFilings.slice(0, 3).forEach(h => sources.push({
+      source: "SEC EDGAR", title: `${h.companyName} — ${h.formType}`, url: h.documentUrl
+    }));
 
     write({ agent: agentId, type: "sources", sources });
-    write({ agent: agentId, type: "status", status: "analyzing", message: "Drafting term sheet with Claude AI..." });
 
-    const edgarContext = edgarHits.slice(0, 10).map(h =>
-      `[${h.form}] ${h.companyName} (${h.filingDate}): ${h.description?.slice(0, 400) ?? ""}`
-    ).join("\n");
+    const successCount = globalData.sources.filter(s => s.status === "success").length;
+    const totalRecords = globalData.sources.reduce((sum, s) => sum + s.count, 0);
+    write({ agent: agentId, type: "status", status: "analyzing", message: `Drafting term sheet from ${totalRecords} records across ${successCount} databases worldwide...` });
 
-    const ctContext = ctHits.slice(0, 8).map(h =>
-      `[${h.nctId}] ${h.title} | Phase: ${h.phase} | Sponsor: ${h.sponsor}`
-    ).join("\n");
-
-    const fdaContext = fdaHits.slice(0, 5).map(h =>
-      `${h.sponsorName}: ${h.brandName} (${h.genericName}) | Approved: ${h.approvalDate ?? "N/A"}`
-    ).join("\n");
-
+    // Generate the comprehensive text summary for Claude
+    const fullContext = summarizeGlobalData(globalData);
     const geoStr = intake.geographies.join(", ");
 
     const response = await anthropic.messages.create({
@@ -81,17 +75,16 @@ Deal Direction: ${intake.dealDirection}
 Target Geographies: ${geoStr}
 Context: ${intake.context || "None"}
 
-## SEC EDGAR — Deal Precedents (${edgarHits.length} filings)
-${edgarContext || "No filings found."}
+## GLOBAL INTELLIGENCE (from ${successCount} databases, ${totalRecords} records)
 
-## Clinical Trials (${ctHits.length} trials)
-${ctContext || "No trials found."}
+${fullContext}
 
-## FDA Approved Products (${fdaHits.length} records)
-${fdaContext || "No records found."}
-
-Draft a complete term sheet for a ${intake.dealDirection} transaction covering ${geoStr}.
-Include specific dollar amounts based on comparable deals and flag any non-standard terms.`,
+Draft a comprehensive term sheet for a ${intake.dealDirection} transaction covering ${geoStr}.
+Use SPECIFIC dollar amounts from comparable deals found in SEC EDGAR and FDA data.
+Include patent cliff considerations from Orange Book data.
+Include safety profile considerations from FAERS adverse event data.
+Include regulatory pathway considerations for each target geography (US FDA, EU EMA, Canada Health Canada).
+Flag any non-standard terms vs. market benchmarks.`,
       }],
     });
 
@@ -99,7 +92,7 @@ Include specific dollar amounts based on comparable deals and flag any non-stand
     const parsed = extractJSON<{ clauses: TermSheetClause[]; termSheet: string }>(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "termsheet", clauses: parsed.clauses, termSheet: parsed.termSheet } });
-    write({ agent: agentId, type: "status", status: "complete", message: `Drafted ${parsed.clauses.length} term sheet clauses` });
+    write({ agent: agentId, type: "status", status: "complete", message: `Drafted ${parsed.clauses.length} clauses from ${totalRecords} global records` });
   } catch (err) {
     const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });
