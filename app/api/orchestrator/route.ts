@@ -8,7 +8,7 @@ import { authOptions } from "@/lib/auth";
 import { z } from "zod";
 import type { SSEEvent, AgentId, AgentResult } from "@/types/hub";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const IntakeSchema = z.object({

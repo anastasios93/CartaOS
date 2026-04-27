@@ -42,6 +42,7 @@ import { DiligenceResults } from "@/components/hub/results/diligence-results";
 import { DataPackageResults } from "@/components/hub/results/datapackage-results";
 import { IntelligenceResults } from "@/components/hub/results/intelligence-results";
 import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-results";
+import { SAMPLE_EXECUTION_PLAN } from "@/lib/sample-execution-plan";
 
 const PILLAR_COLORS = {
   diagnosis: "#3B82F6",
@@ -374,10 +375,21 @@ export default function PortfolioOverview() {
               <div className="space-y-8">
                 <div>
                   <SectionHeader icon={<Rocket className="h-4 w-4" />} title="Simulated Execution Plan" color={PILLAR_COLORS.execution} />
-                  {executionPlanComplete ? (
+                  {executionPlanComplete && executionPlanResult ? (
                     <ExecutionPlanResults data={executionPlanResult} />
                   ) : agents.executionPlan?.status === "error" ? (
-                    <ErrorBlock message={agents.executionPlan.error} />
+                    <>
+                      <ErrorBlock message={agents.executionPlan.error} />
+                      <div className="mt-4">
+                        <p className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
+                          <Rocket className="h-3 w-3" />
+                          Sample plan preview (illustrative example):
+                        </p>
+                        <ExecutionPlanResults
+                          data={{ agentId: "executionPlan", plan: SAMPLE_EXECUTION_PLAN }}
+                        />
+                      </div>
+                    </>
                   ) : (
                     <SkeletonBlock label="Execution plan agent generating timeline & stakeholders..." />
                   )}
