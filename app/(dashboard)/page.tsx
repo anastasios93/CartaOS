@@ -283,10 +283,17 @@ export default function PortfolioOverview() {
         >
           <div className="flex gap-2">
             <Link
-              href="/workspace"
+              href="/simulated-plan"
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#F97316]/8 text-[#F97316] text-[12px] font-semibold hover:bg-[#F97316]/15 transition"
             >
               <Rocket className="h-3.5 w-3.5" />
+              Simulated Plan
+            </Link>
+            <Link
+              href="/workspace"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#F97316]/8 text-[#F97316] text-[12px] font-semibold hover:bg-[#F97316]/15 transition"
+            >
+              <FileSignature className="h-3.5 w-3.5" />
               Workspace
             </Link>
           </div>

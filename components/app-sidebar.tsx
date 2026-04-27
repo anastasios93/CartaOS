@@ -73,7 +73,7 @@ const strategy = [
 const execution = [
   {
     title: "Simulated Plan",
-    href: "/workspace",
+    href: "/simulated-plan",
     icon: Rocket,
   },
   {
