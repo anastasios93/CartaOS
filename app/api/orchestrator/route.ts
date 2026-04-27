@@ -56,12 +56,14 @@ export async function POST(req: Request) {
         { runNegotiationAgent },
         { runTermSheetAgent },
         { runSynthesisAgent },
+        { runExecutionPlanAgent },
       ] = await Promise.all([
         import("@/server/agents/benchmarking"),
         import("@/server/agents/partner"),
         import("@/server/agents/negotiation"),
         import("@/server/agents/termsheet"),
         import("@/server/agents/synthesis"),
+        import("@/server/agents/execution-plan"),
       ]);
 
       const CORE_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "termsheet"];
@@ -73,9 +75,11 @@ export async function POST(req: Request) {
         { id: "termsheet", run: runTermSheetAgent },
       ];
 
-      // Send initial status for all agents (including synthesis)
-      for (const id of [...CORE_IDS, "synthesis" as AgentId]) {
-        sendEvent({ agent: id, type: "status", status: "idle", message: id === "synthesis" ? "Waiting for agents to complete..." : "Queued..." });
+      // Send initial status for all agents (including synthesis & execution plan)
+      const POST_AGENTS: AgentId[] = ["synthesis", "executionPlan"];
+      for (const id of [...CORE_IDS, ...POST_AGENTS]) {
+        const isPost = POST_AGENTS.includes(id);
+        sendEvent({ agent: id, type: "status", status: "idle", message: isPost ? "Waiting for diagnosis & strategy..." : "Queued..." });
       }
 
       // Collect results from the 4 core agents
@@ -94,12 +98,17 @@ export async function POST(req: Request) {
         agents.map(agent => agent.run(intake, capturingSendEvent))
       );
 
-      // Run synthesis agent with collected results
+      // Run synthesis + execution plan agents in PARALLEL with collected results
       if (collectedResults.length > 0) {
-        await runSynthesisAgent(intake, collectedResults, sendEvent);
+        await Promise.allSettled([
+          runSynthesisAgent(intake, collectedResults, sendEvent),
+          runExecutionPlanAgent(intake, collectedResults, sendEvent),
+        ]);
       } else {
-        sendEvent({ agent: "synthesis", type: "error", error: "No agent results to synthesize — all agents failed." });
-        sendEvent({ agent: "synthesis", type: "status", status: "error", message: "No agent results to synthesize" });
+        for (const id of ["synthesis", "executionPlan"] as AgentId[]) {
+          sendEvent({ agent: id, type: "error", error: "No agent results to synthesize — all upstream agents failed." });
+          sendEvent({ agent: id, type: "status", status: "error", message: "No upstream results available" });
+        }
       }
 
       sendEvent({ type: "done" });

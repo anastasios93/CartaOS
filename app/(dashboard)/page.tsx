@@ -41,6 +41,7 @@ import { ContractResults } from "@/components/hub/results/contract-results";
 import { DiligenceResults } from "@/components/hub/results/diligence-results";
 import { DataPackageResults } from "@/components/hub/results/datapackage-results";
 import { IntelligenceResults } from "@/components/hub/results/intelligence-results";
+import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-results";
 
 const PILLAR_COLORS = {
   diagnosis: "#3B82F6",
@@ -84,6 +85,9 @@ export default function PortfolioOverview() {
   // Synthesis result for the Execution pillar
   const synthesisResult = agents.synthesis?.result as Extract<AgentResult, { agentId: "synthesis" }> | null;
   const synthesisComplete = agents.synthesis?.status === "complete" && synthesisResult;
+
+  const executionPlanResult = agents.executionPlan?.result as Extract<AgentResult, { agentId: "executionPlan" }> | null;
+  const executionPlanComplete = agents.executionPlan?.status === "complete" && executionPlanResult;
 
   const benchmarkResult = agents.benchmarking?.result as Extract<AgentResult, { agentId: "benchmarking" }> | null;
   const partnerResult = agents.partner?.result as Extract<AgentResult, { agentId: "partner" }> | null;
@@ -256,18 +260,23 @@ export default function PortfolioOverview() {
         <PillarCard
           number={3}
           title="Execution"
-          subtitle="Simulated deal plan & contracts"
+          subtitle="Simulated plan, term sheet & contracts"
           color={PILLAR_COLORS.execution}
           icon={Rocket}
           items={[
             {
+              label: "Simulated Execution Plan",
+              description: submitted ? "Timeline, stakeholders & dependencies from Pillars 1 & 2" : "Outcome roadmap with phases, owners & milestones",
+              agentState: agents.executionPlan,
+            },
+            {
               label: "Term Sheet & Contract",
-              description: submitted ? "Draft agreement based on Pillars 1 & 2 outputs" : "AI-drafted from comparable deals & best practices",
+              description: submitted ? "Draft agreement from comparable deals" : "AI-drafted from precedents & best practices",
               agentState: agents.termsheet,
             },
             {
               label: "Due Diligence & Data Room",
-              description: submitted ? "Synthesized package from all agent outputs" : "Question prep, data package, smart intelligence",
+              description: submitted ? "Synthesized package from all agents" : "Question prep, data package, smart intelligence",
               agentState: agents.synthesis,
             },
           ]}
@@ -356,6 +365,16 @@ export default function PortfolioOverview() {
 
             {activeView === "execution" && (
               <div className="space-y-8">
+                <div>
+                  <SectionHeader icon={<Rocket className="h-4 w-4" />} title="Simulated Execution Plan" color={PILLAR_COLORS.execution} />
+                  {executionPlanComplete ? (
+                    <ExecutionPlanResults data={executionPlanResult} />
+                  ) : agents.executionPlan?.status === "error" ? (
+                    <ErrorBlock message={agents.executionPlan.error} />
+                  ) : (
+                    <SkeletonBlock label="Execution plan agent generating timeline & stakeholders..." />
+                  )}
+                </div>
                 <div>
                   <SectionHeader icon={<FileSignature className="h-4 w-4" />} title="Term Sheet & Clauses" color={PILLAR_COLORS.execution} />
                   {termSheetResult ? (

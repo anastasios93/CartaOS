@@ -34,7 +34,7 @@ export const GEOGRAPHY_COLORS: Record<Geography, string> = {
 
 // ─── Agent IDs & Status ─────────────────────────────────────────────────────
 
-export type AgentId = "benchmarking" | "partner" | "negotiation" | "termsheet" | "synthesis";
+export type AgentId = "benchmarking" | "partner" | "negotiation" | "termsheet" | "synthesis" | "executionPlan";
 
 export type AgentStatus = "idle" | "scraping" | "analyzing" | "complete" | "error";
 
@@ -44,6 +44,7 @@ export const AGENT_META: Record<AgentId, { label: string; description: string; c
   negotiation:  { label: "Negotiation Intelligence", description: "Deal terms + leverage analysis", color: "#F59E0B", icon: "Scale" },
   termsheet:    { label: "Term Sheet Drafting", description: "All sources → Draft term sheet", color: "#A855F7", icon: "FileText" },
   synthesis:    { label: "Deal Package", description: "Contract, DD, data room & intelligence", color: "#EC4899", icon: "Briefcase" },
+  executionPlan:{ label: "Execution Plan", description: "Timeline, stakeholders & dependencies", color: "#F97316", icon: "Rocket" },
 };
 
 // ─── SSE Events ─────────────────────────────────────────────────────────────
@@ -68,7 +69,64 @@ export type AgentResult =
   | { agentId: "partner"; partners: PartnerScore[] }
   | { agentId: "negotiation"; leveragePoints: NegotiationLeverage[] }
   | { agentId: "termsheet"; clauses: TermSheetClause[]; termSheet: string }
-  | { agentId: "synthesis"; contract: string; dueDiligence: DDSection[]; dataPackage: DataPackageItem[]; intelligence: IntelSection[] };
+  | { agentId: "synthesis"; contract: string; dueDiligence: DDSection[]; dataPackage: DataPackageItem[]; intelligence: IntelSection[] }
+  | { agentId: "executionPlan"; plan: ExecutionPlanOutput };
+
+// ─── Execution Plan Types ───────────────────────────────────────────────────
+
+export interface ExecutionPlanOutput {
+  overview: string;
+  totalDurationWeeks: number;
+  phases: ExecutionPhase[];
+  stakeholders: ExecutionStakeholder[];
+  criticalMilestones: CriticalMilestone[];
+  risks: ExecutionRisk[];
+  connections: ExecutionConnection[];
+}
+
+export interface ExecutionPhase {
+  id: string;
+  name: string;
+  pillar: "Diagnosis" | "Strategy" | "Execution";
+  description: string;
+  startWeek: number;
+  endWeek: number;
+  owner: string;
+  contributors: string[];
+  deliverables: string[];
+  dependsOn: string[];
+  successCriteria: string;
+}
+
+export interface ExecutionStakeholder {
+  role: string;
+  involvement: "Lead" | "Contributor" | "Reviewer" | "Approver";
+  internalOrExternal: "Internal" | "External";
+  responsibilities: string[];
+  phaseIds: string[];
+}
+
+export interface CriticalMilestone {
+  week: number;
+  milestone: string;
+  owner: string;
+  deliverable: string;
+}
+
+export interface ExecutionRisk {
+  risk: string;
+  impact: "High" | "Medium" | "Low";
+  likelihood: "High" | "Medium" | "Low";
+  mitigation: string;
+  owner: string;
+}
+
+export interface ExecutionConnection {
+  from: string;
+  to: string;
+  type: "Sequential" | "Parallel" | "Triggers" | "Blocks";
+  description: string;
+}
 
 // ─── Synthesis Output Types ────────────────────────────────────────────────
 
