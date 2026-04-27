@@ -17,7 +17,7 @@ export default function DashboardLayout({
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
-  const isHub = pathname === "/hub";
+  const isHub = false; // Hub now lives at "/" — no longer needs special layout
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -103,7 +103,7 @@ export default function DashboardLayout({
               className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
               asChild
             >
-              <Link href="/hub">
+              <Link href="/">
                 <Plus className="h-4 w-4" />
               </Link>
             </Button>

@@ -14,9 +14,8 @@ import {
   Lightbulb,
   Settings,
   LogOut,
-  Zap,
-  Target,
-  Briefcase,
+  Sparkles,
+  Network,
   Rocket,
 } from "lucide-react";
 import {
@@ -31,78 +30,67 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Badge } from "@/components/ui/badge";
 
 const mainNav = [
   {
     title: "Portfolio Overview",
     href: "/",
     icon: LayoutDashboard,
-    description: "Portfolio health & unrealized value",
   },
 ];
 
-const diagnosticPhase = [
+const diagnosis = [
   {
-    title: "Intelligence Hub",
-    href: "/hub",
-    icon: Zap,
-    description: "AI portfolio diagnostic",
-    badge: "AI",
+    title: "Market Trends",
+    href: "/trends",
+    icon: TrendingUp,
   },
   {
     title: "Comparable Deals",
     href: "/benchmarks",
     icon: BarChart3,
-    description: "Benchmark & market potential",
-  },
-  {
-    title: "Market Trends",
-    href: "/trends",
-    icon: TrendingUp,
-    description: "Patent cliff & market signals",
   },
 ];
 
-const strategyPhase = [
+const strategy = [
   {
-    title: "Partner Matching",
+    title: "Partners & Synergies",
     href: "/partners",
     icon: Users,
-    description: "Strategic fit & positioning",
   },
   {
-    title: "Deal Insights",
+    title: "Commercial Maximization",
     href: "/insights",
     icon: Lightbulb,
-    description: "Value optimization strategy",
-    badge: "New",
   },
   {
     title: "AI Advisor",
     href: "/conductor",
     icon: MessageSquare,
-    description: "Ask anything about your portfolio",
   },
 ];
 
-const executionPhase = [
+const execution = [
+  {
+    title: "Simulated Plan",
+    href: "/workspace",
+    icon: Rocket,
+  },
   {
     title: "Deal Workspace",
     href: "/workspace",
     icon: FolderKanban,
-    description: "Notes, files & tasks",
-    badge: "3",
   },
+];
+
+const tools = [
   {
     title: "Live Search",
     href: "/search",
     icon: Search,
-    description: "SEC, ClinicalTrials, Patents",
   },
 ];
 
-/** Get initials from a name string, e.g. "Jane Smith" -> "JS" */
 function getInitials(name?: string | null): string {
   if (!name) return "U";
   const parts = name.trim().split(/\s+/);
@@ -110,31 +98,28 @@ function getInitials(name?: string | null): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+type NavItem = { title: string; href: string; icon: React.ComponentType<{ className?: string }> };
+
 function NavGroup({
   label,
-  phaseNumber,
   items,
   isActive,
 }: {
-  label: string;
-  phaseNumber?: number;
-  items: { title: string; href: string; icon: React.ComponentType<{ className?: string }>; description: string; badge?: string }[];
+  label?: string;
+  items: NavItem[];
   isActive: (href: string) => boolean;
 }) {
   return (
     <SidebarGroup className="py-1">
-      <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 px-3 mb-1 flex items-center gap-2">
-        {phaseNumber && (
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#F97316]/15 text-[9px] font-bold text-[#F97316]">
-            {phaseNumber}
-          </span>
-        )}
-        {label}
-      </SidebarGroupLabel>
+      {label && (
+        <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50 px-3 mb-1">
+          {label}
+        </SidebarGroupLabel>
+      )}
       <SidebarGroupContent>
         <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.href}>
+          {items.map((item, i) => (
+            <SidebarMenuItem key={`${item.href}-${i}`}>
               <SidebarMenuButton
                 isActive={isActive(item.href)}
                 className="h-9 rounded-lg px-3 transition-all duration-150"
@@ -142,20 +127,6 @@ function NavGroup({
                 <Link href={item.href} className="flex items-center gap-3 w-full">
                   <item.icon className="h-4 w-4 shrink-0" />
                   <span className="text-[13px] font-medium flex-1">{item.title}</span>
-                  {"badge" in item && item.badge && (
-                    <Badge
-                      variant="secondary"
-                      className={`h-5 px-1.5 text-[10px] font-semibold ${
-                        item.badge === "AI"
-                          ? "bg-gradient-to-r from-[#F97316]/15 to-[#F59E0B]/15 text-[#F97316] border-0"
-                          : item.badge === "New"
-                          ? "bg-[#10B981]/10 text-[#10B981] border-0"
-                          : ""
-                      }`}
-                    >
-                      {item.badge}
-                    </Badge>
-                  )}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -202,50 +173,11 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2">
-        {/* Main */}
-        <SidebarGroup className="py-1">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainNav.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={isActive(item.href)}
-                    className="h-9 rounded-lg px-3 transition-all duration-150"
-                  >
-                    <Link href={item.href} className="flex items-center gap-3 w-full">
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span className="text-[13px] font-medium">{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Phase 1: Diagnostic */}
-        <NavGroup
-          label="Diagnostic"
-          phaseNumber={1}
-          items={diagnosticPhase}
-          isActive={isActive}
-        />
-
-        {/* Phase 2: Strategy */}
-        <NavGroup
-          label="Strategy"
-          phaseNumber={2}
-          items={strategyPhase}
-          isActive={isActive}
-        />
-
-        {/* Phase 3: Execution */}
-        <NavGroup
-          label="Execution"
-          phaseNumber={3}
-          items={executionPhase}
-          isActive={isActive}
-        />
+        <NavGroup items={mainNav} isActive={isActive} />
+        <NavGroup label="Diagnosis" items={diagnosis} isActive={isActive} />
+        <NavGroup label="Strategy" items={strategy} isActive={isActive} />
+        <NavGroup label="Execution" items={execution} isActive={isActive} />
+        <NavGroup label="Tools" items={tools} isActive={isActive} />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/50 p-3">
