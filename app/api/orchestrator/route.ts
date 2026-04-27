@@ -13,10 +13,10 @@ export const dynamic = "force-dynamic";
 
 const IntakeSchema = z.object({
   assetName: z.string().min(1),
-  therapeuticArea: z.string().min(1),
-  developmentStage: z.string().min(1),
-  dealDirection: z.enum(["Out-licensing", "In-licensing", "Co-development", "Option Agreement", "M&A / Acquisition"]),
-  geographies: z.array(z.enum(["US", "EU", "JP", "CN", "ROW"])).min(1),
+  therapeuticArea: z.string().default(""),
+  developmentStage: z.string().default(""),
+  dealDirection: z.enum(["Out-licensing", "In-licensing", "Co-development", "Option Agreement", "M&A / Acquisition"]).default("Out-licensing"),
+  geographies: z.array(z.enum(["US", "EU", "JP", "CN", "ROW"])).default(["US", "EU", "JP", "CN", "ROW"]),
   context: z.string().default(""),
 });
 

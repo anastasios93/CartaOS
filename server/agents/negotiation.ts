@@ -32,8 +32,9 @@ export async function runNegotiationAgent(
     write({ agent: agentId, type: "status", status: "scraping", message: "Querying 7 databases for deal precedents, patents, safety, and competitive intel..." });
 
     const assetBase = intake.assetName.split("(")[0].trim();
-    const edgarQuery = `"upfront payment" OR "milestone payment" OR "royalt" AND "${intake.therapeuticArea}" AND "license"`;
-    const ctQuery = `${intake.assetName} ${intake.therapeuticArea}`;
+    const taQualifier = intake.therapeuticArea ? `AND "${intake.therapeuticArea}" ` : "";
+    const edgarQuery = `"upfront payment" OR "milestone payment" OR "royalt" ${taQualifier}AND "license"`;
+    const ctQuery = `${intake.assetName}${intake.therapeuticArea ? " " + intake.therapeuticArea : ""}`;
 
     const [edgarResult, ctResult, fdaResult, obResult, faersTotal, faersTop, pubmedResult, dmResult] = await Promise.allSettled([
       searchEdgarForDeals(edgarQuery, ["8-K", "10-K", "6-K"], "2021-01-01", undefined, 20),
@@ -42,7 +43,7 @@ export async function runNegotiationAgent(
       searchOrangeBook(assetBase, 10),
       getAdverseEventTotal(assetBase),
       getTopAdverseReactions(assetBase, 10),
-      searchLiterature(`${intake.therapeuticArea} deal terms upfront milestones royalties`, 10),
+      searchLiterature(`${intake.therapeuticArea || assetBase} deal terms upfront milestones royalties`, 10),
       searchDailyMed(assetBase, 5),
     ]);
 
@@ -100,11 +101,11 @@ export async function runNegotiationAgent(
         role: "user",
         content: `## Asset Profile
 Asset: ${intake.assetName}
-Therapeutic Area: ${intake.therapeuticArea}
-Stage: ${intake.developmentStage}
+Therapeutic Area: ${intake.therapeuticArea || "AUTO-DETECT from data"}
+Stage: ${intake.developmentStage || "AUTO-DETECT from clinical trials"}
 Deal Direction: ${intake.dealDirection}
 Target Geographies: ${intake.geographies.join(", ")}
-Context: ${intake.context || "None"}
+Context: ${intake.context || "None — assess negotiating leverage holistically"}
 
 ## Competitive Landscape
 Active competitors: ${uniqueSponsors.size} unique sponsors with active trials

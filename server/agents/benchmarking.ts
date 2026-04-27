@@ -34,8 +34,10 @@ export async function runBenchmarkingAgent(
     write({ agent: agentId, type: "status", status: "scraping", message: "Querying 8 global databases: SEC EDGAR, ClinicalTrials, FDA, Orange Book, DailyMed, ChEMBL, EMA, Health Canada..." });
 
     const assetBase = intake.assetName.split("(")[0].trim();
-    const edgarQuery = `"license agreement" AND "${intake.therapeuticArea}" AND "${assetBase}"`;
-    const ctQuery = `${intake.assetName} ${intake.therapeuticArea}`;
+    // If no TA provided, agents will auto-detect from public data
+    const taQualifier = intake.therapeuticArea ? ` AND "${intake.therapeuticArea}"` : "";
+    const edgarQuery = `"license agreement"${taQualifier} AND "${assetBase}"`;
+    const ctQuery = `${intake.assetName}${intake.therapeuticArea ? " " + intake.therapeuticArea : ""}`;
 
     const [edgarResult, ctResult, fdaResult, obResult, dmResult, chemblResult, emaResult, hcResult] = await Promise.allSettled([
       searchEdgarForDeals(edgarQuery, ["8-K", "10-K", "6-K"], "2020-01-01", undefined, 15),
@@ -113,11 +115,11 @@ export async function runBenchmarkingAgent(
         role: "user",
         content: `## Asset Profile
 Asset: ${intake.assetName}
-Therapeutic Area: ${intake.therapeuticArea}
-Development Stage: ${intake.developmentStage}
+Therapeutic Area: ${intake.therapeuticArea || "AUTO-DETECT from data sources below"}
+Development Stage: ${intake.developmentStage || "AUTO-DETECT from clinical trials data"}
 Deal Direction: ${intake.dealDirection}
 Target Geographies: ${intake.geographies.join(", ")}
-Context: ${intake.context || "None provided"}
+Context: ${intake.context || "None provided — analyze the asset comprehensively"}
 
 ## SEC EDGAR Filings (${edgarHits.length} found)
 ${edgarContext || "No relevant filings found."}

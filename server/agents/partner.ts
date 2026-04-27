@@ -32,18 +32,21 @@ export async function runPartnerAgent(
 
     write({ agent: agentId, type: "status", status: "scraping", message: "Scanning 8 global databases for potential partners..." });
 
-    const indication = intake.context?.split(" ").slice(0, 3).join(" ") || intake.therapeuticArea;
     const assetBase = intake.assetName.split("(")[0].trim();
-    const ctQuery = `${intake.therapeuticArea} ${indication}`;
-    const edgarQuery = `"collaboration agreement" AND "${intake.therapeuticArea}"`;
+    const indication = intake.context?.split(" ").slice(0, 3).join(" ") || intake.therapeuticArea;
+    // If TA missing, query by asset name
+    const ctQuery = intake.therapeuticArea ? `${intake.therapeuticArea} ${indication}` : assetBase;
+    const edgarQuery = intake.therapeuticArea
+      ? `"collaboration agreement" AND "${intake.therapeuticArea}"`
+      : `"collaboration agreement" AND "${assetBase}"`;
 
     const [ctResult, edgarResult, fdaResult, pubmedResult, chemblResult, chemblTargets, emaResult, hcResult, faersResult] = await Promise.allSettled([
       searchClinicalTrials(ctQuery, "RECRUITING", 30),
       searchEdgarForDeals(edgarQuery, ["8-K"], "2022-01-01", undefined, 15),
-      searchDrugApplications(intake.therapeuticArea, 20),
-      searchLiterature(`${intake.therapeuticArea} licensing partnership pharmaceutical`, 10),
+      searchDrugApplications(intake.therapeuticArea || assetBase, 20),
+      searchLiterature(`${intake.therapeuticArea || assetBase} licensing partnership pharmaceutical`, 10),
       searchMolecules(assetBase, 10),
-      searchTargets(intake.therapeuticArea, 15),
+      searchTargets(intake.therapeuticArea || assetBase, 15),
       searchEmaProducts(assetBase, 10),
       searchHealthCanada(assetBase, 10),
       getTopAdverseReactions(assetBase, 5),
@@ -115,11 +118,11 @@ export async function runPartnerAgent(
         role: "user",
         content: `## Asset Profile
 Asset: ${intake.assetName}
-Therapeutic Area: ${intake.therapeuticArea}
-Stage: ${intake.developmentStage}
+Therapeutic Area: ${intake.therapeuticArea || "AUTO-DETECT from sources below"}
+Stage: ${intake.developmentStage || "AUTO-DETECT from clinical trials data"}
 Deal Direction: ${intake.dealDirection}
 Target Geographies: ${intake.geographies.join(", ")}
-Context: ${intake.context || "None"}
+Context: ${intake.context || "None — identify global partners with appropriate scale and TA fit"}
 
 ## Clinical Trials — Active Sponsors (${ctHits.length} trials)
 ${ctContext || "No trials found."}

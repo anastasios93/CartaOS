@@ -69,11 +69,11 @@ export async function runTermSheetAgent(
         role: "user",
         content: `## Asset Profile
 Asset: ${intake.assetName}
-Therapeutic Area: ${intake.therapeuticArea}
-Stage: ${intake.developmentStage}
+Therapeutic Area: ${intake.therapeuticArea || "AUTO-DETECT from global sources"}
+Stage: ${intake.developmentStage || "AUTO-DETECT from clinical trials"}
 Deal Direction: ${intake.dealDirection}
 Target Geographies: ${geoStr}
-Context: ${intake.context || "None"}
+Context: ${intake.context || "None — generate a comprehensive market-aligned term sheet"}
 
 ## GLOBAL INTELLIGENCE (from ${successCount} databases, ${totalRecords} records)
 
