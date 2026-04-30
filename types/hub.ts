@@ -34,7 +34,7 @@ export const GEOGRAPHY_COLORS: Record<Geography, string> = {
 
 // ─── Agent IDs & Status ─────────────────────────────────────────────────────
 
-export type AgentId = "benchmarking" | "partner" | "negotiation" | "termsheet" | "synthesis" | "executionPlan";
+export type AgentId = "benchmarking" | "partner" | "negotiation" | "termsheet" | "synthesis" | "executionPlan" | "outLicensingStrategy";
 
 export type AgentStatus = "idle" | "scraping" | "analyzing" | "complete" | "error";
 
@@ -45,6 +45,7 @@ export const AGENT_META: Record<AgentId, { label: string; description: string; c
   termsheet:    { label: "Term Sheet Drafting", description: "All sources → Draft term sheet", color: "#A855F7", icon: "FileText" },
   synthesis:    { label: "Deal Package", description: "Contract, DD, data room & intelligence", color: "#EC4899", icon: "Briefcase" },
   executionPlan:{ label: "Execution Plan", description: "Timeline, stakeholders & dependencies", color: "#F97316", icon: "Rocket" },
+  outLicensingStrategy: { label: "Out-Licensing Strategy", description: "Per-region market, legal, commercial & IP assessment", color: "#0EA5E9", icon: "Globe" },
 };
 
 // ─── SSE Events ─────────────────────────────────────────────────────────────
@@ -70,7 +71,93 @@ export type AgentResult =
   | { agentId: "negotiation"; leveragePoints: NegotiationLeverage[] }
   | { agentId: "termsheet"; clauses: TermSheetClause[]; termSheet: string }
   | { agentId: "synthesis"; contract: string; dueDiligence: DDSection[]; dataPackage: DataPackageItem[]; intelligence: IntelSection[] }
-  | { agentId: "executionPlan"; plan: ExecutionPlanOutput };
+  | { agentId: "executionPlan"; plan: ExecutionPlanOutput }
+  | { agentId: "outLicensingStrategy"; report: OutLicensingReport };
+
+// ─── Out-Licensing Strategy Report Types ────────────────────────────────────
+
+export interface OutLicensingReport {
+  executiveSummary: string;
+  assetProfile: AssetProfile;
+  regionalAnalysis: RegionalAnalysis[];
+  recommendations: OutLicensingRecommendation[];
+  portfolioRisks: PortfolioRisk[];
+  dataConfidence: "High" | "Medium" | "Low";
+  sourcesUsed: string[];
+}
+
+export interface AssetProfile {
+  name: string;
+  description: string;
+  modality: string;
+  therapeuticArea: string;
+  developmentStage: string;
+  mechanism: string;
+  currentMarkets: string[];
+  keyStrengths: string[];
+  keyChallenges: string[];
+  keyDataPoints: { label: string; value: string; source: string }[];
+}
+
+export interface RegionalAnalysis {
+  region: "US" | "EU" | "JP" | "CN" | "ROW";
+  regionLabel: string;
+  attractiveness: "Very High" | "High" | "Medium" | "Low";
+  attractivenessScore: number;
+  market: {
+    sizeUSD: string;
+    growthRate: string;
+    drivers: string[];
+    barriers: string[];
+    unmetNeed: string;
+  };
+  legal: {
+    regulatoryAuthority: string;
+    pathway: string;
+    estimatedTimeline: string;
+    exclusivityOpportunities: string[];
+    barriers: string[];
+  };
+  commercial: {
+    competitorActivity: string;
+    pricingDynamics: string;
+    reimbursementLandscape: string;
+    keyPartnerCandidates: string[];
+    distributionChannels: string;
+  };
+  ip: {
+    patentStrength: "Strong" | "Moderate" | "Weak";
+    ftoStatus: "Clear" | "Some Risk" | "Significant Risk";
+    expirationRisks: string[];
+    opportunities: string[];
+    estimatedExclusivityYears: number;
+  };
+}
+
+export interface OutLicensingRecommendation {
+  priorityRank: number;
+  targetRegion: string;
+  rationale: string;
+  recommendedDealStructure: string;
+  estimatedValue: {
+    upfront: string;
+    total: string;
+    royaltyRange: string;
+  };
+  topPartnerCandidates: string[];
+  prerequisites: string[];
+  estimatedTimeline: string;
+  expectedROI: string;
+}
+
+export interface PortfolioRisk {
+  category: "Market" | "Legal" | "Commercial" | "IP";
+  risk: string;
+  affectedRegions: string[];
+  impact: "High" | "Medium" | "Low";
+  likelihood: "High" | "Medium" | "Low";
+  mitigation: string;
+}
 
 // ─── Execution Plan Types ───────────────────────────────────────────────────
 

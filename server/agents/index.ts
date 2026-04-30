@@ -17,3 +17,4 @@ export { runNegotiationAgent } from "./negotiation";
 export { runTermSheetAgent } from "./termsheet";
 export { runSynthesisAgent } from "./synthesis";
 export { runExecutionPlanAgent } from "./execution-plan";
+export { runOutLicensingStrategyAgent } from "./out-licensing-strategy";
