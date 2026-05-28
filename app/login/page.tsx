@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 
 function MicrosoftIcon({ className }: { className?: string }) {
   return (
@@ -38,6 +38,7 @@ function LoginContent() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const [error, setError] = useState(authError === "CredentialsSignin" ? "Invalid email or password" : "");
 
   async function handleSubmit(e: FormEvent) {
@@ -63,6 +64,34 @@ function LoginContent() {
 
   async function handleMicrosoftLogin() {
     await signIn("azure-ad", { callbackUrl: "/" });
+  }
+
+  async function handleDemoLogin() {
+    setDemoLoading(true);
+    setError("");
+    try {
+      // Ensure the shared demo account exists, then sign in with it
+      const res = await fetch("/api/demo", { method: "POST" });
+      if (!res.ok) throw new Error("Could not start demo");
+      const { email: demoEmail, password: demoPassword } = await res.json();
+
+      const result = await signIn("credentials", {
+        email: demoEmail,
+        password: demoPassword,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Could not start demo session. Please try again.");
+        setDemoLoading(false);
+        return;
+      }
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("Could not start demo session. Please try again.");
+      setDemoLoading(false);
+    }
   }
 
   return (
@@ -106,6 +135,29 @@ function LoginContent() {
               {error}
             </div>
           )}
+
+          {/* One-click demo access */}
+          <Button
+            type="button"
+            onClick={handleDemoLogin}
+            disabled={demoLoading}
+            className="h-11 w-full gap-2 bg-gradient-to-r from-[#0EA5E9] to-[#0284C7] text-white hover:opacity-90 shadow-sm mb-3"
+          >
+            {demoLoading ? (
+              <><Loader2 className="h-4 w-4 animate-spin" />Starting demo...</>
+            ) : (
+              <><Sparkles className="h-4 w-4" />Explore Live Demo — No Signup</>
+            )}
+          </Button>
+          <p className="text-center text-[11px] text-muted-foreground mb-5">
+            Instant access to the full platform with sample portfolio data
+          </p>
+
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-px flex-1 bg-border/40" />
+            <span className="text-[11px] text-muted-foreground/60 font-medium">or sign in</span>
+            <div className="h-px flex-1 bg-border/40" />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">

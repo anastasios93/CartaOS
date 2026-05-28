@@ -17,6 +17,9 @@ import {
   Filter,
   Pill,
   ShieldCheck,
+  X,
+  Building2,
+  FlaskConical,
 } from "lucide-react";
 
 interface AsymmetryRecord {
@@ -78,6 +81,7 @@ export default function ArbitragePage() {
   const [loading, setLoading] = useState(true);
   const [moleculeFilter, setMoleculeFilter] = useState<string>("");
   const [minAir, setMinAir] = useState(0);
+  const [selected, setSelected] = useState<AsymmetryRecord | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -245,7 +249,11 @@ export default function ArbitragePage() {
                   {filteredRecords.map((r, i) => {
                     const band = AIR_BAND_COLORS[r.airBand];
                     return (
-                      <tr key={i} className="border-b border-border/20 hover:bg-[#F8F9FA] transition-colors">
+                      <tr
+                        key={i}
+                        onClick={() => setSelected(r)}
+                        className="border-b border-border/20 hover:bg-[#F0F9FF] transition-colors cursor-pointer"
+                      >
                         <td className="px-4 py-3">
                           <p className="text-[13px] font-semibold text-[#1A1A2E]">{r.brandReference}</p>
                           <p className="text-[11px] text-muted-foreground">{r.moleculeName} · {r.modality}</p>
@@ -308,6 +316,140 @@ export default function ArbitragePage() {
           </div>
         </>
       )}
+
+      {/* Detail drawer */}
+      {selected && (
+        <OpportunityDrawer record={selected} onClose={() => setSelected(null)} />
+      )}
+    </div>
+  );
+}
+
+function OpportunityDrawer({ record, onClose }: { record: AsymmetryRecord; onClose: () => void }) {
+  const band = AIR_BAND_COLORS[record.airBand];
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-xl bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-border/40 px-6 py-4 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#0EA5E9] to-[#0284C7] text-white">
+                <Pill className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#1A1A2E]">{record.brandReference}</h3>
+                <p className="text-[11px] text-muted-foreground">{record.moleculeName}</p>
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* AIR + band */}
+          <div className="flex items-center justify-between rounded-xl border border-border/40 p-4" style={{ backgroundColor: band.bg }}>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: band.text }}>Arbitrage Index Rating</p>
+              <p className="text-3xl font-bold font-mono mt-1" style={{ color: band.text }}>{record.airScore}<span className="text-base">/100</span></p>
+            </div>
+            <span className="px-3 py-1 rounded-full text-[12px] font-bold" style={{ backgroundColor: "white", color: band.text }}>
+              {record.airBand}
+            </span>
+          </div>
+
+          {/* Route */}
+          <div className="flex items-center gap-3">
+            <RegionPill flag={record.sourceFlag} label={record.sourceRegionLabel} status="generic" sub={`Generic $${record.financials.genericPriceSource}/mo`} />
+            <div className="flex flex-col items-center px-1">
+              <span className="text-[10px] font-bold text-[#0EA5E9]">{record.deltaYears}yr</span>
+              <ArrowRight className="h-5 w-5 text-[#0EA5E9]" />
+            </div>
+            <RegionPill flag={record.targetFlag} label={record.targetRegionLabel} status="protected" sub={`Brand $${record.financials.brandPriceTarget}/mo`} />
+          </div>
+
+          <p className="text-[13px] text-[#475569] leading-relaxed">{record.rationale}</p>
+
+          {/* Financials */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">Arbitrage Economics</p>
+            <div className="grid grid-cols-2 gap-3">
+              <DetailStat label="Brand price (target)" value={`$${record.financials.brandPriceTarget}/mo`} />
+              <DetailStat label="Generic price (source)" value={`$${record.financials.genericPriceSource}/mo`} />
+              <DetailStat label="Gross spread" value={`$${record.financials.grossArbitrageDelta}/mo (${record.financials.marginPct}%)`} />
+              <DetailStat label="Annual savings / patient" value={`$${record.financials.annualSavingsPerPatient.toLocaleString()}`} />
+            </div>
+          </div>
+
+          {/* Asset facts */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">Asset</p>
+            <div className="space-y-2">
+              <FactRow icon={<Building2 className="h-3.5 w-3.5" />} label="Originator" value={record.originator} />
+              <FactRow icon={<FlaskConical className="h-3.5 w-3.5" />} label="Modality" value={record.modality} />
+              <FactRow icon={<Layers className="h-3.5 w-3.5" />} label="Therapeutic Area" value={record.therapeuticCategory} />
+              <FactRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Global Annual Sales" value={`$${record.globalAnnualSalesUSDb}B`} />
+            </div>
+          </div>
+
+          {/* Regulatory */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">Regulatory Pathways</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-[#F8F9FA] border border-border/40 p-3">
+                <p className="text-[11px] font-semibold text-[#1A1A2E]">{record.sourceFlag} {record.sourceRegionLabel}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Generic pathway: <span className="font-medium text-[#475569]">{record.sourcePathway}</span></p>
+                <p className="text-[11px] text-muted-foreground">{record.sourceCompetitors} competitors active</p>
+              </div>
+              <div className="rounded-lg bg-[#F8F9FA] border border-border/40 p-3">
+                <p className="text-[11px] font-semibold text-[#1A1A2E]">{record.targetFlag} {record.targetRegionLabel}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Generic pathway: <span className="font-medium text-[#475569]">{record.targetPathway}</span></p>
+                <p className="text-[11px] text-muted-foreground capitalize">Status: {record.targetStatus.replace("_", " ")}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action */}
+          <div className="flex gap-2 pt-2">
+            <a
+              href={`/simulated-plan`}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-lg bg-gradient-to-r from-[#0EA5E9] to-[#0284C7] text-white text-[13px] font-semibold hover:opacity-90 transition"
+            >
+              <Sparkles className="h-4 w-4" />
+              Build Out-Licensing Plan
+            </a>
+            <a
+              href={`/partners`}
+              className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-lg border border-border/60 text-[13px] font-semibold text-[#475569] hover:bg-[#F8F9FA] transition"
+            >
+              <Building2 className="h-4 w-4" />
+              Find Partners
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-[#F8F9FA] border border-border/40 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{label}</p>
+      <p className="text-[14px] font-bold font-mono text-[#1A1A2E] mt-1">{value}</p>
+    </div>
+  );
+}
+
+function FactRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#F8F9FA] text-muted-foreground shrink-0">{icon}</div>
+      <span className="text-[12px] text-muted-foreground flex-1">{label}</span>
+      <span className="text-[12px] font-semibold text-[#1A1A2E]">{value}</span>
     </div>
   );
 }
