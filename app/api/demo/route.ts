@@ -26,7 +26,13 @@ export async function POST() {
 
     await db.user.upsert({
       where: { email: DEMO_EMAIL },
-      update: { passwordHash },
+      update: {
+        passwordHash,
+        name: "Demo User",
+        company: "CartaOS Demo",
+        role: "Business Development",
+        department: "Corporate Development",
+      },
       create: {
         name: "Demo User",
         email: DEMO_EMAIL,
