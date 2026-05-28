@@ -9,8 +9,6 @@ import { CompactIntakeForm } from "@/components/hub/compact-intake-form";
 import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-results";
 import { OutLicensingStrategyResults } from "@/components/hub/results/out-licensing-strategy-results";
 import type { HubIntakeForm, AgentResult } from "@/types/hub";
-import { SAMPLE_EXECUTION_PLAN } from "@/lib/sample-execution-plan";
-import { SAMPLE_OUT_LICENSING_REPORT } from "@/lib/sample-out-licensing-report";
 import {
   Rocket,
   Globe,
@@ -19,8 +17,6 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 
 const PILLAR_COLORS = {
@@ -34,19 +30,16 @@ type View = "strategy" | "execution";
 export default function SimulatedPlanPage() {
   const { agents, deploy, reset, isRunning, hasResults } = useAgentStream();
   const [submitted, setSubmitted] = useState(false);
-  const [showSample, setShowSample] = useState(true);
   const [view, setView] = useState<View>("strategy");
 
   const handleSubmit = (form: HubIntakeForm) => {
     setSubmitted(true);
-    setShowSample(false);
     deploy(form);
   };
 
   const handleReset = () => {
     reset();
     setSubmitted(false);
-    setShowSample(true);
   };
 
   const executionPlanResult = agents.executionPlan?.result as Extract<AgentResult, { agentId: "executionPlan" }> | null;
@@ -57,7 +50,6 @@ export default function SimulatedPlanPage() {
   const strategyComplete = agents.outLicensingStrategy?.status === "complete" && !!strategyResult;
   const strategyError = agents.outLicensingStrategy?.status === "error";
 
-  // Status of upstream agents
   const upstream = [
     { id: "benchmarking" as const, label: "Diagnosis: Comparable Deals", color: PILLAR_COLORS.diagnosis },
     { id: "partner" as const, label: "Strategy: Partners & Synergies", color: PILLAR_COLORS.strategy },
@@ -85,25 +77,12 @@ export default function SimulatedPlanPage() {
             Live regional report covering market, legal, commercial & IP assessment per geography — with executable plan
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {(submitted || showSample) && !strategyComplete && !executionPlanComplete && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSample(!showSample)}
-              className="h-9 text-xs gap-1.5"
-            >
-              {showSample ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              {showSample ? "Hide Sample" : "Preview Sample"}
-            </Button>
-          )}
-          {submitted && (
-            <Button variant="outline" size="sm" onClick={handleReset} className="h-9 text-xs gap-1.5">
-              <RotateCcw className="h-3.5 w-3.5" />
-              New Report
-            </Button>
-          )}
-        </div>
+        {submitted && (
+          <Button variant="outline" size="sm" onClick={handleReset} className="h-9 text-xs gap-1.5">
+            <RotateCcw className="h-3.5 w-3.5" />
+            New Report
+          </Button>
+        )}
       </div>
 
       {/* Pre-submission: explainer + intake */}
@@ -117,7 +96,7 @@ export default function SimulatedPlanPage() {
               <div>
                 <h3 className="text-base font-bold text-[#1A1A2E]">How the Out-Licensing Strategy works</h3>
                 <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
-                  Provide an asset, compound, or company and the AI agents will pull live data from 12+ global pharma databases
+                  Provide an asset, compound, or company and the AI agents pull live data from 12+ global pharma databases
                   (SEC EDGAR · ClinicalTrials.gov · FDA · Orange Book · FAERS · DailyMed · ChEMBL · RxNorm · EMA · Health Canada · PubMed · Patents · News),
                   then generate a comprehensive regional report covering each major market with full Market, Legal, Commercial & IP assessment.
                 </p>
@@ -215,8 +194,8 @@ export default function SimulatedPlanPage() {
         </Card>
       )}
 
-      {/* View toggle */}
-      {(strategyComplete || executionPlanComplete || showSample) && (
+      {/* View toggle — only once a real report is ready */}
+      {(strategyComplete || executionPlanComplete) && (
         <div className="flex gap-2 p-1 bg-[#F1F5F9] rounded-xl w-fit">
           <button
             onClick={() => setView("strategy")}
@@ -245,9 +224,9 @@ export default function SimulatedPlanPage() {
         </div>
       )}
 
-      {/* Error blocks */}
-      {(strategyError || executionPlanError) && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-5 space-y-2">
+      {/* Error block */}
+      {(strategyError || executionPlanError) && !strategyComplete && !executionPlanComplete && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-5">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
             <div>
@@ -255,83 +234,24 @@ export default function SimulatedPlanPage() {
               <p className="text-xs text-red-600 mt-1 leading-relaxed">
                 {agents.outLicensingStrategy?.error || agents.executionPlan?.error || "Unknown error"}
               </p>
-              <p className="text-xs text-red-500 mt-2">
-                Showing sample report below so you can preview the UI.
-              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* STRATEGY VIEW (default) */}
-      {view === "strategy" && (
-        <>
-          {strategyComplete && strategyResult && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Live AI Strategy Report
-                </span>
-              </div>
-              <OutLicensingStrategyResults data={strategyResult} />
-            </div>
-          )}
-          {!strategyComplete && showSample && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FFF7ED] text-[#F97316] text-[11px] font-semibold">
-                  <Eye className="h-3 w-3" />
-                  Sample Report Preview
-                </span>
-                <p className="text-[11px] text-muted-foreground">
-                  {submitted
-                    ? "Showing illustrative example while agents run."
-                    : "Illustrative example — Phase II oncology asset across 5 regions with Market/Legal/Commercial/IP."}
-                </p>
-              </div>
-              <OutLicensingStrategyResults
-                data={{ agentId: "outLicensingStrategy", report: SAMPLE_OUT_LICENSING_REPORT }}
-              />
-            </div>
-          )}
-          {submitted && !strategyComplete && !showSample && !strategyError && (
-            <LoadingBlock label="Building regional Market/Legal/Commercial/IP assessment..." />
-          )}
-        </>
+      {/* STRATEGY VIEW */}
+      {view === "strategy" && strategyComplete && strategyResult && (
+        <OutLicensingStrategyResults data={strategyResult} />
       )}
 
       {/* EXECUTION VIEW */}
-      {view === "execution" && (
-        <>
-          {executionPlanComplete && executionPlanResult && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Live AI Execution Plan
-                </span>
-              </div>
-              <ExecutionPlanResults data={executionPlanResult} />
-            </div>
-          )}
-          {!executionPlanComplete && showSample && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FFF7ED] text-[#F97316] text-[11px] font-semibold">
-                  <Eye className="h-3 w-3" />
-                  Sample Plan Preview
-                </span>
-              </div>
-              <ExecutionPlanResults
-                data={{ agentId: "executionPlan", plan: SAMPLE_EXECUTION_PLAN }}
-              />
-            </div>
-          )}
-          {submitted && !executionPlanComplete && !showSample && !executionPlanError && (
-            <LoadingBlock label="Building execution plan with timeline & stakeholders..." />
-          )}
-        </>
+      {view === "execution" && executionPlanComplete && executionPlanResult && (
+        <ExecutionPlanResults data={executionPlanResult} />
+      )}
+
+      {/* Loading state */}
+      {submitted && !strategyComplete && !executionPlanComplete && !strategyError && !executionPlanError && (
+        <LoadingBlock label="Pulling global data and generating your regional strategy report..." />
       )}
     </div>
   );

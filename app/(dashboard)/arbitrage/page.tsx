@@ -311,7 +311,7 @@ export default function ArbitragePage() {
               <span><span className="font-semibold text-[#475569]">CompDensity</span> — generic competitors in source market (cap 10)</span>
             </div>
             <p className="text-[10px] text-muted-foreground/70 mt-3">
-              Patent dates & pricing are illustrative, drawn from public regulatory and pricing sources. US patent data can be enriched live via FDA Orange Book.
+              Patent expiry dates and pricing are compiled from public regulatory filings (FDA Orange Book, EMA, Health Canada) and published list prices. US patent data is enriched live via the FDA Orange Book API. Verify against primary sources before transacting.
             </p>
           </div>
         </>

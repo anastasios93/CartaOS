@@ -58,24 +58,6 @@ const SUGGESTED_PROMPTS = [
   },
 ];
 
-// Simulated AI responses for demo
-function getAIResponse(prompt: string, dealCount: number): string {
-  const lower = prompt.toLowerCase();
-  if (lower.includes("benchmark") || lower.includes("compare")) {
-    return `Based on ${dealCount} precedent transactions in our database, here's how your deal compares:\n\n**Upfront Payment**: Your proposed $150M upfront is at the 65th percentile. The median for similar-stage ADC assets is $120M.\n\n**Royalty Range**: 8-12% is within market range. Median is 7-14% for Phase 2 oncology ADCs.\n\n**Total Deal Value**: At $2.1B total, this is above the 75th percentile ($1.8B median).\n\n**Recommendation**: The upfront is competitive. Consider negotiating development milestones higher — recent deals show 35-40% of total value in dev milestones vs. your current 28%.`;
-  }
-  if (lower.includes("partner") || lower.includes("pharma")) {
-    return `Based on recent deal activity and therapeutic focus alignment, here are the top partner matches:\n\n1. **Roche/Genentech** — 95% fit score. 12 ADC deals in 3 years, strong oncology pipeline. Currently seeking Phase 2 assets.\n\n2. **AstraZeneca** — 91% fit score. Acquired Daiichi Sankyo ADC partnership. Active BD team for oncology.\n\n3. **Pfizer** — 88% fit score. Seagen acquisition shows ADC commitment. Large upfront capacity.\n\n4. **Gilead Sciences** — 82% fit score. Expanding oncology through BD. Recent ADC interest.\n\nWould you like me to draft an outreach strategy for any of these partners?`;
-  }
-  if (lower.includes("royalt") || lower.includes("terms") || lower.includes("rate")) {
-    return `Here's the royalty landscape for Phase 2 oncology assets:\n\n**Typical Ranges by Modality:**\n- ADCs: 8-15% (escalating tiers common)\n- mAbs: 6-12%\n- Small Molecules: 5-10%\n- Gene Therapy: 10-20%\n\n**Key Factors Affecting Rates:**\n- Stage advancement commands +2-3% premium\n- Exclusive territories justify higher base\n- Co-development rights typically reduce royalty by 1-3%\n\n**Recent Benchmarks (2024-2025):**\n- Median low: 7.5%\n- Median high: 13.0%\n- 75th percentile high: 16.0%`;
-  }
-  if (lower.includes("trend") || lower.includes("market")) {
-    return `**Key Biotech Licensing Trends (Last 12 Months):**\n\n1. **ADC deals surging** — 40% YoY increase. Average upfronts reached $200M+ for late-stage assets.\n\n2. **Oncology dominance** — 65% of all licensing deals. Immunology growing as #2.\n\n3. **Larger upfronts** — Median upfront increased 25% YoY as competition for assets intensified.\n\n4. **Asia-Pacific expansion** — China/Japan licensing deals up 60%. Territory splits becoming more nuanced.\n\n5. **Option deals growing** — 30% of recent deals include opt-in structures vs. traditional upfront licenses.\n\n6. **Royalty compression** — Increasing competition pushing royalty floors lower, but ceiling rates remain strong for differentiated assets.`;
-  }
-  return `I've analyzed your question against our database of ${dealCount} deals and market intelligence.\n\nThis is a complex topic that touches on several areas of deal structuring. Let me break it down:\n\n**Key Insights:**\n- Market conditions are favorable for licensors in your therapeutic area\n- Recent comparable deals suggest strong negotiating position\n- Partner interest level appears high based on current BD activity\n\nWould you like me to dive deeper into any specific aspect? I can provide detailed benchmarking data, partner analysis, or term sheet recommendations.`;
-}
-
 export default function AICompanionPage() {
   const { deals } = useDeals();
   const { negotiations } = useNegotiations();
@@ -103,22 +85,47 @@ export default function AICompanionPage() {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const history = [...messages, userMsg];
+    setMessages(history);
     setInput("");
     setIsLoading(true);
 
-    // Simulate AI response delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const res = await fetch("/api/conductor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: history.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
 
-    const aiMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: getAIResponse(text, deals.length),
-      timestamp: new Date(),
-    };
+      const data = await res.json();
+      const content = res.ok
+        ? data.reply
+        : data.error || "Something went wrong. Please try again.";
 
-    setMessages((prev) => [...prev, aiMsg]);
-    setIsLoading(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "Could not reach the AI service. Please check your connection and try again.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -139,9 +146,9 @@ export default function AICompanionPage() {
             <Sparkles className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-[#1A1A2E]">AI Deal Companion</h1>
+            <h1 className="text-xl font-bold tracking-tight text-[#1A1A2E]">AI Advisor</h1>
             <p className="text-xs text-muted-foreground">
-              Powered by Deal Twin Engine &middot; {deals.length} deals &middot; {negotiations.length} negotiations
+              Powered by Claude &middot; grounded in {deals.length} deals &middot; {negotiations.length} negotiations
             </p>
           </div>
         </div>
