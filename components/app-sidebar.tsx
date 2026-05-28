@@ -17,6 +17,7 @@ import {
   Sparkles,
   Network,
   Rocket,
+  Globe,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,6 +41,11 @@ const mainNav = [
 ];
 
 const diagnosis = [
+  {
+    title: "Patent Arbitrage",
+    href: "/arbitrage",
+    icon: Globe,
+  },
   {
     title: "Market Trends",
     href: "/trends",

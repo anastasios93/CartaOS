@@ -28,6 +28,7 @@ import {
   ClipboardCheck,
   Database,
   Brain,
+  Globe,
 } from "lucide-react";
 import { CompactIntakeForm } from "@/components/hub/compact-intake-form";
 import { PillarCard } from "@/components/pillar-card";
@@ -191,6 +192,10 @@ export default function PortfolioOverview() {
           icon={Microscope}
           items={[
             {
+              label: "Patent Arbitrage",
+              description: "Cross-border patent asymmetries scored by AIR",
+            },
+            {
               label: "Market Trends",
               description: "Patent cliff, therapeutic area dynamics, FDA/EMA activity",
             },
@@ -203,6 +208,13 @@ export default function PortfolioOverview() {
         >
           <div className="flex gap-2">
             <Link
+              href="/arbitrage"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#0EA5E9]/8 text-[#0EA5E9] text-[12px] font-semibold hover:bg-[#0EA5E9]/15 transition"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Arbitrage
+            </Link>
+            <Link
               href="/trends"
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#3B82F6]/8 text-[#3B82F6] text-[12px] font-semibold hover:bg-[#3B82F6]/15 transition"
             >
@@ -214,7 +226,7 @@ export default function PortfolioOverview() {
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#3B82F6]/8 text-[#3B82F6] text-[12px] font-semibold hover:bg-[#3B82F6]/15 transition"
             >
               <BarChart3 className="h-3.5 w-3.5" />
-              Comparables
+              Comps
             </Link>
           </div>
         </PillarCard>
