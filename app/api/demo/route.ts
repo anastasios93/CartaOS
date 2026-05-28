@@ -19,21 +19,23 @@ const DEMO_PASSWORD = "ExploreCartaOS2026";
 
 export async function POST() {
   try {
-    let user = await db.user.findUnique({ where: { email: DEMO_EMAIL } });
+    // Always (re)set the password hash so the returned credentials are
+    // guaranteed to authenticate — even if the demo user was seeded earlier
+    // with a different password. Idempotent upsert.
+    const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
-    if (!user) {
-      const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
-      user = await db.user.create({
-        data: {
-          name: "Demo User",
-          email: DEMO_EMAIL,
-          passwordHash,
-          company: "CartaOS Demo",
-          role: "Business Development",
-          department: "Corporate Development",
-        },
-      });
-    }
+    await db.user.upsert({
+      where: { email: DEMO_EMAIL },
+      update: { passwordHash },
+      create: {
+        name: "Demo User",
+        email: DEMO_EMAIL,
+        passwordHash,
+        company: "CartaOS Demo",
+        role: "Business Development",
+        department: "Corporate Development",
+      },
+    });
 
     return NextResponse.json({
       email: DEMO_EMAIL,
