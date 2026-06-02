@@ -121,6 +121,36 @@ export default function PartnersPage() {
     : 0;
   const topScorer = [...companies].sort((a, b) => b.partnerScore - a.partnerScore)[0];
 
+  if (companies.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">Partner Matching</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">AI-ranked licensing partners based on deal fit and activity</p>
+        </div>
+        <Card className="border-border/40 shadow-sm">
+          <CardContent className="py-16 px-8 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#10B981]/10 to-[#10B981]/5">
+              <Users className="h-6 w-6 text-[#10B981]" />
+            </div>
+            <h3 className="text-base font-bold text-[#1A1A2E]">No partners tracked yet</h3>
+            <p className="text-[13px] text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+              Run a portfolio diagnostic to surface AI-ranked partner candidates with fit scores, deal propensity, and rationale based on real clinical-trial and SEC filing data.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg bg-[#10B981] hover:bg-[#059669] text-white text-[13px] font-semibold transition"
+              >
+                Run Portfolio Diagnostic
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}

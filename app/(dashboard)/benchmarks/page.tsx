@@ -572,6 +572,42 @@ export default function BenchmarksPage() {
   const sourceColor = (s: string) => s === "database" ? "bg-[#F97316] text-white" : s === "worldwide" ? "bg-[#10B981] text-white" : s === "news" ? "bg-[#06B6D4] text-white" : "bg-[#3B82F6] text-white";
   const sourceLabel = (s: string) => s === "database" ? "DB" : s === "worldwide" ? "WW" : s === "news" ? "News" : "SEC";
 
+  // Empty state — no DB deals, no worldwide reference set, no parsed signals
+  const isEmpty = filteredDeals.length === 0 && wwBenchmarks.totalDeals === 0 && parsedSignals.length === 0;
+
+  if (isEmpty) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">Deal Intelligence &amp; Benchmarks</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Benchmark deal terms against precedent transactions
+          </p>
+        </div>
+        <Card className="border-border/40 shadow-sm">
+          <CardContent className="py-16 px-8 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F97316]/10 to-[#F97316]/5">
+              <BarChart3 className="h-6 w-6 text-[#F97316]" />
+            </div>
+            <h3 className="text-base font-bold text-[#1A1A2E]">No comparable deals yet</h3>
+            <p className="text-[13px] text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+              Run a portfolio diagnostic to populate this page with AI-curated comparable transactions pulled from SEC EDGAR, ClinicalTrials.gov, FDA, and other public sources.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white text-[13px] font-semibold transition"
+              >
+                <TrendingUp className="h-4 w-4" />
+                Run Portfolio Diagnostic
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}

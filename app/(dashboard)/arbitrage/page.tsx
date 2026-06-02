@@ -141,7 +141,27 @@ export default function ArbitragePage() {
         </div>
       )}
 
-      {data && (
+      {data && data.stats.totalMolecules === 0 && (
+        <Card className="border-border/40 shadow-sm">
+          <CardContent className="py-16 px-8 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0EA5E9]/10 to-[#0EA5E9]/5">
+              <Globe className="h-6 w-6 text-[#0EA5E9]" />
+            </div>
+            <h3 className="text-base font-bold text-[#1A1A2E]">No molecules tracked yet</h3>
+            <p className="text-[13px] text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+              The Arbitrage Index Rating engine ranks cross-border patent gaps once you load molecules into your watchlist. The engine pulls patent-expiry timelines from FDA Orange Book and other public regulatory sources, scores each source→target pair, and surfaces the highest-yielding opportunities.
+            </p>
+            <div className="mt-6 rounded-lg bg-[#FAFAFA] border border-border/40 p-4 max-w-md mx-auto text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">AIR Formula</p>
+              <p className="text-[11px] font-mono text-[#475569] leading-relaxed">
+                AIR = (Δt/6yr × 0.40) + (MarginDelta/BrandPrice × 0.35) + ((1 − CompDensity/10) × 0.25), scaled 0–100
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {data && data.stats.totalMolecules > 0 && (
         <>
           {/* Summary metrics */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

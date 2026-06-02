@@ -120,35 +120,35 @@ export default function PortfolioOverview() {
         )}
       </div>
 
-      {/* Top metrics */}
+      {/* Top metrics — reflect only real data the user has loaded */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          label="Portfolio Value"
-          value={formatCurrency(totalPortfolioValue)}
-          sub={`${deals.length} active deals`}
+          label="Active Deals"
+          value={deals.length.toString()}
+          sub={deals.length === 0 ? "No deals yet" : `${deals.length} tracked`}
           icon={<DollarSign className="h-4 w-4" />}
           color="#F97316"
         />
         <MetricCard
-          label="Unrealized Value"
-          value={formatCurrency(Math.round(totalPortfolioValue * 0.22))}
-          sub="22% untapped potential"
+          label="Portfolio Value"
+          value={totalPortfolioValue > 0 ? formatCurrency(totalPortfolioValue) : "—"}
+          sub={totalPortfolioValue > 0 ? "Sum of total deal values" : "Add deals to compute"}
           icon={<Gem className="h-4 w-4" />}
           color="#10B981"
         />
         <MetricCard
-          label="LOE Exposure"
-          value={formatCurrency(Math.round(totalPortfolioValue * 0.15))}
-          sub={`${Math.round(deals.length * 0.15)} assets at risk by 2030`}
-          icon={<AlertTriangle className="h-4 w-4" />}
-          color="#EF4444"
-        />
-        <MetricCard
           label="Active Negotiations"
           value={activeNegotiations.toString()}
-          sub={`${companies.length} partners tracked`}
+          sub={activeNegotiations === 0 ? "None in progress" : "In progress"}
           icon={<Activity className="h-4 w-4" />}
           color="#3B82F6"
+        />
+        <MetricCard
+          label="Partners Tracked"
+          value={companies.length.toString()}
+          sub={companies.length === 0 ? "Add partners to track" : "Companies in CRM"}
+          icon={<AlertTriangle className="h-4 w-4" />}
+          color="#8B5CF6"
         />
       </div>
 
