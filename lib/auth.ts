@@ -15,6 +15,7 @@ declare module "next-auth" {
       role?: string | null;
       company?: string | null;
       department?: string | null;
+      isAdmin?: boolean;
     };
   }
 
@@ -22,6 +23,7 @@ declare module "next-auth" {
     role?: string | null;
     company?: string | null;
     department?: string | null;
+    isAdmin?: boolean;
   }
 }
 
@@ -31,6 +33,7 @@ declare module "next-auth/jwt" {
     role?: string | null;
     company?: string | null;
     department?: string | null;
+    isAdmin?: boolean;
   }
 }
 
@@ -59,6 +62,11 @@ export const authOptions: NextAuthOptions = {
 
         if (!isValid) return null;
 
+        // Stamp last login so admins can see when each client was active
+        db.user
+          .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+          .catch(() => {});
+
         return {
           id: user.id,
           email: user.email,
@@ -67,6 +75,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           company: user.company,
           department: user.department,
+          isAdmin: user.isAdmin,
         };
       },
     }),
@@ -93,12 +102,13 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.company = user.company;
         token.department = user.department;
+        token.isAdmin = user.isAdmin;
       }
       // Refresh profile from DB when session is updated
       if (trigger === "update") {
         const dbUser = await db.user.findUnique({
           where: { id: token.id },
-          select: { name: true, role: true, company: true, department: true, image: true },
+          select: { name: true, role: true, company: true, department: true, image: true, isAdmin: true },
         });
         if (dbUser) {
           token.name = dbUser.name;
@@ -106,6 +116,7 @@ export const authOptions: NextAuthOptions = {
           token.company = dbUser.company;
           token.department = dbUser.department;
           token.picture = dbUser.image;
+          token.isAdmin = dbUser.isAdmin;
         }
       }
       return token;
@@ -116,6 +127,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role;
         session.user.company = token.company;
         session.user.department = token.department;
+        session.user.isAdmin = token.isAdmin;
       }
       return session;
     },

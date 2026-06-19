@@ -218,7 +218,7 @@ export default function BenchmarksPage() {
   // Merged geography options (DB territories + WW geographies)
   const allGeographies = useMemo(() => {
     const geoSet = new Set<string>();
-    (filterOpts.data?.territories ?? []).forEach((t) => geoSet.add(t));
+    (filterOpts.data?.territories ?? []).forEach((t: string) => geoSet.add(t));
     WORLDWIDE_DEALS.forEach((d) => { if (d.geography) geoSet.add(d.geography); });
     return Array.from(geoSet).sort();
   }, [filterOpts.data?.territories]);
@@ -226,7 +226,7 @@ export default function BenchmarksPage() {
   // Merged indication suggestions (DB + WW)
   const allIndications = useMemo(() => {
     const indSet = new Set<string>();
-    (filterOpts.data?.indications ?? []).forEach((i) => indSet.add(i));
+    (filterOpts.data?.indications ?? []).forEach((i: string) => indSet.add(i));
     WORLDWIDE_DEALS.forEach((d) => { if (d.indication) indSet.add(d.indication); });
     return Array.from(indSet).sort();
   }, [filterOpts.data?.indications]);
@@ -234,7 +234,7 @@ export default function BenchmarksPage() {
   // Merged company suggestions (DB + WW)
   const allCompanies = useMemo(() => {
     const compSet = new Set<string>();
-    (filterOpts.data?.companies ?? []).forEach((c) => compSet.add(c));
+    (filterOpts.data?.companies ?? []).forEach((c: string) => compSet.add(c));
     WORLDWIDE_DEALS.forEach((d) => { compSet.add(d.licensor); compSet.add(d.licensee); });
     return Array.from(compSet).sort();
   }, [filterOpts.data?.companies]);

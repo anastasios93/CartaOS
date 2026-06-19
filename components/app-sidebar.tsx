@@ -18,6 +18,7 @@ import {
   Network,
   Rocket,
   Globe,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -184,6 +185,13 @@ export function AppSidebar() {
         <NavGroup label="Strategy" items={strategy} isActive={isActive} />
         <NavGroup label="Execution" items={execution} isActive={isActive} />
         <NavGroup label="Tools" items={tools} isActive={isActive} />
+        {session?.user?.isAdmin && (
+          <NavGroup
+            label="Admin"
+            items={[{ title: "Customer Activity", href: "/admin", icon: Shield }]}
+            isActive={isActive}
+          />
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/50 p-3">

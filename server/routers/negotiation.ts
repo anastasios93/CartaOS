@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { router, publicProcedure, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, getOwnerScope } from "../trpc";
 import { runDealConductor } from "../services/claude";
 
 export const negotiationRouter = router({
@@ -26,7 +26,8 @@ export const negotiationRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const limit = input?.limit ?? 20;
-      const where: any = {};
+      const ownerScope = await getOwnerScope(ctx);
+      const where: any = { ...ownerScope };
 
       if (input?.status) where.status = input.status;
       if (input?.search) {
@@ -54,8 +55,9 @@ export const negotiationRouter = router({
     }),
 
   getById: protectedProcedure.input(z.string()).query(async ({ ctx, input }) => {
-    return ctx.db.negotiation.findUniqueOrThrow({
-      where: { id: input },
+    const ownerScope = await getOwnerScope(ctx);
+    const n = await ctx.db.negotiation.findFirst({
+      where: { id: input, ...ownerScope },
       include: {
         company: true,
         activities: { orderBy: { occurredAt: "desc" }, take: 50 },
@@ -63,6 +65,8 @@ export const negotiationRouter = router({
         benchmarkDeals: { include: { deal: true } },
       },
     });
+    if (!n) throw new Error("Not found");
+    return n;
   }),
 
   create: protectedProcedure
@@ -84,7 +88,7 @@ export const negotiationRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       return ctx.db.negotiation.create({
-        data: input,
+        data: { ...input, ownerId: ctx.session.user.id },
         include: { company: true },
       });
     }),

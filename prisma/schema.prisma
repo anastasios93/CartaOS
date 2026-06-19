@@ -133,12 +133,17 @@ model User {
   company       String?
   department    String?
   phone         String?
+  isAdmin       Boolean   @default(false)
+  lastLoginAt   DateTime?
   orgId         String?
   org           Org?      @relation(fields: [orgId], references: [id])
   accounts      Account[]
   sessions      Session[]
   documents     Document[]
   hubRequests   HubRequest[]
+  deals         Deal[]
+  companies     Company[]
+  negotiations  Negotiation[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt @default(now())
 }
@@ -169,6 +174,10 @@ model Deal {
   announcedDate DateTime
   closedDate    DateTime?
   status        DealStatus
+
+  // Tenant scoping
+  ownerId       String?
+  owner         User?      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   // Parties
   licensorName String
@@ -280,6 +289,10 @@ model Company {
   therapeuticFocus String[]
   modalityFocus    String[]
 
+  // Tenant scoping
+  ownerId          String?
+  owner            User?       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
   // Deal Behavior Profile
   avgDealCadenceDays  Int?
   typicalUpfrontRange Json?
@@ -374,6 +387,10 @@ model Negotiation {
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
   status    NegotiationStatus @default(INITIATED)
+
+  // Tenant scoping
+  ownerId   String?
+  owner     User?   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   // Key Terms
   proposedUpfront      Float?

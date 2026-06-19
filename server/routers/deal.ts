@@ -1,8 +1,8 @@
 import { z } from "zod/v4";
-import { router, publicProcedure, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, getOwnerScope } from "../trpc";
 
 export const dealRouter = router({
-  list: publicProcedure
+  list: protectedProcedure
     .input(
       z
         .object({
@@ -17,7 +17,8 @@ export const dealRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const limit = input?.limit ?? 20;
-      const where: any = {};
+      const ownerScope = await getOwnerScope(ctx);
+      const where: any = { ...ownerScope };
 
       if (input?.therapeuticArea) where.therapeuticArea = input.therapeuticArea;
       if (input?.dealType) where.dealType = input.dealType;
@@ -48,11 +49,14 @@ export const dealRouter = router({
       return { items, nextCursor };
     }),
 
-  getById: publicProcedure.input(z.string()).query(async ({ ctx, input }) => {
-    return ctx.db.deal.findUniqueOrThrow({
-      where: { id: input },
+  getById: protectedProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    const ownerScope = await getOwnerScope(ctx);
+    const deal = await ctx.db.deal.findFirst({
+      where: { id: input, ...ownerScope },
       include: { tags: true, clauses: true, licensor: true, licensee: true, comparisons: true },
     });
+    if (!deal) throw new Error("Not found");
+    return deal;
   }),
 
   create: protectedProcedure
@@ -82,10 +86,12 @@ export const dealRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.deal.create({ data: input });
+      return ctx.db.deal.create({
+        data: { ...input, ownerId: ctx.session.user.id },
+      });
     }),
 
-  filterOptions: publicProcedure.query(async ({ ctx }) => {
+  filterOptions: protectedProcedure.query(async ({ ctx }) => {
     const [indications, territories, licensors, licensees] = await Promise.all([
       ctx.db.deal.findMany({
         select: { indication: true },
@@ -124,7 +130,7 @@ export const dealRouter = router({
     };
   }),
 
-  stats: publicProcedure.query(async ({ ctx }) => {
+  stats: protectedProcedure.query(async ({ ctx }) => {
     const [totalDeals, dealsByType, dealsByStage, recentDeals] = await Promise.all([
       ctx.db.deal.count(),
       ctx.db.deal.groupBy({ by: ["dealType"], _count: true }),

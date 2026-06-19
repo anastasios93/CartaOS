@@ -6,6 +6,7 @@ import { aiRouter } from "./ai";
 import { searchRouter } from "./search";
 import { documentRouter } from "./document";
 import { userRouter } from "./user";
+import { adminRouter } from "./admin";
 
 export const appRouter = router({
   deal: dealRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   search: searchRouter,
   document: documentRouter,
   user: userRouter,
+  admin: adminRouter,
 });
 
 export type AppRouter = typeof appRouter;
