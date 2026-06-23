@@ -135,7 +135,7 @@ export async function runSynthesisAgent(
     write({ agent: agentId, type: "status", status: "analyzing", message: "Generating contract, due diligence, data package & intelligence..." });
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-opus-4-8",
       max_tokens: 16384,
       system: SYNTHESIS_PROMPT,
       messages: [{

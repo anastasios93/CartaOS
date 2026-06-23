@@ -94,7 +94,7 @@ export async function runNegotiationAgent(
     const uniqueSponsors = new Set(ctHits.map(h => h.sponsor));
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-opus-4-8",
       max_tokens: 4096,
       system: NEGOTIATION_AGENT_PROMPT,
       messages: [{

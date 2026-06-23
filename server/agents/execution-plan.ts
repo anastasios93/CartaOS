@@ -146,7 +146,7 @@ export async function runExecutionPlanAgent(
     write({ agent: agentId, type: "status", status: "analyzing", message: "Building execution plan with timeline, stakeholders & dependencies..." });
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-opus-4-8",
       max_tokens: 8192,
       system: EXECUTION_PLAN_PROMPT,
       messages: [{

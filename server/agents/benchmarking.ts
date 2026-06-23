@@ -108,7 +108,7 @@ export async function runBenchmarkingAgent(
 
     // Step 3: Call Claude with ALL data
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-opus-4-8",
       max_tokens: 4096,
       system: BENCHMARKING_AGENT_PROMPT,
       messages: [{
