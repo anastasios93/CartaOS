@@ -10,6 +10,11 @@ import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-re
 import { OutLicensingStrategyResults } from "@/components/hub/results/out-licensing-strategy-results";
 import type { HubIntakeForm, AgentResult } from "@/types/hub";
 import {
+  exportStrategyReportPDF,
+  exportExecutionPlanPDF,
+  exportClientDeck,
+} from "@/lib/exports";
+import {
   Rocket,
   Globe,
   RotateCcw,
@@ -17,6 +22,9 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  FileDown,
+  FileText,
+  Presentation,
 } from "lucide-react";
 
 const PILLAR_COLORS = {
@@ -31,15 +39,19 @@ export default function SimulatedPlanPage() {
   const { agents, deploy, reset, isRunning, hasResults } = useAgentStream();
   const [submitted, setSubmitted] = useState(false);
   const [view, setView] = useState<View>("strategy");
+  const [assetName, setAssetName] = useState<string>("");
+  const [exporting, setExporting] = useState<null | "strategy-pdf" | "execution-pdf" | "deck">(null);
 
   const handleSubmit = (form: HubIntakeForm) => {
     setSubmitted(true);
+    setAssetName(form.assetName);
     deploy(form);
   };
 
   const handleReset = () => {
     reset();
     setSubmitted(false);
+    setAssetName("");
   };
 
   const executionPlanResult = agents.executionPlan?.result as Extract<AgentResult, { agentId: "executionPlan" }> | null;
@@ -194,8 +206,111 @@ export default function SimulatedPlanPage() {
         </Card>
       )}
 
-      {/* View toggle — only once a real report is ready */}
+      {/* Export bar + view toggle — only once a real report is ready */}
       {(strategyComplete || executionPlanComplete) && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex gap-2 p-1 bg-[#F1F5F9] rounded-xl w-fit">
+            <button
+              onClick={() => setView("strategy")}
+              className="flex items-center gap-2 px-4 py-2 text-[12px] font-semibold rounded-lg transition"
+              style={{
+                backgroundColor: view === "strategy" ? "#FFFFFF" : "transparent",
+                color: view === "strategy" ? "#0EA5E9" : "#64748B",
+                boxShadow: view === "strategy" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+              }}
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Strategy Report
+            </button>
+            <button
+              onClick={() => setView("execution")}
+              className="flex items-center gap-2 px-4 py-2 text-[12px] font-semibold rounded-lg transition"
+              style={{
+                backgroundColor: view === "execution" ? "#FFFFFF" : "transparent",
+                color: view === "execution" ? "#F97316" : "#64748B",
+                boxShadow: view === "execution" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+              }}
+            >
+              <Rocket className="h-3.5 w-3.5" />
+              Execution Plan
+            </button>
+          </div>
+
+          {/* Export buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70 mr-1">
+              <FileDown className="inline h-3 w-3 mr-1" />
+              Export
+            </span>
+            <button
+              onClick={async () => {
+                if (!strategyResult) return;
+                setExporting("strategy-pdf");
+                try {
+                  await exportStrategyReportPDF(strategyResult.report, assetName || "Asset");
+                } finally {
+                  setExporting(null);
+                }
+              }}
+              disabled={!strategyComplete || exporting !== null}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#0EA5E9] text-white text-[12px] font-semibold hover:bg-[#0284C7] transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting === "strategy-pdf" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileText className="h-3.5 w-3.5" />
+              )}
+              Strategy PDF
+            </button>
+            <button
+              onClick={async () => {
+                if (!executionPlanResult) return;
+                setExporting("execution-pdf");
+                try {
+                  await exportExecutionPlanPDF(executionPlanResult.plan, assetName || "Asset");
+                } finally {
+                  setExporting(null);
+                }
+              }}
+              disabled={!executionPlanComplete || exporting !== null}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#F97316] text-white text-[12px] font-semibold hover:bg-[#EA580C] transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting === "execution-pdf" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Rocket className="h-3.5 w-3.5" />
+              )}
+              Execution PDF
+            </button>
+            <button
+              onClick={async () => {
+                setExporting("deck");
+                try {
+                  await exportClientDeck(
+                    assetName || "Asset",
+                    strategyResult?.report ?? null,
+                    executionPlanResult?.plan ?? null,
+                  );
+                } finally {
+                  setExporting(null);
+                }
+              }}
+              disabled={(!strategyComplete && !executionPlanComplete) || exporting !== null}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-gradient-to-r from-[#1A1A2E] to-[#0F0F1B] text-white text-[12px] font-semibold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting === "deck" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Presentation className="h-3.5 w-3.5" />
+              )}
+              Client Deck (PPTX)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* (legacy view toggle removed — merged above) */}
+      {false && (
         <div className="flex gap-2 p-1 bg-[#F1F5F9] rounded-xl w-fit">
           <button
             onClick={() => setView("strategy")}
