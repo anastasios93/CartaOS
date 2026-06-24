@@ -37,6 +37,32 @@ export function cleanError(err: unknown): string {
 }
 
 /**
+ * Parse one or more compounds from a free-text input. Users may search several
+ * compounds at once, separated by commas, semicolons or new lines. Deduped and
+ * capped to keep the run bounded.
+ */
+export function parseCompounds(input: string): string[] {
+  const parts = (input ?? "")
+    .split(/[,;\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const key = p.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(p);
+    }
+  }
+  return out.slice(0, 4);
+}
+
+/** The lead compound (first entry), stripped of any parenthetical, for deep data pulls. */
+export const primaryCompound = (input: string): string =>
+  (parseCompounds(input)[0] ?? input ?? "").split("(")[0].trim();
+
+/**
  * Extract JSON from Claude's response text.
  * Handles: raw JSON, ```json fenced blocks, text with embedded JSON, and
  * — critically — JSON that was TRUNCATED because the model hit max_tokens

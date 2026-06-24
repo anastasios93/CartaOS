@@ -14,39 +14,41 @@ import type { HubIntakeForm, OutLicensingReport, AgentResult } from "@/types/hub
 import type { AgentWriter } from "./index";
 import { withGrounding } from "@/server/services/source-reference";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
-import { extractJSON, cleanError } from "./utils";
+import { extractJSON, cleanError, parseCompounds } from "./utils";
 
-const STRATEGY_PROMPT = `You are a senior pharmaceutical commercial strategist producing a GLOBAL DRUG OPPORTUNITY ASSESSMENT for the OWNER of an asset — a company that holds a compound/biologic and must decide whether, and where, a real market opportunity exists and whether to invest in developing/launching it. This is a board-level GO / NO-GO market-opportunity assessment, NOT a partnering pitch.
+const STRATEGY_PROMPT = `You are a CartaOS pharmaceutical business-development analyst specialising in OFF-PATENT VALUE CAPTURE — small-molecule generics, complex/specialty & 505(b)(2) generics, and biosimilars — preparing a decision-grade market opportunity assessment for a sophisticated BD principal. The output is a finished CartaOS client deliverable, ready to present.
 
-You receive (a) outputs from prior diagnostic agents and (b) a live global evidence base (openFDA, Orange/Purple Book, ClinicalTrials.gov, EMA, ChEMBL, Open Targets, PubChem, FAERS, SEC EDGAR, CMS Medicare spend, Spain CIMA, WHO GHO burden data, Health Canada, patents, news).
+You are given ONE OR MORE compounds to assess (a portfolio search). For EACH compound run the CartaOS off-patent method, then synthesise: classify the molecule (commodity small-molecule generic | complex/specialty or 505(b)(2) | biosimilar), size the POST-LoE addressable pool, gauge competitive intensity (the main determinant of capturable value), locate where margin sits in the value chain, name partners, map channels and the regulatory path, recommend a go-to-market sequence, and state explicit kill criteria. If several compounds are supplied, the verdict and recommendations RANK them.
 
-Assess the asset across SIX vectors per region and compute a Commercial Opportunity Score (COS, 0–100):
-  A. Regulatory pathway & feasibility — named expedited pathways (US: 505(b)(1)/505(b)(2)/BLA, Breakthrough, Fast Track, Accelerated Approval, Priority Review, Orphan; EU: centralised vs DCP/MRP, PRIME, conditional MA; China NMPA: priority/breakthrough/conditional, local-trial vs IMCT bridging; Japan PMDA: Sakigake, orphan, ethnic-bridging), timeline, hurdles.
-  B. IP & exclusivity — composition/formulation/method patents; regulatory exclusivity clocks (US 5y NCE / 3y / 7y orphan / 12y biologic; EU 8+2+1; CN/JP data protection + PTE); FTO risk.
-  C. Market size & epidemiology — incidence/prevalence (anchor to IHME GBD / WHO GHO where available), addressable patient pool, lines of therapy / biomarker segmentation, growth, unmet need.
-  D. Market access, pricing & reimbursement (HTA) — US (commercial/Medicare/Medicaid, IRA negotiation risk, CMS spend signal), Germany AMNOG added-benefit, France HAS SMR/ASMR, Italy/Spain regional formularies, Japan Chuikyo pricing, China NRDL inclusion & negotiated price-cut dynamics.
-  E. Competitive density & pipeline — current standard of care (NCCN/ESMO/JP guidance), marketed + Phase I–III competitors by MoA/class (ClinicalTrials.gov etc.), generic/biosimilar LOE threat.
-  F. Manufacturing & CMC complexity — synthesis/expression complexity, cold-chain/formulation burden, supply-chain/geopolitical concentration risk.
+You receive (a) outputs from prior diagnostic agents and (b) a live evidence base (openFDA, Orange/Purple Book, ClinicalTrials.gov, EMA, ChEMBL, Open Targets, PubChem, SEC EDGAR, CMS spend, Spain CIMA, WHO GHO, patents, news).
+
+Per geography, assess SIX vectors and compute a Commercial Opportunity Score (COS, 0–100):
+  A. Value / addressable pool — the POST-LoE pool, NOT the originator's protected revenue: reference-market value (value vs volume), the exclusivity WINDOW per geo (primary patent + SPC, paediatric extension, EU 8+2+1 data/market exclusivity, US BPCIA 12-yr biologics) and a stated erosion curve; walk TAM → SAM → SOM.
+  B. Exclusivity & regulatory path — when the opportunity OPENS (LoE/SPC dates), the pathway (ANDA + GDUFA, EU decentralised/MRP/centralised, biosimilar comparability + clinical package, bioequivalence, India CDSCO), and a realistic time-to-launch and capex band.
+  C. Competitive intensity — count ANDA / EU MA / biosimilar filers; first-filer & paragraph IV dynamics; crowded commodity race vs defensible high-barrier pool.
+  D. Market access & channels — retail / hospital & tender / specialty; EU national tender & payer behaviour (AMNOG, HAS, AIFA, AEMPS), US PBM + Big-3 wholesalers, India trade- vs branded-generics vs tender; which channel holds the value.
+  E. Value capture & partners — where margin concentrates along KSM → API → finished dose / drug substance → MAH → distribution; named API/KSM suppliers (China/India concentration risk), CDMO/CMO, MAH, EU specialty-pharma buyers and Indian supply-side originators.
+  F. Manufacturing & barriers — API availability, manufacturing/device/comparability complexity and capex that actually protect margin.
 
 Return ONLY valid JSON with this exact structure:
 
 {
   "verdict": "Go | Conditional Go | No-Go",
-  "opportunityThesis": "One sentence: is there a market opportunity, where it is strongest, and the single biggest blocker.",
-  "executiveSummary": "2-3 paragraphs: the opportunity, the priority geographies, the COS logic, and the decisive risks.",
+  "opportunityThesis": "One sentence: the sharpest capture wedge — which compound, which geography, and the single biggest blocker.",
+  "executiveSummary": "2-3 flowing paragraphs in a CartaOS partner's voice: the off-patent opportunity, the lead compound x geography, the value-capture logic, and the decisive risks.",
   "assetProfile": {
-    "name": "Asset name as detected from data",
-    "description": "What the asset does, mechanism, value proposition",
-    "modality": "Small molecule / mAb / ADC / Cell therapy / Gene therapy / etc.",
-    "therapeuticArea": "Auto-detected from clinical + label data",
-    "developmentStage": "Auto-detected from ClinicalTrials.gov phases",
-    "mechanism": "Specific MoA from Open Targets / ChEMBL / FDA",
+    "name": "Compound, or 'Portfolio: A, B, C' when several are assessed",
+    "description": "Classification (commodity generic / complex-specialty / biosimilar), originator brand, mechanism, dosage forms/routes, value proposition",
+    "modality": "commodity small-molecule generic | complex/specialty (505(b)(2)) | biosimilar",
+    "therapeuticArea": "ATC class / indication",
+    "developmentStage": "Off-patent status — LoE reached or window opening (with the key date)",
+    "mechanism": "Mechanism / originator brand",
     "currentMarkets": ["US", "EU"],
-    "keyStrengths": ["3-5 strengths from real data"],
-    "keyChallenges": ["3-5 challenges/risks"],
+    "keyStrengths": ["3-5: capture wedge, barriers protecting margin, supply security"],
+    "keyChallenges": ["3-5: erosion, crowding, comparability, timing"],
     "keyDataPoints": [
-      {"label": "Prevalence (US)", "value": "~XXX,000 patients", "source": "WHO GHO / IHME GBD"},
-      {"label": "Active trials", "value": "47 globally", "source": "ClinicalTrials.gov"}
+      {"label": "EU LoE / SPC expiry", "value": "2027", "source": "EPO INPADOC / patent register"},
+      {"label": "Originator EU revenue", "value": "~EUR 1.2B", "source": "originator annual report"}
     ]
   },
   "regionalAnalysis": [
@@ -54,46 +56,46 @@ Return ONLY valid JSON with this exact structure:
       "region": "US",
       "regionLabel": "United States",
       "attractiveness": "Very High|High|Medium|Low",
-      "attractivenessScore": 92,
-      "cos": { "marketSize": 88, "regulatory": 90, "ip": 85, "marketAccess": 80, "competition": 70 },
-      "market": { "sizeUSD": "$X.XB", "growthRate": "X% CAGR", "drivers": ["3-4 drivers"], "barriers": ["2-3 barriers"], "unmetNeed": "incidence/prevalence + addressable pool + lines of therapy" },
-      "legal": { "regulatoryAuthority": "FDA", "pathway": "named expedited pathway(s)", "estimatedTimeline": "X months", "exclusivityOpportunities": ["Orphan 7yr", "windows"], "barriers": ["asset-class hurdles"] },
-      "commercial": { "competitorActivity": "pipeline density — marketed + Phase I-III competitors by class/MoA", "pricingDynamics": "pricing + HTA framework (AMNOG / SMR-ASMR / NRDL / Chuikyo / IRA)", "reimbursementLandscape": "access/formulary pathway & risk", "keyPartnerCandidates": ["only if partnering is relevant, else []"], "distributionChannels": "specialty / hospital / retail" },
-      "ip": { "patentStrength": "Strong|Moderate|Weak", "ftoStatus": "Clear|Some Risk|Significant Risk", "expirationRisks": ["Composition patent expires 2034"], "opportunities": ["method patents for new indications"], "estimatedExclusivityYears": 12 },
-      "manufacturing": { "complexity": "Low|Moderate|High", "notes": "synthesis / cold-chain / supply-chain concentration" }
+      "attractivenessScore": 82,
+      "cos": { "marketSize": 80, "regulatory": 78, "ip": 72, "marketAccess": 70, "competition": 55 },
+      "market": { "sizeUSD": "post-LoE pool, e.g. $X", "growthRate": "erosion curve assumed", "drivers": ["demand, tender, unmet supply"], "barriers": ["price/volume erosion, oversupply"], "unmetNeed": "TAM -> SAM -> SOM with the arithmetic" },
+      "legal": { "regulatoryAuthority": "FDA", "pathway": "ANDA / 505(b)(2) / biosimilar (BPCIA)", "estimatedTimeline": "time-to-launch", "exclusivityOpportunities": ["window opens YYYY — LoE/SPC/data-exclusivity basis"], "barriers": ["paragraph IV / SPC litigation, comparability"] },
+      "commercial": { "competitorActivity": "filer count & competitive intensity (ANDA / EU MA / biosimilar applicants)", "pricingDynamics": "erosion + tender/payer dynamics", "reimbursementLandscape": "channel access & tender mechanics", "keyPartnerCandidates": ["named API/CDMO/MAH/EU-buyer/supply-side partners"], "distributionChannels": "retail / hospital-tender / specialty" },
+      "ip": { "patentStrength": "Strong|Moderate|Weak", "ftoStatus": "Clear|Some Risk|Significant Risk", "expirationRisks": ["secondary patents, SPC, formulation patents"], "opportunities": ["505(b)(2) / device / interchangeability angle"], "estimatedExclusivityYears": 8 },
+      "manufacturing": { "complexity": "Low|Moderate|High", "notes": "API source & concentration risk, CDMO capability, comparability burden" }
     }
   ],
   "recommendations": [
     {
       "priorityRank": 1,
-      "targetRegion": "US",
-      "rationale": "why this market ranks here, citing the COS drivers and named sources",
-      "recommendedDealStructure": "Recommended route: Direct commercialisation | Co-development | Out-license / partner | Deprioritise",
-      "estimatedValue": { "upfront": "peak-year revenue or deal upfront", "total": "risk-adjusted peak sales / NPV band", "royaltyRange": "if partnered" },
-      "topPartnerCandidates": ["named partners IF partnering is recommended, else []"],
-      "prerequisites": ["data/milestones needed to unlock this market"],
-      "estimatedTimeline": "time to market entry",
-      "expectedROI": "value vs investment"
+      "targetRegion": "Germany",
+      "rationale": "why this compound x geography ranks here — the capture wedge and timing vs the window",
+      "recommendedDealStructure": "In-license | Originate | Co-develop | Build | Partner | Pass",
+      "estimatedValue": { "upfront": "capturable SOM / entry value", "total": "addressable pool (TAM) and realistic capture", "royaltyRange": "if partnered/licensed" },
+      "topPartnerCandidates": ["named API/CDMO/MAH/EU-buyer/supply-side candidates"],
+      "prerequisites": ["the data gaps to resolve first — e.g. tender pricing, filer count, API qualification"],
+      "estimatedTimeline": "time-to-launch vs the window",
+      "expectedROI": "capturable value vs investment and erosion"
     }
   ],
   "portfolioRisks": [
-    { "category": "Market|Legal|Commercial|IP", "risk": "flaw or FATAL BLOCKER", "affectedRegions": ["US","EU"], "impact": "High|Medium|Low", "likelihood": "High|Medium|Low", "mitigation": "concrete action" }
+    { "category": "Market|Legal|Commercial|IP", "risk": "risk or KILL CRITERION (price erosion/oversupply, API concentration, paragraph IV/SPC litigation, comparability failure, slipping past the window)", "affectedRegions": ["US","DE"], "impact": "High|Medium|Low", "likelihood": "High|Medium|Low", "mitigation": "concrete action" }
   ],
   "dataConfidence": "High|Medium|Low",
-  "sourcesUsed": ["names of the authoritative sources underpinning the assessment"]
+  "sourcesUsed": ["named authorities underpinning the assessment"]
 }
 
 CRITICAL RULES:
-1. Cover these markets INDIVIDUALLY — one regionalAnalysis entry each: US, Germany, France, Italy, Spain, Japan, China, Rest of World (region codes "US", "DE", "FR", "IT", "ES", "JP", "CN", "ROW"; regionLabel = full country name). NEVER emit a single combined "EU" row — approval is centralised (EMA) but pricing, reimbursement and HTA are decided nationally, so assess Germany (G-BA / IQWiG · AMNOG), France (HAS · SMR/ASMR · CEPS), Italy (AIFA regional formularies) and Spain (AEMPS · CIMA) as four distinct markets, each with its own access, competition, opportunities and risks. For EACH market populate all six vectors (market, legal, commercial incl. competition, ip, manufacturing) AND the cos sub-scores.
-2. attractivenessScore is the regional Commercial Opportunity Score; keep it consistent with the cos sub-scores (market size + regulatory + ip + market access, penalised by competitive density). In cos.competition, 100 = LOW density (favourable), low = crowded.
-3. Anchor epidemiology to IHME GBD / WHO GHO and pricing to CMS / HTA bodies where present; name expedited pathways and HTA frameworks explicitly per region.
-4. verdict is a clear Go / Conditional Go / No-Go for pursuing the opportunity; opportunityThesis states where it is strongest and the single biggest blocker.
-5. portfolioRisks must surface true FLAWS & FATAL BLOCKERS (crowded Phase III field, hard IRA/AMNOG pricing, FTO collision, no exclusivity runway, China local-trial requirement, cold-chain/supply risk) — not generic risks.
-6. Use ACTUAL competitor names, trial IDs, patent/exclusivity dates and pricing signals from the evidence — never hypotheticals; mark inferred figures [estimated].
+1. Cover the target geographies INDIVIDUALLY — one regionalAnalysis entry each: US, Germany, France, Italy, Spain, Japan, China, Rest of World, plus India where the in-license/origination corridor is relevant (region codes "US","DE","FR","IT","ES","JP","CN","ROW","IN"; regionLabel = full country name). NEVER emit a single combined "EU" row — pricing, reimbursement and tendering are national: assess Germany (G-BA/IQWiG·AMNOG), France (HAS·SMR/ASMR·CEPS), Italy (AIFA) and Spain (AEMPS·CIMA) separately. Populate all six vectors and the cos sub-scores per geography.
+2. attractivenessScore is the regional Commercial Opportunity Score; keep it consistent with the cos sub-scores. In cos.competition, 100 = LOW intensity (favourable), low = crowded.
+3. VALUE is the post-LoE addressable pool, not the originator's protected revenue. Show the TAM -> SAM -> SOM arithmetic and state the erosion curve you assume and why.
+4. verdict maps the off-patent call: Go = pursue, Conditional Go = watch, No-Go = pass. opportunityThesis is the single sharpest capture wedge (compound x geography) and the biggest blocker. When several compounds are supplied, RANK them in the recommendations.
+5. portfolioRisks must surface real risks and 2–4 explicit KILL CRITERIA that would make this a pass — not generic risks.
+6. Use ACTUAL competitor/partner names, LoE/SPC dates and filer counts from the evidence — never invented figures. Distinguish fact from estimate IN THE PROSE; never print a bracket tag of any kind.
 7. Set dataConfidence by evidence quality and the confidence tiering (US/EU high; China medium; deal/pricing/sales low) — never by a count of sources.
-8. Be specific, decisive and execution-oriented. Lead with the answer.
+8. Write as a finished CartaOS client report — flowing, natural, decisive prose, attributed to CartaOS where natural. Lead with the answer.
 
-This assessment drives a board-level invest / partner / kill decision. Be rigorous and honest.`;
+This is a CartaOS in-license / originate / pass decision. Be rigorous, honest and client-ready.`;
 
 export async function runOutLicensingStrategyAgent(
   intake: HubIntakeForm,
@@ -135,21 +137,27 @@ export async function runOutLicensingStrategyAgent(
       return "";
     }).filter(Boolean).join("\n\n");
 
-    // Ground the assessment in the FULL live evidence base (science, epidemiology,
-    // pricing, regulatory, IP) from the wired data sources.
+    // Ground the assessment in the live evidence base for EACH compound the user
+    // searched (capped to keep the run bounded).
+    const compounds = parseCompounds(intake.assetName);
     let evidenceBase = "";
     try {
-      const assetBase = intake.assetName.split("(")[0].trim();
-      const globalData = await aggregateGlobalData(assetBase, intake.therapeuticArea, {
-        includeNews: true,
-        includePatents: true,
-      });
-      evidenceBase = summarizeGlobalData(globalData);
+      const perCompound = await Promise.all(
+        compounds.slice(0, 3).map(async (c) => {
+          const base = c.split("(")[0].trim();
+          const data = await aggregateGlobalData(base, intake.therapeuticArea, {
+            includeNews: true,
+            includePatents: true,
+          });
+          return `### Evidence — ${c}\n${summarizeGlobalData(data)}`;
+        }),
+      );
+      evidenceBase = perCompound.filter(Boolean).join("\n\n");
     } catch {
       // Proceed on the diagnostic outputs alone if the aggregate pull fails.
     }
 
-    write({ agent: agentId, type: "status", status: "analyzing", message: "Scoring the opportunity across six vectors and every target market..." });
+    write({ agent: agentId, type: "status", status: "analyzing", message: `Assessing the off-patent opportunity for ${compounds.length > 1 ? `${compounds.length} compounds` : "the compound"} across all target markets...` });
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
@@ -157,22 +165,22 @@ export async function runOutLicensingStrategyAgent(
       system: withGrounding(STRATEGY_PROMPT),
       messages: [{
         role: "user",
-        content: `## Asset
-${intake.assetName}
-Therapeutic Area: ${intake.therapeuticArea || "auto-detect from the evidence"}
-Development Stage: ${intake.developmentStage || "auto-detect from ClinicalTrials.gov"}
-Target Geographies: ${intake.geographies.join(", ")}
-${intake.context ? "Owner context: " + intake.context : ""}
+        content: `## Compound(s) to assess
+${compounds.map((c, i) => `${i + 1}. ${c}`).join("\n") || intake.assetName}
+Therapeutic area / ATC: ${intake.therapeuticArea || "auto-detect from the evidence"}
+Status: ${intake.developmentStage || "auto-detect (off-patent / loss of exclusivity)"}
+Target geographies: ${intake.geographies.join(", ")}  (assess the EU as Germany, France, Italy and Spain individually)
+${intake.context ? "BD context / angle: " + intake.context : ""}
 
 ## Prior Diagnostic Agent Outputs
 ${agentContext || "None available."}
 
-## Global Evidence Base (live sources)
-${evidenceBase || "Evidence base unavailable — rely on the diagnostic outputs and clearly-labelled [estimated] figures."}
+## Live Evidence Base
+${evidenceBase || "Evidence base unavailable — rely on the diagnostic outputs and clearly-worded estimates."}
 
 ---
 
-Produce the Global Drug Opportunity Assessment now — a board-level GO / NO-GO market-opportunity assessment for the asset owner. Cover the US, the FOUR EU national markets individually (Germany, France, Italy, Spain — never a single "EU" row), Japan, China and Rest of World, each with all six vectors and COS sub-scores, a verdict and opportunityThesis, prioritised market recommendations, and the true flaws & fatal blockers. Anchor every claim to named sources; mark inferred figures [estimated].`,
+Produce the CartaOS off-patent market opportunity assessment now: classify each compound, size the post-LoE addressable pool, assess competitive intensity and where margin sits, name partners and channels, and recommend an in-license / originate / pass call. Cover the target geographies individually (the EU as Germany, France, Italy, Spain; add India where the corridor applies). If more than one compound is supplied, rank them. Write it as a finished, client-ready CartaOS report in natural prose — never use bracket tags.`,
       }],
     });
 

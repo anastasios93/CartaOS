@@ -16,7 +16,7 @@ import { searchLiterature } from "@/server/services/pubmed";
 import { searchDailyMed } from "@/server/services/dailymed";
 import { NEGOTIATION_AGENT_PROMPT } from "@/server/services/hub-prompts";
 import { withGrounding } from "@/server/services/source-reference";
-import { extractJSON, cleanError } from "./utils";
+import { extractJSON, cleanError, primaryCompound } from "./utils";
 
 export async function runNegotiationAgent(
   intake: HubIntakeForm,
@@ -32,7 +32,7 @@ export async function runNegotiationAgent(
 
     write({ agent: agentId, type: "status", status: "scraping", message: "Querying deal precedents, patent, safety and competitive sources..." });
 
-    const assetBase = intake.assetName.split("(")[0].trim();
+    const assetBase = primaryCompound(intake.assetName);
     const taQualifier = intake.therapeuticArea ? `AND "${intake.therapeuticArea}" ` : "";
     const edgarQuery = `"upfront payment" OR "milestone payment" OR "royalt" ${taQualifier}AND "license"`;
     const ctQuery = `${intake.assetName}${intake.therapeuticArea ? " " + intake.therapeuticArea : ""}`;

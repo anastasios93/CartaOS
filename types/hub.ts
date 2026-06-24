@@ -104,8 +104,9 @@ export interface AssetProfile {
 }
 
 export interface RegionalAnalysis {
-  // EU is assessed as four national markets (DE/FR/IT/ES); "EU" kept for legacy reports.
-  region: "US" | "DE" | "FR" | "IT" | "ES" | "EU" | "JP" | "CN" | "ROW";
+  // EU is assessed as four national markets (DE/FR/IT/ES); India (IN) appears for the
+  // in-license/origination corridor; "EU" kept for legacy reports.
+  region: "US" | "DE" | "FR" | "IT" | "ES" | "EU" | "JP" | "CN" | "ROW" | "IN";
   regionLabel: string;
   attractiveness: "Very High" | "High" | "Medium" | "Low";
   attractivenessScore: number;

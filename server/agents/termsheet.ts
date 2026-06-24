@@ -10,7 +10,7 @@ import type { AgentWriter } from "./index";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
 import { TERMSHEET_AGENT_PROMPT } from "@/server/services/hub-prompts";
 import { withGrounding } from "@/server/services/source-reference";
-import { extractJSON, cleanError } from "./utils";
+import { extractJSON, cleanError, primaryCompound } from "./utils";
 
 export async function runTermSheetAgent(
   intake: HubIntakeForm,
@@ -27,7 +27,7 @@ export async function runTermSheetAgent(
     write({ agent: agentId, type: "status", status: "scraping", message: "Querying global regulatory, clinical, IP and commercial sources..." });
 
     // Use the global aggregator to pull from EVERY source
-    const assetBase = intake.assetName.split("(")[0].trim();
+    const assetBase = primaryCompound(intake.assetName);
     const globalData = await aggregateGlobalData(assetBase, intake.therapeuticArea, {
       includeNews: true,
       includePatents: true,

@@ -17,7 +17,7 @@ import { searchEmaProducts } from "@/server/services/ema";
 import { searchByBrandName as searchHealthCanada } from "@/server/services/health-canada";
 import { BENCHMARKING_AGENT_PROMPT } from "@/server/services/hub-prompts";
 import { withGrounding } from "@/server/services/source-reference";
-import { extractJSON, cleanError } from "./utils";
+import { extractJSON, cleanError, primaryCompound } from "./utils";
 
 export async function runBenchmarkingAgent(
   intake: HubIntakeForm,
@@ -34,7 +34,7 @@ export async function runBenchmarkingAgent(
     // Step 1: Query ALL data sources in parallel
     write({ agent: agentId, type: "status", status: "scraping", message: "Querying global regulatory, clinical, IP and corporate sources..." });
 
-    const assetBase = intake.assetName.split("(")[0].trim();
+    const assetBase = primaryCompound(intake.assetName);
     // If no TA provided, agents will auto-detect from public data
     const taQualifier = intake.therapeuticArea ? ` AND "${intake.therapeuticArea}"` : "";
     const edgarQuery = `"license agreement"${taQualifier} AND "${assetBase}"`;

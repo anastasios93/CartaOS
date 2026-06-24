@@ -52,18 +52,18 @@ export function CompactIntakeForm({
         {/* Single primary input */}
         <div>
           <label className="block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">
-            Asset / Compound / Portfolio / Company
+            Compound(s) — search one or several
           </label>
           <input
             type="text"
             value={assetName}
             onChange={e => setAssetName(e.target.value)}
-            placeholder="e.g., Keytruda · pembrolizumab · CTX-4100 · Moderna oncology pipeline · Vertex"
+            placeholder="e.g., pertuzumab, adalimumab, dimethyl fumarate — separate multiple with commas"
             autoFocus
             className="w-full px-4 py-3 rounded-lg bg-[#FAFAFA] border border-border text-[15px] text-[#1A1A2E] placeholder-muted-foreground/60 focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316] focus:bg-white outline-none transition"
           />
           <p className="text-[10px] text-muted-foreground mt-1.5">
-            Agents will auto-detect therapeutic area, stage, geographies, and ideal deal structure
+            Search several compounds at once (comma-separated) — CartaOS classifies each and ranks the off-patent opportunity
           </p>
         </div>
 

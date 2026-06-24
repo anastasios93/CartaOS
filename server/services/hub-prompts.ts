@@ -133,5 +133,5 @@ Rules for termSheet markdown:
 - Complete, professional term sheet in markdown format
 - Include all clauses with specific proposed numbers/terms
 - Add a "Key Assumptions" section at the end
-- Mark AI-estimated values clearly with [estimated] tags
+- Where a value is a CartaOS estimate rather than a disclosed figure, say so in plain words — never with a bracket tag
 - Include a "Precedent References" section citing source deals`;

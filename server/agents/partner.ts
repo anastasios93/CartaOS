@@ -17,7 +17,7 @@ import { searchByBrandName as searchHealthCanada } from "@/server/services/healt
 import { getTopAdverseReactions } from "@/server/services/fda-adverse-events";
 import { PARTNER_AGENT_PROMPT } from "@/server/services/hub-prompts";
 import { withGrounding } from "@/server/services/source-reference";
-import { extractJSON, cleanError } from "./utils";
+import { extractJSON, cleanError, primaryCompound } from "./utils";
 
 export async function runPartnerAgent(
   intake: HubIntakeForm,
@@ -33,7 +33,7 @@ export async function runPartnerAgent(
 
     write({ agent: agentId, type: "status", status: "scraping", message: "Scanning global clinical, regulatory and corporate sources for partners..." });
 
-    const assetBase = intake.assetName.split("(")[0].trim();
+    const assetBase = primaryCompound(intake.assetName);
     const indication = intake.context?.split(" ").slice(0, 3).join(" ") || intake.therapeuticArea;
     // If TA missing, query by asset name
     const ctQuery = intake.therapeuticArea ? `${intake.therapeuticArea} ${indication}` : assetBase;
