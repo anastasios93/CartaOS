@@ -812,13 +812,51 @@ const dotScale = (score: number): string => {
 };
 
 /**
- * Anti-overlap text writer. Every text box is fixed-size and shrinks its text
- * to fit (PowerPoint/LibreOffice/Google honour `normAutofit`), so copy can never
- * spill out of its box and collide with a neighbour. Internal margins give the
- * words breathing room; wrap is on so long lines never run off the box edge.
+ * Conservative char-estimate font sizer (no font metrics needed in-browser):
+ * the largest size ≤ maxPt whose wrapped text fits the box height, with a 15%
+ * export safety margin and a hard floor. Accounts for forced line breaks.
+ */
+function fitFont(text: string, wIn: number, hIn: number, maxPt: number, minPt = 8): number {
+  const t = (text ?? "").trim();
+  if (!t) return maxPt;
+  const wPt = Math.max(36, wIn * 72);
+  const hPt = hIn * 72;
+  const breaks = (t.match(/\n/g) || []).length;
+  for (let fs = maxPt; fs > minPt; fs -= 0.5) {
+    const cpl = Math.max(1, Math.floor(wPt / (fs * 0.5))); // ~0.5em avg glyph width
+    const lines = Math.max(1 + breaks, Math.ceil(t.length / cpl) + breaks);
+    if (lines * fs * 1.2 * 1.15 <= hPt) return fs; // line-height 1.2 × 15% margin
+  }
+  return minPt;
+}
+
+/**
+ * Anti-overlap text writer. The font is shrunk DETERMINISTICALLY to fit the
+ * fixed box (baked into the file, so it holds even in renderers that ignore
+ * PowerPoint auto-fit), and `fit:"shrink"` stays on as a secondary backstop.
+ * Works for a plain string and for rich-text run arrays (runs scale together).
  */
 function txt(slide: any, text: any, opts: any = {}): any {
-  return slide.addText(text, { fontFace: F, wrap: true, fit: "shrink", margin: 5, lineSpacingMultiple: 1.1, ...opts });
+  const o: any = { fontFace: F, wrap: true, fit: "shrink", margin: 5, lineSpacingMultiple: 1.1, ...opts };
+  if (typeof o.w === "number" && typeof o.h === "number") {
+    if (typeof text === "string") {
+      const maxPt = typeof o.fontSize === "number" ? o.fontSize : 14;
+      o.fontSize = fitFont(text, o.w - 0.15, o.h, maxPt);
+    } else if (Array.isArray(text)) {
+      const full = text.map((r: any) => (r && r.text) || "").join("");
+      const maxRun = Math.max(8, ...text.map((r: any) => (r && r.options && r.options.fontSize) || 12));
+      const fitted = fitFont(full, o.w - 0.15, o.h, maxRun);
+      if (fitted < maxRun) {
+        const ratio = fitted / maxRun;
+        for (const r of text) {
+          if (r && r.options && typeof r.options.fontSize === "number") {
+            r.options.fontSize = Math.max(8, Math.round(r.options.fontSize * ratio * 10) / 10);
+          }
+        }
+      }
+    }
+  }
+  return slide.addText(text, o);
 }
 
 export async function exportClientDeck(
