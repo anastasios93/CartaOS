@@ -86,6 +86,26 @@ export interface OutLicensingReport {
   regionalAnalysis: RegionalAnalysis[];
   recommendations: OutLicensingRecommendation[];
   portfolioRisks: PortfolioRisk[];
+  /** Consolidated business case — every commercial channel across geographies
+   *  (with how to win each) and the sequenced go-to-market plan ("how to proceed"). */
+  commercialPlan?: {
+    summary: string;
+    channels: {
+      channel: string;
+      geographies: string[];
+      valueRole: string;
+      accessMechanics: string;
+      keyPlayers: string[];
+    }[];
+    howToProceed: {
+      step: number;
+      action: string;
+      geography: string;
+      approach: string;
+      timing: string;
+      owner: string;
+    }[];
+  };
   dataConfidence: "High" | "Medium" | "Low";
   sourcesUsed: string[];
 }

@@ -82,6 +82,15 @@ Return ONLY valid JSON with this exact structure:
   "portfolioRisks": [
     { "category": "Market|Legal|Commercial|IP", "risk": "risk or KILL CRITERION (price erosion/oversupply, API concentration, paragraph IV/SPC litigation, comparability failure, slipping past the window)", "affectedRegions": ["US","DE"], "impact": "High|Medium|Low", "likelihood": "High|Medium|Low", "mitigation": "concrete action" }
   ],
+  "commercialPlan": {
+    "summary": "2-3 sentences: the business case in brief — the opportunity, the route to market that captures it, and the money.",
+    "channels": [
+      { "channel": "Hospital & tender | Retail pharmacy | Specialty pharmacy | Mail-order | Trade / branded generics | Wholesale distribution", "geographies": ["DE","FR","US"], "valueRole": "where the value sits in this channel and why it matters for THIS asset", "accessMechanics": "exactly how you win it — tender cycles, formulary/PBM, payer behaviour, AMNOG/HAS, NRDL/VBP, Japan NHI, India trade dynamics, grounded in the evidence", "keyPlayers": ["named wholesalers / tender consortia / PBMs / distributors where known"] }
+    ],
+    "howToProceed": [
+      { "step": 1, "action": "the concrete move", "geography": "lead geo", "approach": "In-license | Originate | Co-develop | Build | Partner | Tender", "timing": "when, relative to the exclusivity window", "owner": "who runs it" }
+    ]
+  },
   "dataConfidence": "High|Medium|Low",
   "sourcesUsed": ["named authorities underpinning the assessment"]
 }
@@ -96,6 +105,7 @@ CRITICAL RULES:
 7. Set dataConfidence by evidence quality and the confidence tiering (US/EU high; China medium; deal/pricing/sales low) — never by a count of sources.
 8. Write as a finished CartaOS client report — flowing, natural, decisive prose, attributed to CartaOS where natural. Lead with the answer.
 9. For EVERY region, populate businessCase — synthesise ALL six vectors into a clear, rational value proposition and state EXACTLY where (and how) a profitable business case can be made, or why it cannot, with the concrete economics (capturable SOM, margin, the investment/erosion it must beat) and a per-region Pursue / Watch / Pass call. This is the so-what a BD principal acts on; make it specific, not generic.
+10. Populate commercialPlan — the consolidated business case. Cover EVERY relevant commercial channel (retail pharmacy, hospital & tender, specialty, mail-order, trade / branded generics, wholesale distribution) across the target geographies, stating where the value sits, the exact access mechanics (tender cycles, PBM/formulary, AMNOG/HAS, NRDL/VBP, Japan NHI, India trade) and named players where known. Then give a clear, sequenced "how to proceed" plan: step → action → geography → build/partner/in-license → timing vs the window → owner. Ground every channel, pricing and access claim in the evidence base (CMS spend, HTA bodies, NRDL/VBP, NHI, tender data, originator filings) — never generic.
 
 This is a CartaOS in-license / originate / pass decision. Be rigorous, honest and client-ready.`;
 

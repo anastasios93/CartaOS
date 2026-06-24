@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { AgentResult, RegionalAnalysis, OutLicensingRecommendation, PortfolioRisk } from "@/types/hub";
+import type { AgentResult, RegionalAnalysis, OutLicensingRecommendation, PortfolioRisk, OutLicensingReport } from "@/types/hub";
 import {
   Globe,
   TrendingUp,
@@ -68,7 +68,7 @@ export function OutLicensingStrategyResults({
   data: Extract<AgentResult, { agentId: "outLicensingStrategy" }>;
 }) {
   const { report } = data;
-  const [view, setView] = useState<"overview" | "regions" | "recommendations" | "risks">("overview");
+  const [view, setView] = useState<"overview" | "regions" | "recommendations" | "business" | "risks">("overview");
 
   if (!report) return <p className="text-sm text-muted-foreground">No report generated.</p>;
 
@@ -114,6 +114,7 @@ export function OutLicensingStrategyResults({
         <ViewTab id="overview" current={view} icon={Award} label="Asset & Overview" onClick={setView} />
         <ViewTab id="regions" current={view} icon={Globe} label="Regional Assessments" onClick={setView} />
         <ViewTab id="recommendations" current={view} icon={Target} label="Market Priorities" onClick={setView} />
+        <ViewTab id="business" current={view} icon={DollarSign} label="Business Case" onClick={setView} />
         <ViewTab id="risks" current={view} icon={AlertTriangle} label="Flaws & Blockers" onClick={setView} />
       </div>
 
@@ -121,6 +122,7 @@ export function OutLicensingStrategyResults({
       {view === "overview" && <OverviewView report={report} />}
       {view === "regions" && <RegionsView regions={report.regionalAnalysis || []} />}
       {view === "recommendations" && <RecommendationsView recommendations={report.recommendations || []} />}
+      {view === "business" && <CommercialPlanView plan={report.commercialPlan} />}
       {view === "risks" && <RisksView risks={report.portfolioRisks || []} />}
     </div>
   );
@@ -158,6 +160,89 @@ function VerdictBadge({ verdict }: { verdict: "Go" | "Conditional Go" | "No-Go" 
     >
       {verdict}
     </span>
+  );
+}
+
+function CommercialPlanView({ plan }: { plan?: OutLicensingReport["commercialPlan"] }) {
+  if (!plan) return <p className="text-sm text-muted-foreground">No commercial plan generated.</p>;
+  return (
+    <div className="space-y-4">
+      {plan.summary && (
+        <div className="rounded-xl border border-border/40 border-l-4 bg-[#FFF7ED] p-4" style={{ borderLeftColor: "#F97316" }}>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#C2410C] mb-1">Business Case</p>
+          <p className="text-[13px] text-[#1A1A2E] leading-relaxed">{plan.summary}</p>
+        </div>
+      )}
+
+      {plan.channels?.length > 0 && (
+        <div className="rounded-xl border border-border/40 bg-white overflow-hidden">
+          <div className="px-5 py-3 border-b border-border/30 flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-[#C2410C]" />
+            <h5 className="text-sm font-bold text-[#1A1A2E]">Commercial Channels</h5>
+          </div>
+          <div className="divide-y divide-border/30">
+            {plan.channels.map((c, i) => (
+              <div key={i} className="p-4">
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <span className="text-[13px] font-bold text-[#1A1A2E]">{c.channel}</span>
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {c.geographies?.map(g => (
+                      <span key={g} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F8F9FA] border border-border/40 text-muted-foreground">
+                        {REGION_FLAGS[g] ?? ""} {g}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {c.valueRole && (
+                  <p className="text-[12px] text-[#1A1A2E] leading-relaxed">
+                    <span className="font-semibold">Where the value is:</span> {c.valueRole}
+                  </p>
+                )}
+                {c.accessMechanics && (
+                  <p className="text-[12px] text-muted-foreground leading-relaxed mt-1">
+                    <span className="font-semibold text-[#1A1A2E]">How to win it:</span> {c.accessMechanics}
+                  </p>
+                )}
+                {c.keyPlayers?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {c.keyPlayers.map((p, j) => (
+                      <span key={j} className="px-2 py-0.5 rounded-md text-[11px] bg-[#F8F9FA] border border-border/40 text-muted-foreground">{p}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {plan.howToProceed?.length > 0 && (
+        <div className="rounded-xl border border-border/40 bg-white p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Target className="h-4 w-4 text-[#F97316]" />
+            <h5 className="text-sm font-bold text-[#1A1A2E]">How to Proceed</h5>
+          </div>
+          <div className="space-y-2.5">
+            {[...plan.howToProceed].sort((a, b) => a.step - b.step).map((s, i) => (
+              <div key={i} className="flex gap-3">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#F97316] text-white text-[12px] font-bold">
+                  {s.step}
+                </div>
+                <div className="flex-1">
+                  <p className="text-[13px] font-semibold text-[#1A1A2E] leading-snug">{s.action}</p>
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
+                    {s.geography && <span>{REGION_FLAGS[s.geography] ?? ""} {s.geography}</span>}
+                    {s.approach && <><span className="text-muted-foreground/40">·</span><span className="font-medium text-[#C2410C]">{s.approach}</span></>}
+                    {s.timing && <><span className="text-muted-foreground/40">·</span><span>{s.timing}</span></>}
+                    {s.owner && <><span className="text-muted-foreground/40">·</span><span>{s.owner}</span></>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -659,6 +659,44 @@ export async function exportStrategyReportPDF(
     }, autoTable);
   }
 
+  // Business case — commercial channels & how to proceed
+  if (report.commercialPlan) {
+    const cp = report.commercialPlan;
+    newPage(state);
+    sectionTitle(state, "Business Case", "Commercial channels & go-to-market", cp.summary);
+    if (cp.channels?.length) {
+      subHeader(state, "Commercial channels", STRATEGY_COLOR);
+      table(state, {
+        head: [["Channel", "Geographies", "Where the value is", "How to win it"]],
+        body: cp.channels.map((c) => [
+          c.channel,
+          (c.geographies ?? []).join(", "),
+          c.valueRole,
+          c.accessMechanics + (c.keyPlayers?.length ? `  Players: ${c.keyPlayers.join(", ")}` : ""),
+        ]),
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 92 },
+          1: { cellWidth: 60 },
+          2: { cellWidth: 140 },
+        },
+      }, autoTable);
+    }
+    if (cp.howToProceed?.length) {
+      subHeader(state, "How to proceed", STRATEGY_COLOR);
+      table(state, {
+        head: [["#", "Action", "Geo", "Approach", "Timing", "Owner"]],
+        body: cp.howToProceed.slice().sort((a, b) => a.step - b.step).map((s) => [
+          String(s.step), s.action, s.geography, s.approach, s.timing, s.owner,
+        ]),
+        columnStyles: {
+          0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 24 },
+          1: { cellWidth: 150 },
+          3: { textColor: POS },
+        },
+      }, autoTable);
+    }
+  }
+
   if (report.sourcesUsed?.length) {
     sectionTitle(state, "Appendix", "Data sources");
     paragraph(state, report.sourcesUsed.join("   ·   "), 9, MUTED);
@@ -1168,6 +1206,37 @@ export async function exportClientDeck(
       txt(slide,"TIMELINE", { x: COL_R, y: 5.6, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.muted, charSpacing: 1 });
       txt(slide,topRec.estimatedTimeline, { x: COL_R, y: 5.88, w: HALF, h: 0.4, fontFace: F, fontSize: 13, color: P.ink });
     }
+  }
+
+  // ─── Business case: commercial channels ─────────────────────────────────
+  if (strategy?.commercialPlan?.channels?.length) {
+    const cp = strategy.commercialPlan;
+    const slide = contentSlide(pptx, "Business Case · Channels", "Where the value sits across commercial channels", P.accent, SRC);
+    const rows: any[][] = [
+      ["Channel", "Geographies", "Where the value is", "How to win it"].map((t) => ({ text: t, options: cellHead() })),
+      ...cp.channels.slice(0, 6).map((c) => [
+        { text: truncate(c.channel, 28), options: cellBody({ bold: true, color: P.ink }) },
+        { text: (c.geographies ?? []).join(", "), options: cellBody({ fontSize: 10 }) },
+        { text: truncate(c.valueRole, 130), options: cellBody({ fontSize: 10 }) },
+        { text: truncate((c.accessMechanics || "") + (c.keyPlayers?.length ? ` (${c.keyPlayers.join(", ")})` : ""), 170), options: cellBody({ fontSize: 10 }) },
+      ]),
+    ];
+    slide.addTable(rows, { x: MX, y: BODY_TOP + 0.15, w: MW, colW: [2.3, 1.7, 3.5, 4.633], valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false });
+  }
+
+  // ─── Business case: how to proceed ──────────────────────────────────────
+  if (strategy?.commercialPlan?.howToProceed?.length) {
+    const slide = contentSlide(pptx, "Business Case · How to proceed", "The sequenced path to capture", P.accent, "CartaOS go-to-market model");
+    const steps = strategy.commercialPlan.howToProceed.slice().sort((a, b) => a.step - b.step).slice(0, 7);
+    steps.forEach((s, i) => {
+      const y = 1.75 + i * 0.66;
+      slide.addShape("rect", { x: MX, y, w: 0.46, h: 0.46, fill: { color: P.accent }, line: { type: "none" } });
+      txt(slide, String(s.step), { x: MX, y, w: 0.46, h: 0.46, fontFace: F, fontSize: 15, bold: true, color: P.white, align: "center", valign: "middle" });
+      txt(slide, [
+        { text: `${s.action}   `, options: { fontSize: 13, bold: true, color: P.ink } },
+        { text: [s.geography, s.approach, s.timing, s.owner].filter(Boolean).join(" · "), options: { fontSize: 10.5, color: P.muted } },
+      ], { x: MX + 0.66, y, w: MW - 0.66, h: 0.5, fontFace: F, valign: "middle" });
+    });
   }
 
   // ─── Divider: Execution ─────────────────────────────────────────────────
