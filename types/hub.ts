@@ -151,6 +151,15 @@ export interface RegionalAnalysis {
     complexity: "Low" | "Moderate" | "High";
     notes: string;
   };
+  /** Synthesised investment thesis for this region — the rational value
+   *  proposition, exactly where a profitable business case sits, the economics,
+   *  and the per-region call. Pulls together all six vectors. */
+  businessCase?: {
+    valueProposition: string;
+    profitWedge: string;
+    economics: string;
+    verdict: "Pursue" | "Watch" | "Pass";
+  };
 }
 
 export interface OutLicensingRecommendation {

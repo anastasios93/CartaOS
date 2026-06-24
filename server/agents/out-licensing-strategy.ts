@@ -62,7 +62,8 @@ Return ONLY valid JSON with this exact structure:
       "legal": { "regulatoryAuthority": "FDA", "pathway": "ANDA / 505(b)(2) / biosimilar (BPCIA)", "estimatedTimeline": "time-to-launch", "exclusivityOpportunities": ["window opens YYYY — LoE/SPC/data-exclusivity basis"], "barriers": ["paragraph IV / SPC litigation, comparability"] },
       "commercial": { "competitorActivity": "filer count & competitive intensity (ANDA / EU MA / biosimilar applicants)", "pricingDynamics": "erosion + tender/payer dynamics", "reimbursementLandscape": "channel access & tender mechanics", "keyPartnerCandidates": ["named API/CDMO/MAH/EU-buyer/supply-side partners"], "distributionChannels": "retail / hospital-tender / specialty" },
       "ip": { "patentStrength": "Strong|Moderate|Weak", "ftoStatus": "Clear|Some Risk|Significant Risk", "expirationRisks": ["secondary patents, SPC, formulation patents"], "opportunities": ["505(b)(2) / device / interchangeability angle"], "estimatedExclusivityYears": 8 },
-      "manufacturing": { "complexity": "Low|Moderate|High", "notes": "API source & concentration risk, CDMO capability, comparability burden" }
+      "manufacturing": { "complexity": "Low|Moderate|High", "notes": "API source & concentration risk, CDMO capability, comparability burden" },
+      "businessCase": { "valueProposition": "the rational value proposition for THIS region — why it is (or isn't) attractive, synthesising market, regulatory, IP, access, competition and manufacturing into one clear thesis", "profitWedge": "exactly WHERE and HOW a profitable business case is made here — the specific channel, the timing against the exclusivity window, and the differentiation / capture lever that protects margin", "economics": "the economics — the share of the pool you can realistically capture (SOM), the gross margin it supports, and the investment and erosion it must beat to be profitable", "verdict": "Pursue | Watch | Pass" }
     }
   ],
   "recommendations": [
@@ -94,6 +95,7 @@ CRITICAL RULES:
 6. Use ACTUAL competitor/partner names, LoE/SPC dates and filer counts from the evidence — never invented figures. Distinguish fact from estimate IN THE PROSE; never print a bracket tag of any kind.
 7. Set dataConfidence by evidence quality and the confidence tiering (US/EU high; China medium; deal/pricing/sales low) — never by a count of sources.
 8. Write as a finished CartaOS client report — flowing, natural, decisive prose, attributed to CartaOS where natural. Lead with the answer.
+9. For EVERY region, populate businessCase — synthesise ALL six vectors into a clear, rational value proposition and state EXACTLY where (and how) a profitable business case can be made, or why it cannot, with the concrete economics (capturable SOM, margin, the investment/erosion it must beat) and a per-region Pursue / Watch / Pass call. This is the so-what a BD principal acts on; make it specific, not generic.
 
 This is a CartaOS in-license / originate / pass decision. Be rigorous, honest and client-ready.`;
 

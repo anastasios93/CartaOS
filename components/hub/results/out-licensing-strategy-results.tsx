@@ -161,6 +161,39 @@ function VerdictBadge({ verdict }: { verdict: "Go" | "Conditional Go" | "No-Go" 
   );
 }
 
+function RegionBusinessCase({ bc }: { bc: NonNullable<RegionalAnalysis["businessCase"]> }) {
+  const map: Record<string, { bg: string; text: string }> = {
+    Pursue: { bg: "#C2410C18", text: "#9A3412" },
+    Watch: { bg: "#F9731618", text: "#C2410C" },
+    Pass: { bg: "#14141412", text: "#141414" },
+  };
+  const c = map[bc.verdict] ?? map.Watch;
+  return (
+    <div className="rounded-xl border border-border/40 border-l-4 bg-[#FFF7ED] p-4" style={{ borderLeftColor: "#F97316" }}>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#C2410C]">Business Case — value proposition</p>
+        <span
+          className="text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full"
+          style={{ backgroundColor: c.bg, color: c.text }}
+        >
+          {bc.verdict}
+        </span>
+      </div>
+      <p className="text-[13px] font-semibold text-[#1A1A2E] leading-relaxed">{bc.valueProposition}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t border-[#F97316]/15">
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">Where the profitable case is</p>
+          <p className="text-[12px] text-[#1A1A2E] leading-relaxed">{bc.profitWedge}</p>
+        </div>
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">Economics</p>
+          <p className="text-[12px] text-[#1A1A2E] leading-relaxed">{bc.economics}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CosBreakdown({ cos }: { cos: NonNullable<RegionalAnalysis["cos"]> }) {
   const items = [
     { label: "Market Size", value: cos.marketSize },
@@ -399,6 +432,7 @@ function RegionsView({ regions }: { regions: RegionalAnalysis[] }) {
             {/* Expanded six-vector assessment */}
             {isExpanded && (
               <div className="border-t border-border/30 p-5 space-y-4">
+                {region.businessCase && <RegionBusinessCase bc={region.businessCase} />}
                 {region.cos && <CosBreakdown cos={region.cos} />}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <DimensionCard

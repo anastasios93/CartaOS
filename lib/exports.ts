@@ -502,6 +502,22 @@ export async function exportStrategyReportPDF(
         `${region.regionLabel} — ${region.attractivenessScore}/100 attractiveness`,
       );
 
+      // Business case — the rational value proposition and where the profit is
+      if (region.businessCase) {
+        const bc = region.businessCase;
+        subHeader(state, `Business case — ${bc.verdict}`, STRATEGY_COLOR);
+        paragraph(state, bc.valueProposition, 10.5, INK);
+        if (bc.profitWedge) {
+          tinyLabel(state, "Where the profitable case is");
+          paragraph(state, bc.profitWedge);
+        }
+        if (bc.economics) {
+          tinyLabel(state, "Economics");
+          paragraph(state, bc.economics);
+        }
+        state.y += 6;
+      }
+
       writeDimension(state, autoTable, "Market", [
         ["Size", region.market?.sizeUSD],
         ["Growth", region.market?.growthRate],
@@ -1030,17 +1046,32 @@ export async function exportClientDeck(
         region.ip?.estimatedExclusivityYears != null ? `Exclusivity — ${region.ip.estimatedExclusivityYears} years` : "",
       ].filter(Boolean) },
     ];
+
+    // Business case strip — the rational value proposition + per-region call
+    let qTop = 1.7, qGap = 2.25, qH = 2.05;
+    if (region.businessCase) {
+      const bc = region.businessCase;
+      slide.addShape("rect", { x: MX, y: 1.62, w: MW, h: 0.66, fill: { color: P.calloutBg }, line: { type: "none" } });
+      slide.addShape("rect", { x: MX, y: 1.62, w: 0.07, h: 0.66, fill: { color: P.accent } });
+      txt(slide, [
+        { text: "BUSINESS CASE   ", options: { fontSize: 9, bold: true, color: P.accent2, charSpacing: 1 } },
+        { text: bc.valueProposition, options: { fontSize: 10.5, color: P.ink } },
+      ], { x: MX + 0.25, y: 1.66, w: MW - 1.3, h: 0.58, fontFace: F, valign: "middle" });
+      txt(slide, bc.verdict.toUpperCase(), { x: SLIDE_W - MX - 1.05, y: 1.74, w: 1.0, h: 0.4, fontFace: F, fontSize: 11, bold: true, color: P.accent2, align: "right", valign: "middle" });
+      qTop = 2.45; qGap = 2.05; qH = 1.85;
+    }
+
     quads.forEach((q, i) => {
       const x = i % 2 === 0 ? MX : COL_R;
-      const y = 1.7 + Math.floor(i / 2) * 2.25;
-      slide.addShape("rect", { x, y, w: HALF, h: 2.05, fill: { color: P.panel }, line: { type: "none" } });
-      slide.addShape("rect", { x, y, w: 0.07, h: 2.05, fill: { color: q.color } });
-      txt(slide,q.title, { x: x + 0.25, y: y + 0.13, w: HALF - 0.4, h: 0.4, fontFace: F, fontSize: 13, bold: true, color: q.color });
+      const y = qTop + Math.floor(i / 2) * qGap;
+      slide.addShape("rect", { x, y, w: HALF, h: qH, fill: { color: P.panel }, line: { type: "none" } });
+      slide.addShape("rect", { x, y, w: 0.07, h: qH, fill: { color: q.color } });
+      txt(slide,q.title, { x: x + 0.25, y: y + 0.12, w: HALF - 0.4, h: 0.38, fontFace: F, fontSize: 12.5, bold: true, color: q.color });
       txt(slide,
         q.lines.length
-          ? q.lines.map((t) => ({ text: t, options: { bullet: { code: "2022" }, fontSize: 10.5, color: P.ink } }))
-          : [{ text: "No data available", options: { fontSize: 10.5, italic: true, color: P.faint } }],
-        { x: x + 0.28, y: y + 0.55, w: HALF - 0.5, h: 1.4, fontFace: F, valign: "top", paraSpaceAfter: 2 },
+          ? q.lines.map((t) => ({ text: t, options: { bullet: { code: "2022" }, fontSize: 10, color: P.ink } }))
+          : [{ text: "No data available", options: { fontSize: 10, italic: true, color: P.faint } }],
+        { x: x + 0.28, y: y + 0.52, w: HALF - 0.5, h: qH - 0.62, fontFace: F, valign: "top", paraSpaceAfter: 2 },
       );
     });
   }
