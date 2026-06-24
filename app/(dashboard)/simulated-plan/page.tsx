@@ -139,10 +139,13 @@ export default function SimulatedPlanPage() {
                   <DimensionPreview emoji="🏢" label="Access & Comp." desc="HTA/pricing, reimbursement, competitive density" color="#C2410C" />
                   <DimensionPreview emoji="🛡️" label="IP" desc="Patent strength, FTO, expiration, opportunities" color="#F97316" />
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3">
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 mt-3">
                   {[
                     { flag: "🇺🇸", label: "US" },
-                    { flag: "🇪🇺", label: "EU" },
+                    { flag: "🇩🇪", label: "Germany" },
+                    { flag: "🇫🇷", label: "France" },
+                    { flag: "🇮🇹", label: "Italy" },
+                    { flag: "🇪🇸", label: "Spain" },
                     { flag: "🇯🇵", label: "Japan" },
                     { flag: "🇨🇳", label: "China" },
                     { flag: "🌍", label: "ROW" },

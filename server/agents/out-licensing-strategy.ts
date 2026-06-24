@@ -84,7 +84,7 @@ Return ONLY valid JSON with this exact structure:
 }
 
 CRITICAL RULES:
-1. Cover all 5 regions: US, EU, JP, CN, ROW. For EACH, populate all six vectors (market, legal, commercial incl. competition, ip, manufacturing) AND the cos sub-scores.
+1. Cover these markets INDIVIDUALLY — one regionalAnalysis entry each: US, Germany, France, Italy, Spain, Japan, China, Rest of World (region codes "US", "DE", "FR", "IT", "ES", "JP", "CN", "ROW"; regionLabel = full country name). NEVER emit a single combined "EU" row — approval is centralised (EMA) but pricing, reimbursement and HTA are decided nationally, so assess Germany (G-BA / IQWiG · AMNOG), France (HAS · SMR/ASMR · CEPS), Italy (AIFA regional formularies) and Spain (AEMPS · CIMA) as four distinct markets, each with its own access, competition, opportunities and risks. For EACH market populate all six vectors (market, legal, commercial incl. competition, ip, manufacturing) AND the cos sub-scores.
 2. attractivenessScore is the regional Commercial Opportunity Score; keep it consistent with the cos sub-scores (market size + regulatory + ip + market access, penalised by competitive density). In cos.competition, 100 = LOW density (favourable), low = crowded.
 3. Anchor epidemiology to IHME GBD / WHO GHO and pricing to CMS / HTA bodies where present; name expedited pathways and HTA frameworks explicitly per region.
 4. verdict is a clear Go / Conditional Go / No-Go for pursuing the opportunity; opportunityThesis states where it is strongest and the single biggest blocker.
@@ -149,7 +149,7 @@ export async function runOutLicensingStrategyAgent(
       // Proceed on the diagnostic outputs alone if the aggregate pull fails.
     }
 
-    write({ agent: agentId, type: "status", status: "analyzing", message: "Scoring the opportunity across six vectors and five markets..." });
+    write({ agent: agentId, type: "status", status: "analyzing", message: "Scoring the opportunity across six vectors and every target market..." });
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
@@ -172,7 +172,7 @@ ${evidenceBase || "Evidence base unavailable — rely on the diagnostic outputs 
 
 ---
 
-Produce the Global Drug Opportunity Assessment now — a board-level GO / NO-GO market-opportunity assessment for the asset owner. Cover all 5 regions (US, EU, JP, CN, ROW) with all six vectors and COS sub-scores per region, a verdict and opportunityThesis, prioritised market recommendations, and the true flaws & fatal blockers. Anchor every claim to named sources; mark inferred figures [estimated].`,
+Produce the Global Drug Opportunity Assessment now — a board-level GO / NO-GO market-opportunity assessment for the asset owner. Cover the US, the FOUR EU national markets individually (Germany, France, Italy, Spain — never a single "EU" row), Japan, China and Rest of World, each with all six vectors and COS sub-scores, a verdict and opportunityThesis, prioritised market recommendations, and the true flaws & fatal blockers. Anchor every claim to named sources; mark inferred figures [estimated].`,
       }],
     });
 

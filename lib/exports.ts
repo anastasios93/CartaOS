@@ -394,7 +394,7 @@ export async function exportStrategyReportPDF(
     state,
     "Market Opportunity Assessment",
     "Global Drug Opportunity Assessment",
-    "Regulatory · IP · Market & Epidemiology · Access · Competition · Manufacturing — across five global markets",
+    "Regulatory · IP · Market & Epidemiology · Access · Competition · Manufacturing — US, EU national markets (DE/FR/IT/ES), Japan, China & ROW",
     assetName,
     [
       { label: "Verdict", value: report.verdict ?? "—" },

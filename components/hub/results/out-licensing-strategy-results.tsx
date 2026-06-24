@@ -20,10 +20,19 @@ import {
 
 const REGION_FLAGS: Record<string, string> = {
   US: "🇺🇸",
+  DE: "🇩🇪",
+  FR: "🇫🇷",
+  IT: "🇮🇹",
+  ES: "🇪🇸",
   EU: "🇪🇺",
   JP: "🇯🇵",
   CN: "🇨🇳",
   ROW: "🌍",
+  // full-name fallbacks in case the model emits names rather than codes
+  Germany: "🇩🇪",
+  France: "🇫🇷",
+  Italy: "🇮🇹",
+  Spain: "🇪🇸",
 };
 
 // Orange · black · white — ratings shown tonally (deep orange = strongest,

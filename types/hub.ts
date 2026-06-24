@@ -104,7 +104,8 @@ export interface AssetProfile {
 }
 
 export interface RegionalAnalysis {
-  region: "US" | "EU" | "JP" | "CN" | "ROW";
+  // EU is assessed as four national markets (DE/FR/IT/ES); "EU" kept for legacy reports.
+  region: "US" | "DE" | "FR" | "IT" | "ES" | "EU" | "JP" | "CN" | "ROW";
   regionLabel: string;
   attractiveness: "Very High" | "High" | "Medium" | "Low";
   attractivenessScore: number;
