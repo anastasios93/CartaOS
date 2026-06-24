@@ -5,12 +5,12 @@ import type { AgentResult } from "@/types/hub";
 export function ContractResults({ data }: { data: Extract<AgentResult, { agentId: "synthesis" }> }) {
   const { contract } = data;
 
-  if (!contract) return <p className="text-xs text-[#64748B]">No contract generated.</p>;
+  if (!contract) return <p className="text-xs text-muted-foreground">No contract generated.</p>;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[#F1F5F9]">Draft License Agreement</h3>
+        <h3 className="text-sm font-semibold text-[#1A1A2E]">Draft License Agreement</h3>
         <button
           onClick={() => {
             const blob = new Blob([contract], { type: "text/markdown" });
@@ -26,8 +26,8 @@ export function ContractResults({ data }: { data: Extract<AgentResult, { agentId
           Download .md
         </button>
       </div>
-      <div className="bg-[#0F172A] rounded-lg p-5 max-h-[600px] overflow-auto">
-        <pre className="text-xs text-[#94A3B8] font-mono whitespace-pre-wrap leading-relaxed">{contract}</pre>
+      <div className="bg-[#FAFAFA] border border-border/40 rounded-lg p-5 max-h-[600px] overflow-auto">
+        <pre className="text-xs text-muted-foreground font-mono whitespace-pre-wrap leading-relaxed">{contract}</pre>
       </div>
     </div>
   );

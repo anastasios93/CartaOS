@@ -11,7 +11,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 export function DataPackageResults({ data }: { data: Extract<AgentResult, { agentId: "synthesis" }> }) {
   const { dataPackage } = data;
 
-  if (!dataPackage.length) return <p className="text-xs text-[#64748B]">No data package generated.</p>;
+  if (!dataPackage.length) return <p className="text-xs text-muted-foreground">No data package generated.</p>;
 
   const totalItems = dataPackage.reduce((sum, s) => sum + s.items.length, 0);
   const requiredCount = dataPackage.reduce((sum, s) => sum + s.items.filter(i => i.status === "Required").length, 0);
@@ -19,8 +19,8 @@ export function DataPackageResults({ data }: { data: Extract<AgentResult, { agen
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <h3 className="text-sm font-semibold text-[#F1F5F9]">Data Room Checklist</h3>
-        <span className="text-xs text-[#64748B]">{totalItems} documents</span>
+        <h3 className="text-sm font-semibold text-[#1A1A2E]">Data Room Checklist</h3>
+        <span className="text-xs text-muted-foreground">{totalItems} documents</span>
         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#EF444415", color: "#EF4444" }}>
           {requiredCount} Required
         </span>
@@ -28,8 +28,8 @@ export function DataPackageResults({ data }: { data: Extract<AgentResult, { agen
 
       <div className="space-y-3">
         {dataPackage.map((section: DataPackageItem) => (
-          <div key={section.category} className="rounded-lg bg-[#1E293B]/50 p-4 space-y-3">
-            <h4 className="text-xs font-semibold text-[#F1F5F9] tracking-wide">{section.category}</h4>
+          <div key={section.category} className="rounded-lg bg-[#F8F9FA] border border-border/40 p-4 space-y-3">
+            <h4 className="text-xs font-semibold text-[#1A1A2E] tracking-wide">{section.category}</h4>
             <div className="space-y-1.5">
               {section.items.map((item, i) => {
                 const sColor = STATUS_COLORS[item.status] ?? STATUS_COLORS.Optional;
@@ -37,7 +37,7 @@ export function DataPackageResults({ data }: { data: Extract<AgentResult, { agen
                   <div key={i} className="flex items-start gap-3 py-1.5">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: sColor.text }} />
-                      <span className="text-xs text-[#F1F5F9] truncate">{item.document}</span>
+                      <span className="text-xs text-[#1A1A2E] truncate">{item.document}</span>
                     </div>
                     <span
                       className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -52,8 +52,8 @@ export function DataPackageResults({ data }: { data: Extract<AgentResult, { agen
             {section.items.some(i => i.notes) && (
               <div className="border-t border-[#1E293B] pt-2 space-y-1">
                 {section.items.filter(i => i.notes).map((item, i) => (
-                  <p key={i} className="text-[10px] text-[#475569]">
-                    <span className="text-[#64748B] font-medium">{item.document}:</span> {item.notes}
+                  <p key={i} className="text-[10px] text-muted-foreground">
+                    <span className="text-muted-foreground font-medium">{item.document}:</span> {item.notes}
                   </p>
                 ))}
               </div>

@@ -16,6 +16,7 @@ import { searchMolecules } from "@/server/services/chembl";
 import { searchEmaProducts } from "@/server/services/ema";
 import { searchByBrandName as searchHealthCanada } from "@/server/services/health-canada";
 import { BENCHMARKING_AGENT_PROMPT } from "@/server/services/hub-prompts";
+import { withGrounding } from "@/server/services/source-reference";
 import { extractJSON, cleanError } from "./utils";
 
 export async function runBenchmarkingAgent(
@@ -31,7 +32,7 @@ export async function runBenchmarkingAgent(
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     // Step 1: Query ALL data sources in parallel
-    write({ agent: agentId, type: "status", status: "scraping", message: "Querying 8 global databases: SEC EDGAR, ClinicalTrials, FDA, Orange Book, DailyMed, ChEMBL, EMA, Health Canada..." });
+    write({ agent: agentId, type: "status", status: "scraping", message: "Querying global regulatory, clinical, IP and corporate sources..." });
 
     const assetBase = intake.assetName.split("(")[0].trim();
     // If no TA provided, agents will auto-detect from public data
@@ -74,7 +75,7 @@ export async function runBenchmarkingAgent(
     ];
 
     write({ agent: agentId, type: "sources", sources });
-    write({ agent: agentId, type: "status", status: "analyzing", message: `Analyzing ${totalSources} records from 8 databases with Claude...` });
+    write({ agent: agentId, type: "status", status: "analyzing", message: "Analyzing the evidence base for comparable transactions..." });
 
     // Step 2: Build rich context for Claude
     const edgarContext = edgarHits.slice(0, 10).map(h =>
@@ -109,8 +110,8 @@ export async function runBenchmarkingAgent(
     // Step 3: Call Claude with ALL data
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 4096,
-      system: BENCHMARKING_AGENT_PROMPT,
+      max_tokens: 8000,
+      system: withGrounding(BENCHMARKING_AGENT_PROMPT),
       messages: [{
         role: "user",
         content: `## Asset Profile
@@ -150,7 +151,7 @@ Analyze ALL sources across US, EU, and Canadian markets. Return a JSON array of 
     const comparables: DealComparable[] = extractJSON(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "benchmarking", comparables } });
-    write({ agent: agentId, type: "status", status: "complete", message: `Found ${comparables.length} comparable deals from ${totalSources} global sources` });
+    write({ agent: agentId, type: "status", status: "complete", message: `Identified ${comparables.length} comparable transactions` });
   } catch (err) {
     const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });

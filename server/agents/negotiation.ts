@@ -15,6 +15,7 @@ import { getTopAdverseReactions, getAdverseEventTotal } from "@/server/services/
 import { searchLiterature } from "@/server/services/pubmed";
 import { searchDailyMed } from "@/server/services/dailymed";
 import { NEGOTIATION_AGENT_PROMPT } from "@/server/services/hub-prompts";
+import { withGrounding } from "@/server/services/source-reference";
 import { extractJSON, cleanError } from "./utils";
 
 export async function runNegotiationAgent(
@@ -29,7 +30,7 @@ export async function runNegotiationAgent(
     }
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    write({ agent: agentId, type: "status", status: "scraping", message: "Querying 7 databases for deal precedents, patents, safety, and competitive intel..." });
+    write({ agent: agentId, type: "status", status: "scraping", message: "Querying deal precedents, patent, safety and competitive sources..." });
 
     const assetBase = intake.assetName.split("(")[0].trim();
     const taQualifier = intake.therapeuticArea ? `AND "${intake.therapeuticArea}" ` : "";
@@ -67,7 +68,7 @@ export async function runNegotiationAgent(
     ];
 
     write({ agent: agentId, type: "sources", sources });
-    write({ agent: agentId, type: "status", status: "analyzing", message: `Analyzing leverage from ${totalSources} records + safety data (${aeTotal.toLocaleString()} FAERS reports)...` });
+    write({ agent: agentId, type: "status", status: "analyzing", message: "Analyzing negotiating leverage from precedent transactions and the safety profile..." });
 
     const edgarContext = edgarHits.slice(0, 12).map(h =>
       `[${h.form}] ${h.companyName} (${h.filingDate}): ${h.description?.slice(0, 400) ?? ""} | Accession: ${h.accessionNumber}`
@@ -95,8 +96,8 @@ export async function runNegotiationAgent(
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 4096,
-      system: NEGOTIATION_AGENT_PROMPT,
+      max_tokens: 8000,
+      system: withGrounding(NEGOTIATION_AGENT_PROMPT),
       messages: [{
         role: "user",
         content: `## Asset Profile
@@ -133,7 +134,7 @@ Analyze the negotiating position considering regulatory status, patent landscape
     const leveragePoints: NegotiationLeverage[] = extractJSON(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "negotiation", leveragePoints } });
-    write({ agent: agentId, type: "status", status: "complete", message: `Assessed leverage on ${leveragePoints.length} deal terms from ${totalSources} sources` });
+    write({ agent: agentId, type: "status", status: "complete", message: `Assessed leverage across ${leveragePoints.length} deal terms` });
   } catch (err) {
     const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });

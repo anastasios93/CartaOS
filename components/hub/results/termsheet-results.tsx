@@ -18,7 +18,7 @@ export function TermSheetResults({ data }: { data: Extract<AgentResult, { agentI
   return (
     <div className="space-y-3">
       {/* Tab toggle */}
-      <div className="flex gap-1 p-0.5 bg-[#0F172A] rounded-lg w-fit">
+      <div className="flex gap-1 p-0.5 bg-[#FAFAFA] border border-border/40 rounded-lg w-fit">
         <button
           onClick={() => setView("clauses")}
           className="px-3 py-1 text-xs font-medium rounded-md transition"
@@ -46,9 +46,9 @@ export function TermSheetResults({ data }: { data: Extract<AgentResult, { agentI
           {clauses.map((c: TermSheetClause, i: number) => {
             const flagStyle = FLAG_COLORS[c.flag] ?? FLAG_COLORS.Aligned;
             return (
-              <div key={i} className="rounded-lg bg-[#1E293B]/50 p-3 space-y-1.5">
+              <div key={i} className="rounded-lg bg-[#F8F9FA] border border-border/40 p-3 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#F1F5F9]">{c.clause}</span>
+                  <span className="text-xs font-semibold text-[#1A1A2E]">{c.clause}</span>
                   <span
                     className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                     style={{ backgroundColor: flagStyle.bg, color: flagStyle.text }}
@@ -56,16 +56,16 @@ export function TermSheetResults({ data }: { data: Extract<AgentResult, { agentI
                     {c.flag}
                   </span>
                 </div>
-                <div className="text-[11px] text-[#F1F5F9]">{c.proposedTerm}</div>
-                <div className="text-[10px] text-[#64748B]">Benchmark: {c.marketBenchmark}</div>
-                {c.geoNotes && <div className="text-[10px] text-[#475569] italic">{c.geoNotes}</div>}
+                <div className="text-[11px] text-[#1A1A2E]">{c.proposedTerm}</div>
+                <div className="text-[10px] text-muted-foreground">Benchmark: {c.marketBenchmark}</div>
+                {c.geoNotes && <div className="text-[10px] text-muted-foreground italic">{c.geoNotes}</div>}
               </div>
             );
           })}
         </div>
       ) : (
-        <div className="bg-[#0F172A] rounded-lg p-4 max-h-[350px] overflow-auto">
-          <pre className="text-xs text-[#94A3B8] font-mono whitespace-pre-wrap leading-relaxed">{termSheet}</pre>
+        <div className="bg-[#FAFAFA] border border-border/40 rounded-lg p-4 max-h-[350px] overflow-auto">
+          <pre className="text-xs text-muted-foreground font-mono whitespace-pre-wrap leading-relaxed">{termSheet}</pre>
         </div>
       )}
     </div>

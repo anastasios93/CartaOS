@@ -6,22 +6,22 @@ import type { AgentResult, PartnerScore } from "@/types/hub";
 
 export function PartnerResults({ data }: { data: Extract<AgentResult, { agentId: "partner" }> }) {
   const { partners } = data;
-  if (!partners.length) return <p className="text-xs text-[#64748B]">No potential partners identified.</p>;
+  if (!partners.length) return <p className="text-xs text-muted-foreground">No potential partners identified.</p>;
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-[#94A3B8]">{partners.length} partners ranked</p>
+      <p className="text-xs font-medium text-muted-foreground">{partners.length} partners ranked</p>
       <div className="space-y-2">
         {partners.map((p: PartnerScore, i: number) => (
-          <div key={i} className="rounded-lg bg-[#1E293B]/50 p-3 space-y-2">
+          <div key={i} className="rounded-lg bg-[#F8F9FA] border border-border/40 p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[#F1F5F9]">{p.company}</span>
+              <span className="text-sm font-semibold text-[#1A1A2E]">{p.company}</span>
               <span className="text-xs font-mono font-bold" style={{ color: p.fitScore >= 75 ? "#10B981" : p.fitScore >= 50 ? "#F59E0B" : "#EF4444" }}>
                 {p.fitScore}/100
               </span>
             </div>
             {/* Score bar */}
-            <div className="w-full h-1.5 rounded-full bg-[#0F172A]">
+            <div className="w-full h-1.5 rounded-full bg-[#FAFAFA] border border-border/40">
               <div
                 className="h-full rounded-full transition-all"
                 style={{
@@ -31,15 +31,15 @@ export function PartnerResults({ data }: { data: Extract<AgentResult, { agentId:
               />
             </div>
             <div className="flex flex-wrap gap-1.5 text-[10px]">
-              <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-[#94A3B8]">Gap: {p.pipelineGapLevel}</span>
-              <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-[#94A3B8]">Propensity: {p.dealPropensity}</span>
-              <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-[#94A3B8]">{p.recentDeals} deals</span>
-              <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-[#94A3B8]">{p.trialFootprint} trials</span>
+              <span className="px-1.5 py-0.5 rounded bg-[#FAFAFA] border border-border/40 text-muted-foreground">Gap: {p.pipelineGapLevel}</span>
+              <span className="px-1.5 py-0.5 rounded bg-[#FAFAFA] border border-border/40 text-muted-foreground">Propensity: {p.dealPropensity}</span>
+              <span className="px-1.5 py-0.5 rounded bg-[#FAFAFA] border border-border/40 text-muted-foreground">{p.recentDeals} deals</span>
+              <span className="px-1.5 py-0.5 rounded bg-[#FAFAFA] border border-border/40 text-muted-foreground">{p.trialFootprint} trials</span>
               {p.geoStrength.map(g => (
                 <span key={g} className="px-1.5 py-0.5 rounded bg-[#3B82F6]/10 text-[#60A5FA]">{g}</span>
               ))}
             </div>
-            <p className="text-[11px] text-[#94A3B8] leading-relaxed">{p.rationale}</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">{p.rationale}</p>
           </div>
         ))}
       </div>

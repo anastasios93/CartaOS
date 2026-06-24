@@ -6,15 +6,15 @@ import type { AgentResult, DealComparable } from "@/types/hub";
 
 export function BenchmarkingResults({ data }: { data: Extract<AgentResult, { agentId: "benchmarking" }> }) {
   const { comparables } = data;
-  if (!comparables.length) return <p className="text-xs text-[#64748B]">No comparable deals found.</p>;
+  if (!comparables.length) return <p className="text-xs text-muted-foreground">No comparable deals found.</p>;
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-[#94A3B8]">{comparables.length} comparable deals</p>
+      <p className="text-xs font-medium text-muted-foreground">{comparables.length} comparable deals</p>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-[#64748B] border-b border-[#1E293B]">
+            <tr className="text-muted-foreground border-b border-[#1E293B]">
               <th className="text-left py-1.5 pr-3 font-medium">Deal</th>
               <th className="text-right py-1.5 px-2 font-medium">Upfront</th>
               <th className="text-right py-1.5 px-2 font-medium">Total</th>
@@ -23,14 +23,14 @@ export function BenchmarkingResults({ data }: { data: Extract<AgentResult, { age
           </thead>
           <tbody>
             {comparables.map((c: DealComparable, i: number) => (
-              <tr key={i} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition">
+              <tr key={i} className="border-b border-[#1E293B]/50 hover:bg-[#F1F5F9]/30 transition">
                 <td className="py-2 pr-3">
-                  <div className="text-[#F1F5F9] font-medium">{c.dealName}</div>
-                  <div className="text-[#64748B]">{c.stage} &middot; {c.indication} &middot; {c.date}</div>
+                  <div className="text-[#1A1A2E] font-medium">{c.dealName}</div>
+                  <div className="text-muted-foreground">{c.stage} &middot; {c.indication} &middot; {c.date}</div>
                 </td>
-                <td className="text-right py-2 px-2 text-[#F1F5F9] font-mono">{c.upfront}</td>
-                <td className="text-right py-2 px-2 text-[#F1F5F9] font-mono">{c.totalValue}</td>
-                <td className="text-right py-2 pl-2 text-[#F1F5F9] font-mono">{c.royaltyRange}</td>
+                <td className="text-right py-2 px-2 text-[#1A1A2E] font-mono">{c.upfront}</td>
+                <td className="text-right py-2 px-2 text-[#1A1A2E] font-mono">{c.totalValue}</td>
+                <td className="text-right py-2 pl-2 text-[#1A1A2E] font-mono">{c.royaltyRange}</td>
               </tr>
             ))}
           </tbody>

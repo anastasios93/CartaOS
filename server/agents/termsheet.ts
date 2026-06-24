@@ -9,6 +9,7 @@ import type { HubIntakeForm, SourceHit, TermSheetClause } from "@/types/hub";
 import type { AgentWriter } from "./index";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
 import { TERMSHEET_AGENT_PROMPT } from "@/server/services/hub-prompts";
+import { withGrounding } from "@/server/services/source-reference";
 import { extractJSON, cleanError } from "./utils";
 
 export async function runTermSheetAgent(
@@ -23,7 +24,7 @@ export async function runTermSheetAgent(
     }
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    write({ agent: agentId, type: "status", status: "scraping", message: "Querying ALL 12+ global databases: FDA, EMA, Health Canada, FAERS, Orange Book, DailyMed, ChEMBL, RxNorm, ClinicalTrials, PubMed, SEC EDGAR, Patents, News..." });
+    write({ agent: agentId, type: "status", status: "scraping", message: "Querying global regulatory, clinical, IP and commercial sources..." });
 
     // Use the global aggregator to pull from EVERY source
     const assetBase = intake.assetName.split("(")[0].trim();
@@ -37,7 +38,7 @@ export async function runTermSheetAgent(
     const sources: SourceHit[] = [];
     for (const s of globalData.sources) {
       if (s.count > 0) {
-        sources.push({ source: s.name, title: `${s.count} records found` });
+        sources.push({ source: s.name, title: "Records found" });
       }
     }
     // Add specific entries
@@ -55,7 +56,7 @@ export async function runTermSheetAgent(
 
     const successCount = globalData.sources.filter(s => s.status === "success").length;
     const totalRecords = globalData.sources.reduce((sum, s) => sum + s.count, 0);
-    write({ agent: agentId, type: "status", status: "analyzing", message: `Drafting term sheet from ${totalRecords} records across ${successCount} databases worldwide...` });
+    write({ agent: agentId, type: "status", status: "analyzing", message: "Drafting the term sheet against market precedent..." });
 
     // Generate the comprehensive text summary for Claude
     const fullContext = summarizeGlobalData(globalData);
@@ -63,8 +64,8 @@ export async function runTermSheetAgent(
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 8192,
-      system: TERMSHEET_AGENT_PROMPT,
+      max_tokens: 16000,
+      system: withGrounding(TERMSHEET_AGENT_PROMPT),
       messages: [{
         role: "user",
         content: `## Asset Profile
@@ -75,7 +76,7 @@ Deal Direction: ${intake.dealDirection}
 Target Geographies: ${geoStr}
 Context: ${intake.context || "None — generate a comprehensive market-aligned term sheet"}
 
-## GLOBAL INTELLIGENCE (from ${successCount} databases, ${totalRecords} records)
+## GLOBAL INTELLIGENCE
 
 ${fullContext}
 
@@ -92,7 +93,7 @@ Flag any non-standard terms vs. market benchmarks.`,
     const parsed = extractJSON<{ clauses: TermSheetClause[]; termSheet: string }>(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "termsheet", clauses: parsed.clauses, termSheet: parsed.termSheet } });
-    write({ agent: agentId, type: "status", status: "complete", message: `Drafted ${parsed.clauses.length} clauses from ${totalRecords} global records` });
+    write({ agent: agentId, type: "status", status: "complete", message: `Drafted ${parsed.clauses.length} benchmarked clauses` });
   } catch (err) {
     const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });

@@ -10,6 +10,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { HubIntakeForm, AgentResult, ExecutionPlanOutput } from "@/types/hub";
 import type { AgentWriter } from "./index";
+import { withGrounding } from "@/server/services/source-reference";
 import { extractJSON, cleanError } from "./utils";
 
 const EXECUTION_PLAN_PROMPT = `You are a senior pharmaceutical deal execution strategist. You receive outputs from four AI agents that have completed Pillar 1 (Diagnosis: market & comparable deals) and Pillar 2 (Strategy: partners & commercial maximization). Your job is to synthesize these into a concrete, executable plan.
@@ -148,7 +149,7 @@ export async function runExecutionPlanAgent(
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
       max_tokens: 8192,
-      system: EXECUTION_PLAN_PROMPT,
+      system: withGrounding(EXECUTION_PLAN_PROMPT),
       messages: [{
         role: "user",
         content: `## Deal Context

@@ -22,6 +22,12 @@ import { searchLiterature } from "./pubmed";
 import { searchEdgarForDeals } from "./sec-edgar";
 import { searchPatents } from "./patents";
 import { searchGoogleNews } from "./news";
+import { searchOpenTargets, type OpenTargetsProfile } from "./open-targets";
+import { searchPubChem, type PubChemCompound } from "./pubchem";
+import { searchCima, type CimaMedicine } from "./cima-spain";
+import { searchCmsSpending, type CmsDrugSpending } from "./cms-pricing";
+import { searchGhoIndicators, type GhoIndicator } from "./who-gho";
+import { searchUnii, type UniiSubstance } from "./unii-gsrs";
 
 // ─── Unified types ──────────────────────────────────────────────────────────
 
@@ -42,6 +48,12 @@ export interface GlobalDrugProfile {
   secFilings: any[];
   patentData: any[];
   news: any[];
+  openTargets: OpenTargetsProfile | null;
+  pubchem: PubChemCompound | null;
+  cimaSpain: CimaMedicine[];
+  cmsSpending: CmsDrugSpending[];
+  whoGho: GhoIndicator[];
+  unii: UniiSubstance[];
   sources: { name: string; count: number; status: "success" | "error" | "empty" }[];
 }
 
@@ -76,6 +88,12 @@ export async function aggregateGlobalData(
     secFilings,
     patentData,
     news,
+    openTargetsRes,
+    pubChemRes,
+    cimaRes,
+    cmsRes,
+    ghoRes,
+    uniiRes,
   ] = await Promise.allSettled([
     // 🇺🇸 FDA
     searchDrugApplications(searchTerm, maxPerSource),
@@ -102,6 +120,13 @@ export async function aggregateGlobalData(
     includePatents ? searchPatents(searchTerm, maxPerSource) : Promise.resolve({ results: [], totalCount: 0 }),
     // 🌍 News
     includeNews ? searchGoogleNews(searchTerm, 10) : Promise.resolve({ results: [] }),
+    // 🔬 Science · chemistry · EU/US access · burden · substance identity
+    searchOpenTargets(searchTerm),
+    searchPubChem(searchTerm),
+    searchCima(searchTerm, maxPerSource),
+    searchCmsSpending(searchTerm, 10),
+    searchGhoIndicators(therapeuticArea || searchTerm, 12),
+    searchUnii(searchTerm, 10),
   ]);
 
   // Helper to safely extract result
@@ -150,6 +175,21 @@ export async function aggregateGlobalData(
   const patData = extract(patentData, "Patents", { results: [], nextToken: null, totalCount: 0 } as any);
   const newsData = extract(news, "Google News", { results: [] } as any);
 
+  // Object-or-null sources (handled outside extract so counts stay honest)
+  const openTargets = openTargetsRes.status === "fulfilled" ? openTargetsRes.value : null;
+  sources.push({
+    name: "Open Targets",
+    count: openTargets && (openTargets.drug || openTargets.associatedTargets.length) ? 1 : 0,
+    status: openTargetsRes.status === "fulfilled" ? (openTargets?.drug || openTargets?.associatedTargets.length ? "success" : "empty") : "error",
+  });
+  const pubchem = pubChemRes.status === "fulfilled" ? pubChemRes.value : null;
+  sources.push({ name: "PubChem", count: pubchem ? 1 : 0, status: pubChemRes.status === "fulfilled" ? (pubchem ? "success" : "empty") : "error" });
+
+  const cimaSpain = extract(cimaRes, "Spain CIMA (AEMPS)", [] as CimaMedicine[]);
+  const cmsSpending = extract(cmsRes, "CMS Medicare Part D", [] as CmsDrugSpending[]);
+  const whoGho = extract(ghoRes, "WHO GHO", [] as GhoIndicator[]);
+  const unii = extract(uniiRes, "FDA UNII (GSRS)", [] as UniiSubstance[]);
+
   return {
     query: drugName,
     timestamp: new Date().toISOString(),
@@ -167,6 +207,12 @@ export async function aggregateGlobalData(
     secFilings: secData.results,
     patentData: patData.results,
     news: (newsData as any).results ?? [],
+    openTargets,
+    pubchem,
+    cimaSpain,
+    cmsSpending,
+    whoGho,
+    unii,
     sources,
   };
 }
@@ -290,6 +336,50 @@ export function summarizeGlobalData(profile: GlobalDrugProfile): string {
     for (const n of profile.news.slice(0, 5)) {
       sections.push(`- ${n.title} (${n.source}, ${n.publishedDate})`);
     }
+  }
+
+  // Open Targets — asset science / mechanism
+  if (profile.openTargets?.drug) {
+    const d = profile.openTargets.drug;
+    sections.push(`\n## 🎯 Open Targets — Asset Science`);
+    sections.push(`- ${d.name} | Type: ${d.drugType || "N/A"} | Max clinical phase: ${d.maxPhase ?? "N/A"}`);
+    if (d.mechanismsOfAction.length) sections.push(`  Mechanism of action: ${d.mechanismsOfAction.join("; ")}`);
+    if (d.linkedTargets.length) sections.push(`  Molecular targets: ${d.linkedTargets.join(", ")}`);
+    if (d.indications.length) sections.push(`  Indications: ${d.indications.slice(0, 6).join(", ")}`);
+  }
+  if (profile.openTargets?.associatedTargets?.length) {
+    sections.push(`Top target–disease associations: ${profile.openTargets.associatedTargets.map(t => `${t.name} (${t.associationScore})`).join(", ")}`);
+  }
+
+  // PubChem — compound identity
+  if (profile.pubchem) {
+    const p = profile.pubchem;
+    sections.push(`\n## 🧪 PubChem — Compound Identity`);
+    sections.push(`- CID ${p.cid} | Formula: ${p.molecularFormula} | MW: ${p.molecularWeight} | ${p.iupacName}`);
+  }
+
+  // FDA UNII — substance-level identity (entity resolution)
+  if (profile.unii?.length) {
+    sections.push(`\n## 🔑 FDA UNII (substance identity)`);
+    for (const u of profile.unii.slice(0, 3)) sections.push(`- ${u.name} | UNII: ${u.unii} | Class: ${u.substanceClass}`);
+  }
+
+  // Spain CIMA — EU national authorisation
+  if (profile.cimaSpain?.length) {
+    sections.push(`\n## 🇪🇸 Spain CIMA (AEMPS) — EU national authorisations`);
+    for (const m of profile.cimaSpain.slice(0, 5)) sections.push(`- ${m.nombre} | ${m.labTitular} | Marketed: ${m.comercializado ? "yes" : "no"}${m.generico ? " | generic" : ""}`);
+  }
+
+  // CMS — US Medicare spend signal (rare open pricing proxy)
+  if (profile.cmsSpending?.length) {
+    sections.push(`\n## 💵 CMS Medicare Part D — US spend signal`);
+    for (const c of profile.cmsSpending.slice(0, 5)) sections.push(`- ${c.brandName} (${c.genericName}) by ${c.manufacturer} — Total spend ${c.totalSpending} (${c.year})`);
+  }
+
+  // WHO GHO — disease-burden / epidemiology context for market sizing
+  if (profile.whoGho?.length) {
+    sections.push(`\n## 🌍 WHO GHO — burden / epidemiology indicators`);
+    sections.push(profile.whoGho.slice(0, 6).map(i => i.name).join("; "));
   }
 
   // Source summary

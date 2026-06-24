@@ -77,6 +77,10 @@ export type AgentResult =
 // ─── Out-Licensing Strategy Report Types ────────────────────────────────────
 
 export interface OutLicensingReport {
+  /** Board-level go/no-go on pursuing the opportunity. */
+  verdict?: "Go" | "Conditional Go" | "No-Go";
+  /** One-sentence so-what: where the opportunity is strongest and the biggest blocker. */
+  opportunityThesis?: string;
   executiveSummary: string;
   assetProfile: AssetProfile;
   regionalAnalysis: RegionalAnalysis[];
@@ -131,6 +135,19 @@ export interface RegionalAnalysis {
     expirationRisks: string[];
     opportunities: string[];
     estimatedExclusivityYears: number;
+  };
+  /** Commercial Opportunity Score sub-scores (0–100). competition: 100 = low density (favourable). */
+  cos?: {
+    marketSize: number;
+    regulatory: number;
+    ip: number;
+    marketAccess: number;
+    competition: number;
+  };
+  /** Vector F — manufacturing / CMC / supply-chain complexity. */
+  manufacturing?: {
+    complexity: "Low" | "Moderate" | "High";
+    notes: string;
   };
 }
 

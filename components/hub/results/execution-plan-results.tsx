@@ -14,23 +14,24 @@ import {
   Target,
 } from "lucide-react";
 
+// Orange · black · white — pillars/ratings shown tonally to match the deck.
 const PILLAR_COLORS = {
-  Diagnosis: "#3B82F6",
-  Strategy: "#10B981",
+  Diagnosis: "#141414",
+  Strategy: "#C2410C",
   Execution: "#F97316",
 };
 
 const IMPACT_COLORS: Record<string, { bg: string; text: string }> = {
-  High: { bg: "#FEE2E2", text: "#DC2626" },
-  Medium: { bg: "#FEF3C7", text: "#D97706" },
-  Low: { bg: "#DCFCE7", text: "#16A34A" },
+  High: { bg: "#C2410C18", text: "#C2410C" },
+  Medium: { bg: "#6B6B6B18", text: "#6B6B6B" },
+  Low: { bg: "#9A9A9A18", text: "#6B6B6B" },
 };
 
 const INVOLVEMENT_COLORS: Record<string, string> = {
-  Lead: "#F97316",
-  Contributor: "#3B82F6",
-  Reviewer: "#94A3B8",
-  Approver: "#10B981",
+  Lead: "#EA580C",
+  Contributor: "#141414",
+  Reviewer: "#9A9A9A",
+  Approver: "#6B6B6B",
 };
 
 export function ExecutionPlanResults({
@@ -61,7 +62,7 @@ export function ExecutionPlanResults({
                 {plan.totalDurationWeeks} weeks
               </span>
             </div>
-            <p className="text-[13px] text-[#475569] leading-relaxed">{plan.overview}</p>
+            <p className="text-[13px] text-muted-foreground leading-relaxed">{plan.overview}</p>
           </div>
         </div>
 
@@ -201,7 +202,7 @@ function TimelineView({ phases, totalWeeks }: { phases: ExecutionPhase[]; totalW
                 {/* Expanded detail */}
                 {isExpanded && (
                   <div className="ml-44 mr-1 mt-2 mb-3 p-4 rounded-lg bg-[#FAFAFA] border border-border/30 space-y-3">
-                    <p className="text-[12px] text-[#475569] leading-relaxed">{phase.description}</p>
+                    <p className="text-[12px] text-muted-foreground leading-relaxed">{phase.description}</p>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -218,7 +219,7 @@ function TimelineView({ phases, totalWeeks }: { phases: ExecutionPhase[]; totalW
                           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">Contributors</p>
                           <div className="flex flex-wrap gap-1">
                             {phase.contributors.map(c => (
-                              <span key={c} className="px-2 py-0.5 rounded-md text-[11px] bg-white border border-border/40 text-[#475569]">
+                              <span key={c} className="px-2 py-0.5 rounded-md text-[11px] bg-white border border-border/40 text-muted-foreground">
                                 {c}
                               </span>
                             ))}
@@ -248,7 +249,7 @@ function TimelineView({ phases, totalWeeks }: { phases: ExecutionPhase[]; totalW
                           {phase.dependsOn.map(d => {
                             const depPhase = phases.find(p => p.id === d);
                             return (
-                              <span key={d} className="px-2 py-0.5 rounded-md text-[11px] bg-white border border-border/40 text-[#475569]">
+                              <span key={d} className="px-2 py-0.5 rounded-md text-[11px] bg-white border border-border/40 text-muted-foreground">
                                 {depPhase?.name ?? d}
                               </span>
                             );
@@ -316,7 +317,7 @@ function StakeholdersView({
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">Responsibilities</p>
               <ul className="space-y-1">
                 {sh.responsibilities.map((r, j) => (
-                  <li key={j} className="text-[12px] text-[#475569] leading-relaxed flex items-start gap-1.5">
+                  <li key={j} className="text-[12px] text-muted-foreground leading-relaxed flex items-start gap-1.5">
                     <span className="mt-1.5 h-1 w-1 rounded-full bg-muted-foreground/40 shrink-0" />
                     {r}
                   </li>
@@ -334,7 +335,7 @@ function StakeholdersView({
                 {sh.phaseIds.slice(0, 5).map(pid => {
                   const phase = phases.find(p => p.id === pid);
                   return (
-                    <span key={pid} className="px-2 py-0.5 rounded-md text-[10px] bg-[#F8F9FA] text-[#475569]">
+                    <span key={pid} className="px-2 py-0.5 rounded-md text-[10px] bg-[#F8F9FA] text-muted-foreground">
                       {phase?.name ?? pid}
                     </span>
                   );
@@ -377,9 +378,9 @@ function MilestonesView({ milestones, totalWeeks }: { milestones: CriticalMilest
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                  <span><span className="font-semibold text-[#475569]">Owner:</span> {m.owner}</span>
+                  <span><span className="font-semibold text-muted-foreground">Owner:</span> {m.owner}</span>
                   <span className="h-3 w-px bg-border" />
-                  <span><span className="font-semibold text-[#475569]">Deliverable:</span> {m.deliverable}</span>
+                  <span><span className="font-semibold text-muted-foreground">Deliverable:</span> {m.deliverable}</span>
                 </div>
               </div>
             </div>
@@ -437,10 +438,10 @@ function ConnectionsView({
   phases: ExecutionPhase[];
 }) {
   const typeColors: Record<string, { bg: string; text: string }> = {
-    Sequential: { bg: "#DBEAFE", text: "#2563EB" },
-    Parallel: { bg: "#DCFCE7", text: "#16A34A" },
-    Triggers: { bg: "#FEF3C7", text: "#D97706" },
-    Blocks: { bg: "#FEE2E2", text: "#DC2626" },
+    Sequential: { bg: "#14141412", text: "#141414" },
+    Parallel: { bg: "#F9731618", text: "#C2410C" },
+    Triggers: { bg: "#6B6B6B14", text: "#6B6B6B" },
+    Blocks: { bg: "#C2410C18", text: "#C2410C" },
   };
 
   return (

@@ -6,6 +6,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { HubIntakeForm, AgentResult } from "@/types/hub";
 import type { AgentWriter } from "./index";
+import { withGrounding } from "@/server/services/source-reference";
 import { extractJSON, cleanError } from "./utils";
 
 export interface SynthesisOutput {
@@ -137,7 +138,7 @@ export async function runSynthesisAgent(
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
       max_tokens: 16384,
-      system: SYNTHESIS_PROMPT,
+      system: withGrounding(SYNTHESIS_PROMPT),
       messages: [{
         role: "user",
         content: `## Asset Profile

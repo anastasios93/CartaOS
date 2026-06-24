@@ -5,6 +5,8 @@
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { db } from "@/server/db";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import type { SSEEvent, AgentId, AgentResult } from "@/types/hub";
 
@@ -36,15 +38,49 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400 });
   }
 
+  const userId = session.user.id;
+
   // Create SSE stream
   const encoder = new TextEncoder();
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
 
+  // Capture every agent's latest state so the whole run can be persisted to
+  // HubRequest/HubResult and reopened later from the Simulated Plan tab.
+  const captured: Record<string, { status?: string; sources?: unknown; result?: unknown; error?: string }> = {};
+  const record = (event: SSEEvent | { type: "done" }) => {
+    if (!("agent" in event)) return;
+    const a = (captured[event.agent] ??= {});
+    if (event.type === "status") a.status = event.status;
+    else if (event.type === "sources") a.sources = event.sources;
+    else if (event.type === "result") a.result = event.data;
+    else if (event.type === "error") a.error = event.error;
+  };
+
   const sendEvent = (event: SSEEvent | { type: "done" }) => {
+    record(event);
     const data = `data: ${JSON.stringify(event)}\n\n`;
     writer.write(encoder.encode(data)).catch(() => {});
   };
+
+  // Persist the request immediately so it shows up in the user's history even
+  // while it's still running. DB failures must never break the live stream.
+  const hubRequestPromise = db.hubRequest
+    .create({
+      data: {
+        userId,
+        assetName: intake.assetName,
+        therapeuticArea: intake.therapeuticArea,
+        stage: intake.developmentStage,
+        dealDirection: intake.dealDirection,
+        geographies: intake.geographies,
+        context: intake.context || null,
+        status: "running",
+      },
+      select: { id: true },
+    })
+    .then(r => r.id)
+    .catch(() => null);
 
   // Run agents in background (don't await — stream starts immediately)
   (async () => {
@@ -121,6 +157,34 @@ export async function POST(req: Request) {
       sendEvent({ type: "done" });
     } finally {
       writer.close().catch(() => {});
+
+      // Persist captured results so the run is reopenable from history.
+      try {
+        const requestId = await hubRequestPromise;
+        if (requestId) {
+          const entries = Object.entries(captured);
+          const anyResult = entries.some(([, v]) => v.result != null);
+          await db.hubResult.createMany({
+            data: entries.map(([agentId, v]) => ({
+              requestId,
+              agentId,
+              status: v.error ? "error" : v.result != null ? "complete" : (v.status ?? "idle"),
+              sources: (v.sources ?? []) as Prisma.InputJsonValue,
+              result: v.result == null ? Prisma.JsonNull : (v.result as Prisma.InputJsonValue),
+              error: v.error ?? null,
+            })),
+          });
+          await db.hubRequest.update({
+            where: { id: requestId },
+            data: {
+              status: anyResult ? "complete" : "error",
+              completedAt: new Date(),
+            },
+          });
+        }
+      } catch {
+        // Persistence is best-effort — never surface to the user.
+      }
     }
   })();
 

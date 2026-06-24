@@ -16,6 +16,7 @@ import { searchEmaProducts } from "@/server/services/ema";
 import { searchByBrandName as searchHealthCanada } from "@/server/services/health-canada";
 import { getTopAdverseReactions } from "@/server/services/fda-adverse-events";
 import { PARTNER_AGENT_PROMPT } from "@/server/services/hub-prompts";
+import { withGrounding } from "@/server/services/source-reference";
 import { extractJSON, cleanError } from "./utils";
 
 export async function runPartnerAgent(
@@ -30,7 +31,7 @@ export async function runPartnerAgent(
     }
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    write({ agent: agentId, type: "status", status: "scraping", message: "Scanning 8 global databases for potential partners..." });
+    write({ agent: agentId, type: "status", status: "scraping", message: "Scanning global clinical, regulatory and corporate sources for partners..." });
 
     const assetBase = intake.assetName.split("(")[0].trim();
     const indication = intake.context?.split(" ").slice(0, 3).join(" ") || intake.therapeuticArea;
@@ -75,7 +76,7 @@ export async function runPartnerAgent(
     ];
 
     write({ agent: agentId, type: "sources", sources });
-    write({ agent: agentId, type: "status", status: "analyzing", message: `Scoring partners from ${totalSources} records across US, EU, Canada...` });
+    write({ agent: agentId, type: "status", status: "analyzing", message: "Scoring candidate partners across US, EU and global markets..." });
 
     // Build context
     const ctContext = ctHits.slice(0, 15).map(h =>
@@ -112,8 +113,8 @@ export async function runPartnerAgent(
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 4096,
-      system: PARTNER_AGENT_PROMPT,
+      max_tokens: 8000,
+      system: withGrounding(PARTNER_AGENT_PROMPT),
       messages: [{
         role: "user",
         content: `## Asset Profile
@@ -155,7 +156,7 @@ Identify and score the top potential licensing partners across ALL geographies. 
     const partners: PartnerScore[] = extractJSON(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "partner", partners } });
-    write({ agent: agentId, type: "status", status: "complete", message: `Identified ${partners.length} partners from ${totalSources} global sources` });
+    write({ agent: agentId, type: "status", status: "complete", message: `Identified ${partners.length} candidate partners` });
   } catch (err) {
     const msg = cleanError(err);
     write({ agent: agentId, type: "error", error: msg });

@@ -1,8 +1,10 @@
 /**
- * Agent 7: Out-Licensing Strategy Report
- * Generates a comprehensive regional out-licensing assessment using REAL data
- * from 12+ global pharma databases. Per-region analysis covering Market,
- * Legal, Commercial, and IP dimensions.
+ * Agent 7: Global Drug Opportunity Assessment
+ * Produces a board-level, go/no-go MARKET-OPPORTUNITY assessment for the OWNER
+ * of a compound/biologic: per-region scoring across six vectors (regulatory
+ * feasibility, IP/exclusivity, market size & epidemiology, market access/HTA,
+ * competitive density, manufacturing) with a Commercial Opportunity Score (COS)
+ * — grounded in the full live evidence base from the wired data sources.
  *
  * Runs in parallel with synthesis + execution plan after the 4 core agents.
  */
@@ -10,29 +12,40 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { HubIntakeForm, OutLicensingReport, AgentResult } from "@/types/hub";
 import type { AgentWriter } from "./index";
+import { withGrounding } from "@/server/services/source-reference";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
 import { extractJSON, cleanError } from "./utils";
 
-const STRATEGY_PROMPT = `You are a senior pharmaceutical out-licensing strategist preparing a comprehensive regional opportunity assessment. You have access to outputs from 4 prior agents (benchmarking, partner identification, negotiation intelligence, term sheet) AND raw data from 12+ global public pharma databases (SEC EDGAR, ClinicalTrials.gov, OpenFDA, Orange Book, FAERS, DailyMed, RxNorm, EMA, Health Canada, ChEMBL, PubMed, Patents, News).
+const STRATEGY_PROMPT = `You are a senior pharmaceutical commercial strategist producing a GLOBAL DRUG OPPORTUNITY ASSESSMENT for the OWNER of an asset — a company that holds a compound/biologic and must decide whether, and where, a real market opportunity exists and whether to invest in developing/launching it. This is a board-level GO / NO-GO market-opportunity assessment, NOT a partnering pitch.
 
-Your task: Produce a comprehensive Out-Licensing Strategy Report with real, evidence-grounded assessments per region.
+You receive (a) outputs from prior diagnostic agents and (b) a live global evidence base (openFDA, Orange/Purple Book, ClinicalTrials.gov, EMA, ChEMBL, Open Targets, PubChem, FAERS, SEC EDGAR, CMS Medicare spend, Spain CIMA, WHO GHO burden data, Health Canada, patents, news).
+
+Assess the asset across SIX vectors per region and compute a Commercial Opportunity Score (COS, 0–100):
+  A. Regulatory pathway & feasibility — named expedited pathways (US: 505(b)(1)/505(b)(2)/BLA, Breakthrough, Fast Track, Accelerated Approval, Priority Review, Orphan; EU: centralised vs DCP/MRP, PRIME, conditional MA; China NMPA: priority/breakthrough/conditional, local-trial vs IMCT bridging; Japan PMDA: Sakigake, orphan, ethnic-bridging), timeline, hurdles.
+  B. IP & exclusivity — composition/formulation/method patents; regulatory exclusivity clocks (US 5y NCE / 3y / 7y orphan / 12y biologic; EU 8+2+1; CN/JP data protection + PTE); FTO risk.
+  C. Market size & epidemiology — incidence/prevalence (anchor to IHME GBD / WHO GHO where available), addressable patient pool, lines of therapy / biomarker segmentation, growth, unmet need.
+  D. Market access, pricing & reimbursement (HTA) — US (commercial/Medicare/Medicaid, IRA negotiation risk, CMS spend signal), Germany AMNOG added-benefit, France HAS SMR/ASMR, Italy/Spain regional formularies, Japan Chuikyo pricing, China NRDL inclusion & negotiated price-cut dynamics.
+  E. Competitive density & pipeline — current standard of care (NCCN/ESMO/JP guidance), marketed + Phase I–III competitors by MoA/class (ClinicalTrials.gov etc.), generic/biosimilar LOE threat.
+  F. Manufacturing & CMC complexity — synthesis/expression complexity, cold-chain/formulation burden, supply-chain/geopolitical concentration risk.
 
 Return ONLY valid JSON with this exact structure:
 
 {
-  "executiveSummary": "2-3 paragraph executive summary explaining the asset, the strategic opportunity, and the highest-priority regional recommendations.",
+  "verdict": "Go | Conditional Go | No-Go",
+  "opportunityThesis": "One sentence: is there a market opportunity, where it is strongest, and the single biggest blocker.",
+  "executiveSummary": "2-3 paragraphs: the opportunity, the priority geographies, the COS logic, and the decisive risks.",
   "assetProfile": {
     "name": "Asset name as detected from data",
     "description": "What the asset does, mechanism, value proposition",
     "modality": "Small molecule / mAb / ADC / Cell therapy / Gene therapy / etc.",
-    "therapeuticArea": "Auto-detected from clinical trial data and FDA labels",
+    "therapeuticArea": "Auto-detected from clinical + label data",
     "developmentStage": "Auto-detected from ClinicalTrials.gov phases",
-    "mechanism": "Specific mechanism of action from ChEMBL/FDA data",
+    "mechanism": "Specific MoA from Open Targets / ChEMBL / FDA",
     "currentMarkets": ["US", "EU"],
     "keyStrengths": ["3-5 strengths from real data"],
-    "keyChallenges": ["3-5 challenges/risks identified"],
+    "keyChallenges": ["3-5 challenges/risks"],
     "keyDataPoints": [
-      {"label": "FDA approval date", "value": "2014-09-04", "source": "OpenFDA"},
+      {"label": "Prevalence (US)", "value": "~XXX,000 patients", "source": "WHO GHO / IHME GBD"},
       {"label": "Active trials", "value": "47 globally", "source": "ClinicalTrials.gov"}
     ]
   },
@@ -40,88 +53,47 @@ Return ONLY valid JSON with this exact structure:
     {
       "region": "US",
       "regionLabel": "United States",
-      "attractiveness": "Very High",
+      "attractiveness": "Very High|High|Medium|Low",
       "attractivenessScore": 92,
-      "market": {
-        "sizeUSD": "$X.XB",
-        "growthRate": "X% CAGR",
-        "drivers": ["3-4 specific drivers from real data"],
-        "barriers": ["2-3 barriers"],
-        "unmetNeed": "Specific unmet need with patient numbers if available"
-      },
-      "legal": {
-        "regulatoryAuthority": "FDA",
-        "pathway": "BLA / NDA / 505(b)(2) / etc.",
-        "estimatedTimeline": "X months from filing to approval",
-        "exclusivityOpportunities": ["Orphan Drug exclusivity (7yr)", "Specific exclusivity windows"],
-        "barriers": ["Specific regulatory hurdles for this asset class"]
-      },
-      "commercial": {
-        "competitorActivity": "Description of key competitors with names and stages",
-        "pricingDynamics": "Reference drug pricing, payer dynamics",
-        "reimbursementLandscape": "Coverage decisions, ICER, formulary positioning",
-        "keyPartnerCandidates": ["3-5 specific company names with rationale"],
-        "distributionChannels": "Specialty pharmacy / retail / hospital channels"
-      },
-      "ip": {
-        "patentStrength": "Strong",
-        "ftoStatus": "Clear",
-        "expirationRisks": ["Composition patent expires 2034", "Specific risks"],
-        "opportunities": ["Method patents available for new indications"],
-        "estimatedExclusivityYears": 12
-      }
+      "cos": { "marketSize": 88, "regulatory": 90, "ip": 85, "marketAccess": 80, "competition": 70 },
+      "market": { "sizeUSD": "$X.XB", "growthRate": "X% CAGR", "drivers": ["3-4 drivers"], "barriers": ["2-3 barriers"], "unmetNeed": "incidence/prevalence + addressable pool + lines of therapy" },
+      "legal": { "regulatoryAuthority": "FDA", "pathway": "named expedited pathway(s)", "estimatedTimeline": "X months", "exclusivityOpportunities": ["Orphan 7yr", "windows"], "barriers": ["asset-class hurdles"] },
+      "commercial": { "competitorActivity": "pipeline density — marketed + Phase I-III competitors by class/MoA", "pricingDynamics": "pricing + HTA framework (AMNOG / SMR-ASMR / NRDL / Chuikyo / IRA)", "reimbursementLandscape": "access/formulary pathway & risk", "keyPartnerCandidates": ["only if partnering is relevant, else []"], "distributionChannels": "specialty / hospital / retail" },
+      "ip": { "patentStrength": "Strong|Moderate|Weak", "ftoStatus": "Clear|Some Risk|Significant Risk", "expirationRisks": ["Composition patent expires 2034"], "opportunities": ["method patents for new indications"], "estimatedExclusivityYears": 12 },
+      "manufacturing": { "complexity": "Low|Moderate|High", "notes": "synthesis / cold-chain / supply-chain concentration" }
     }
   ],
   "recommendations": [
     {
       "priorityRank": 1,
       "targetRegion": "US",
-      "rationale": "Detailed reasoning citing specific data points from sources",
-      "recommendedDealStructure": "Out-licensing with regional option | Co-development | Asset acquisition",
-      "estimatedValue": {
-        "upfront": "$XXXm",
-        "total": "$X.XB",
-        "royaltyRange": "12-18%"
-      },
-      "topPartnerCandidates": ["Pfizer", "Roche", "BMS"],
-      "prerequisites": ["Specific data/milestones required first"],
-      "estimatedTimeline": "9-12 months to signing",
-      "expectedROI": "3-5x at peak sales vs. internal commercialization"
+      "rationale": "why this market ranks here, citing the COS drivers and named sources",
+      "recommendedDealStructure": "Recommended route: Direct commercialisation | Co-development | Out-license / partner | Deprioritise",
+      "estimatedValue": { "upfront": "peak-year revenue or deal upfront", "total": "risk-adjusted peak sales / NPV band", "royaltyRange": "if partnered" },
+      "topPartnerCandidates": ["named partners IF partnering is recommended, else []"],
+      "prerequisites": ["data/milestones needed to unlock this market"],
+      "estimatedTimeline": "time to market entry",
+      "expectedROI": "value vs investment"
     }
   ],
   "portfolioRisks": [
-    {
-      "category": "IP",
-      "risk": "Specific IP risk with detail",
-      "affectedRegions": ["US", "EU"],
-      "impact": "High",
-      "likelihood": "Medium",
-      "mitigation": "Concrete mitigation action"
-    }
+    { "category": "Market|Legal|Commercial|IP", "risk": "flaw or FATAL BLOCKER", "affectedRegions": ["US","EU"], "impact": "High|Medium|Low", "likelihood": "High|Medium|Low", "mitigation": "concrete action" }
   ],
-  "dataConfidence": "High",
-  "sourcesUsed": ["List of databases that provided data"]
+  "dataConfidence": "High|Medium|Low",
+  "sourcesUsed": ["names of the authoritative sources underpinning the assessment"]
 }
 
 CRITICAL RULES:
+1. Cover all 5 regions: US, EU, JP, CN, ROW. For EACH, populate all six vectors (market, legal, commercial incl. competition, ip, manufacturing) AND the cos sub-scores.
+2. attractivenessScore is the regional Commercial Opportunity Score; keep it consistent with the cos sub-scores (market size + regulatory + ip + market access, penalised by competitive density). In cos.competition, 100 = LOW density (favourable), low = crowded.
+3. Anchor epidemiology to IHME GBD / WHO GHO and pricing to CMS / HTA bodies where present; name expedited pathways and HTA frameworks explicitly per region.
+4. verdict is a clear Go / Conditional Go / No-Go for pursuing the opportunity; opportunityThesis states where it is strongest and the single biggest blocker.
+5. portfolioRisks must surface true FLAWS & FATAL BLOCKERS (crowded Phase III field, hard IRA/AMNOG pricing, FTO collision, no exclusivity runway, China local-trial requirement, cold-chain/supply risk) — not generic risks.
+6. Use ACTUAL competitor names, trial IDs, patent/exclusivity dates and pricing signals from the evidence — never hypotheticals; mark inferred figures [estimated].
+7. Set dataConfidence by evidence quality and the confidence tiering (US/EU high; China medium; deal/pricing/sales low) — never by a count of sources.
+8. Be specific, decisive and execution-oriented. Lead with the answer.
 
-1. Generate 5 regional analyses: US, EU, JP, CN, ROW (rest of world)
-2. ALL assessments must reference SPECIFIC data points from the provided sources
-3. For each region, include ALL FOUR dimensions (Market, Legal, Commercial, IP)
-4. Generate 3-7 prioritized recommendations
-5. Generate 5-8 portfolio risks across the 4 categories
-6. attractivenessScore: 0-100 numerical rating
-7. Use ACTUAL company names, ACTUAL deal precedents, ACTUAL partner candidates from the data — not hypothetical
-8. Estimate market sizes based on competitor revenue data when available
-9. For IP assessments, cite Orange Book patent data and ChEMBL when available
-10. For legal/regulatory, reference FDA/EMA/Health Canada specifics
-11. Set dataConfidence based on data coverage:
-    - "High" = ≥7 sources returned data
-    - "Medium" = 4-6 sources
-    - "Low" = <4 sources
-12. Be SPECIFIC and ACTIONABLE. No generic platitudes. Every claim needs a data anchor.
-
-This report informs C-suite decisions on hundreds of millions in deal value. Be rigorous.`;
+This assessment drives a board-level invest / partner / kill decision. Be rigorous and honest.`;
 
 export async function runOutLicensingStrategyAgent(
   intake: HubIntakeForm,
@@ -136,22 +108,9 @@ export async function runOutLicensingStrategyAgent(
     }
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    write({ agent: agentId, type: "status", status: "scraping", message: "Aggregating global pharma data for regional assessment..." });
+    write({ agent: agentId, type: "status", status: "scraping", message: "Pulling the live global evidence base for the opportunity assessment..." });
 
-    // Pull comprehensive real data
-    const assetBase = intake.assetName.split("(")[0].trim();
-    const globalData = await aggregateGlobalData(assetBase, intake.therapeuticArea, {
-      includeNews: true,
-      includePatents: true,
-      maxPerSource: 15,
-    });
-
-    const successCount = globalData.sources.filter(s => s.status === "success").length;
-    const totalRecords = globalData.sources.reduce((sum, s) => sum + s.count, 0);
-
-    write({ agent: agentId, type: "status", status: "analyzing", message: `Generating regional report from ${totalRecords} records across ${successCount} databases...` });
-
-    // Build agent context summary
+    // Reuse the 4 prior diagnostic agents' curated outputs as one input.
     const agentContext = agentResults.map(r => {
       if (r.agentId === "benchmarking") {
         return `## Benchmarking — Comparable Deals (${r.comparables.length})\n${r.comparables.slice(0, 6).map(c =>
@@ -176,30 +135,44 @@ export async function runOutLicensingStrategyAgent(
       return "";
     }).filter(Boolean).join("\n\n");
 
-    const globalDataSummary = summarizeGlobalData(globalData);
+    // Ground the assessment in the FULL live evidence base (science, epidemiology,
+    // pricing, regulatory, IP) from the wired data sources.
+    let evidenceBase = "";
+    try {
+      const assetBase = intake.assetName.split("(")[0].trim();
+      const globalData = await aggregateGlobalData(assetBase, intake.therapeuticArea, {
+        includeNews: true,
+        includePatents: true,
+      });
+      evidenceBase = summarizeGlobalData(globalData);
+    } catch {
+      // Proceed on the diagnostic outputs alone if the aggregate pull fails.
+    }
+
+    write({ agent: agentId, type: "status", status: "analyzing", message: "Scoring the opportunity across six vectors and five markets..." });
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 16000,
-      system: STRATEGY_PROMPT,
+      max_tokens: 12000,
+      system: withGrounding(STRATEGY_PROMPT),
       messages: [{
         role: "user",
-        content: `## Asset / Portfolio
+        content: `## Asset
 ${intake.assetName}
-${intake.context ? "Strategic Context: " + intake.context : ""}
+Therapeutic Area: ${intake.therapeuticArea || "auto-detect from the evidence"}
+Development Stage: ${intake.developmentStage || "auto-detect from ClinicalTrials.gov"}
+Target Geographies: ${intake.geographies.join(", ")}
+${intake.context ? "Owner context: " + intake.context : ""}
 
-## Prior Agent Outputs
-${agentContext || "No prior agent outputs available."}
+## Prior Diagnostic Agent Outputs
+${agentContext || "None available."}
 
-## RAW GLOBAL DATA FROM 12+ PUBLIC DATABASES
-
-${globalDataSummary}
+## Global Evidence Base (live sources)
+${evidenceBase || "Evidence base unavailable — rely on the diagnostic outputs and clearly-labelled [estimated] figures."}
 
 ---
 
-Generate the comprehensive Out-Licensing Strategy Report now. Use the REAL data above. Do not fabricate. If a data point isn't in the sources, mark it as "Not in sources" or use a clearly labeled industry estimate.
-
-Cover all 5 regions (US, EU, JP, CN, ROW) with full Market/Legal/Commercial/IP assessment per region.`,
+Produce the Global Drug Opportunity Assessment now — a board-level GO / NO-GO market-opportunity assessment for the asset owner. Cover all 5 regions (US, EU, JP, CN, ROW) with all six vectors and COS sub-scores per region, a verdict and opportunityThesis, prioritised market recommendations, and the true flaws & fatal blockers. Anchor every claim to named sources; mark inferred figures [estimated].`,
       }],
     });
 
@@ -207,7 +180,7 @@ Cover all 5 regions (US, EU, JP, CN, ROW) with full Market/Legal/Commercial/IP a
     const report = extractJSON<OutLicensingReport>(text);
 
     write({ agent: agentId, type: "result", data: { agentId: "outLicensingStrategy", report } });
-    write({ agent: agentId, type: "status", status: "complete", message: `Strategy report: ${report.regionalAnalysis?.length || 0} regions, ${report.recommendations?.length || 0} recommendations, ${report.portfolioRisks?.length || 0} risks` });
+    write({ agent: agentId, type: "status", status: "complete", message: `Opportunity assessment complete — verdict: ${report.verdict ?? "see report"} across ${report.regionalAnalysis?.length || 0} markets` });
 
     return report;
   } catch (err) {
