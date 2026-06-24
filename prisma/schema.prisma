@@ -141,6 +141,7 @@ model User {
   sessions      Session[]
   documents     Document[]
   hubRequests   HubRequest[]
+  evaluations   Evaluation[]
   deals         Deal[]
   companies     Company[]
   negotiations  Negotiation[]
@@ -550,4 +551,29 @@ model CachedAPIResponse {
   createdAt DateTime @default(now())
 
   @@index([sourceKey, expiresAt])
+}
+
+// ─── Market-Worthiness Engine ─────────────────────────────────────────────────
+
+model Evaluation {
+  id                        String   @id @default(cuid())
+  userId                    String
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset                     Json     // { name, inn, modality, stage, owner }
+  geography                 String
+  assetValueScore           Int
+  marketAttractivenessScore Int
+  worthinessScore           Int
+  confidence                Float
+  verdict                   String   // GO | CONDITIONAL | NO_GO
+  conditions                Json?
+  bindingConstraint         String?  @db.Text
+  decisiveDrivers           Json?
+  subscores                 Json?
+  rnpv                      Json?
+  provenance                Json?
+  summary                   String?  @db.Text
+  createdAt                 DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

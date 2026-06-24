@@ -19,6 +19,7 @@ import {
   Rocket,
   Globe,
   Shield,
+  Gauge,
 } from "lucide-react";
 import {
   Sidebar,
@@ -82,6 +83,11 @@ const execution = [
     title: "Simulated Plan",
     href: "/simulated-plan",
     icon: Rocket,
+  },
+  {
+    title: "Market Worthiness",
+    href: "/market-worthiness",
+    icon: Gauge,
   },
   {
     title: "Deal Workspace",
