@@ -48,8 +48,35 @@ const TODAY = () =>
 const safeFilename = (s: string) =>
   s.replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "") || "untitled";
 
-const truncate = (s: string, max: number): string =>
-  !s ? "" : s.length <= max ? s : s.slice(0, max - 1) + "…";
+const truncate = (s: string, max: number): string => {
+  if (!s) return "";
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max - 1);
+  const sp = cut.lastIndexOf(" ");
+  return (sp > max * 0.55 ? cut.slice(0, sp) : cut).replace(/[\s,;:.–-]+$/, "") + "…";
+};
+
+// The standard PDF (WinAnsi) fonts can't encode glyphs like "→" — they render as
+// mojibake. Map the common ones to safe equivalents, then strip anything else
+// outside the WinAnsi-renderable range so the PDF never shows garbage.
+const PDF_GLYPHS: [RegExp, string][] = [
+  [/[→⟶➔➙➜⇒▶⮕]/g, ">"], // → ⟶ ➔ ➜ ⇒ ▶
+  [/[←⇐]/g, "<"],
+  [/[↔↕⬌]/g, "-"],
+  [/[•●■▪⁃∙·]/g, "·"],  // bullets → middle dot (WinAnsi-safe)
+  [/[○◦]/g, "o"],                                    // ○ ◦
+  [/[✓✔]/g, "v"],                                    // ✓ ✔
+  [/[‘’‛]/g, "'"],
+  [/[“”‟]/g, '"'],
+];
+function pdfSafe(s: any): string {
+  let out = String(s ?? "");
+  for (const [re, rep] of PDF_GLYPHS) out = out.replace(re, rep);
+  return out.replace(
+    /[^\x09\x0A\x0D\x20-\x7E -ÿ–—…€™ŒœŠšŸŽžƒ]/g,
+    "",
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 //  PDF ENGINE
@@ -73,6 +100,7 @@ interface PdfState {
   reportName: string;
   asset: string;
   accent: string;
+  decoratedPages: Set<number>;
 }
 
 const HEADER_TOP = 88;   // content start on decorated pages
@@ -89,6 +117,7 @@ function newPdf(jsPDF: any, reportName: string, asset: string, accent: string): 
     reportName,
     asset,
     accent,
+    decoratedPages: new Set<number>(),
   };
 }
 
@@ -97,6 +126,13 @@ const contentW = (s: PdfState) => s.pageWidth - s.margin * 2;
 /** Running header + footer drawn on every content page (not the cover). */
 function decorate(state: PdfState) {
   const { doc, pageWidth, pageHeight, margin, accent } = state;
+
+  // Draw the running header/footer EXACTLY ONCE per physical page — autoTable's
+  // didDrawPage and newPage() both call this, so without the guard a page with
+  // several tables would stamp the header many times.
+  const pageNum = doc.internal.getNumberOfPages();
+  if (state.decoratedPages.has(pageNum)) return;
+  state.decoratedPages.add(pageNum);
 
   // Top accent hairline + kicker
   doc.setFillColor(accent);
@@ -159,7 +195,7 @@ function coverPage(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(accent);
-  doc.text(eyebrow.toUpperCase(), margin, 110, { charSpace: 2 });
+  doc.text(pdfSafe(eyebrow.toUpperCase()), margin, 110, { charSpace: 2 });
 
   // Brand
   doc.setFontSize(9);
@@ -173,7 +209,7 @@ function coverPage(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(25);
   doc.setTextColor(INK);
-  const titleLines = doc.splitTextToSize(title, contentW(state));
+  const titleLines = doc.splitTextToSize(pdfSafe(title), contentW(state));
   doc.text(titleLines, margin, cy);
   cy += (titleLines.length - 1) * titleLH + 8;
 
@@ -188,7 +224,7 @@ function coverPage(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10.5);
   doc.setTextColor(MUTED);
-  const subLines = doc.splitTextToSize(subtitle, contentW(state));
+  const subLines = doc.splitTextToSize(pdfSafe(subtitle), contentW(state));
   doc.text(subLines, margin, cy);
   cy += (subLines.length - 1) * subLH + 30;
 
@@ -196,7 +232,7 @@ function coverPage(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(accent);
-  doc.text(doc.splitTextToSize(asset, contentW(state)), margin, Math.min(cy, pageHeight - 290));
+  doc.text(doc.splitTextToSize(pdfSafe(asset), contentW(state)), margin, Math.min(cy, pageHeight - 290));
 
   // KPI band
   if (kpis.length) {
@@ -210,15 +246,16 @@ function coverPage(
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(MUTED);
-      doc.text(k.label.toUpperCase(), x, bandY + 22, { charSpace: 1 });
-      // value — shrink to the cell width so it never bleeds into the next KPI cell
-      const val = truncate(k.value, 22);
-      let vfs = 19;
+      doc.text(pdfSafe(k.label.toUpperCase()), x, bandY + 20, { charSpace: 1 });
+      // value — WRAP + shrink to the cell so nothing is clipped or cut mid-word
+      const val = pdfSafe(k.value);
+      let vfs = 18;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(vfs);
-      while (vfs > 11 && doc.getTextWidth(val) > cellW - 12) { vfs -= 1; doc.setFontSize(vfs); }
+      let vlines = doc.splitTextToSize(val, cellW - 14);
+      while (vfs > 9 && vlines.length > 2) { vfs -= 1; doc.setFontSize(vfs); vlines = doc.splitTextToSize(val, cellW - 14); }
       doc.setTextColor(INK);
-      doc.text(val, x, bandY + 50);
+      doc.text(vlines.slice(0, 2), x, bandY + 42);
     });
     doc.line(margin, bandY + 66, pageWidth - margin, bandY + 66);
   }
@@ -240,7 +277,7 @@ function coverPage(
   doc.setFontSize(7.5);
   doc.setTextColor(FAINT);
   doc.text(
-    "Confidential — prepared from public regulatory, clinical and pricing sources. Figures marked [estimated] are AI-derived; verify against primary sources before transacting.",
+    "Confidential — prepared by CartaOS from public regulatory, clinical and pricing sources. Figures noted as estimates are CartaOS-derived; verify against primary sources before transacting.",
     margin,
     pageHeight - 72,
     { maxWidth: contentW(state) },
@@ -258,11 +295,11 @@ function sectionTitle(state: PdfState, eyebrow: string, title: string, takeaway?
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(state.accent);
-  doc.text(eyebrow.toUpperCase(), margin, state.y, { charSpace: 1.6 });
+  doc.text(pdfSafe(eyebrow.toUpperCase()), margin, state.y, { charSpace: 1.6 });
 
   doc.setFontSize(17);
   doc.setTextColor(INK);
-  const titleLines = doc.splitTextToSize(title, contentW(state));
+  const titleLines = doc.splitTextToSize(pdfSafe(title), contentW(state));
   doc.text(titleLines, margin, state.y + 18);
   state.y += 18 + titleLines.length * 18;
 
@@ -270,7 +307,7 @@ function sectionTitle(state: PdfState, eyebrow: string, title: string, takeaway?
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10.5);
     doc.setTextColor(BODY);
-    const tl = doc.splitTextToSize(takeaway, contentW(state));
+    const tl = doc.splitTextToSize(pdfSafe(takeaway), contentW(state));
     doc.text(tl, margin, state.y + 4);
     state.y += tl.length * 14 + 4;
   }
@@ -286,7 +323,7 @@ function lead(state: PdfState, text: string) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10.5);
   doc.setTextColor(INK_2);
-  const lines = doc.splitTextToSize(text, contentW(state));
+  const lines = doc.splitTextToSize(pdfSafe(text), contentW(state));
   const lh = 14.5;
   ensureSpace(state, lines.length * lh + 8);
   doc.text(lines, margin, state.y + lh);
@@ -299,7 +336,7 @@ function paragraph(state: PdfState, text: string, sizePt = 10.5, color = BODY) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(sizePt);
   doc.setTextColor(color);
-  const lines = doc.splitTextToSize(text, contentW(state));
+  const lines = doc.splitTextToSize(pdfSafe(text), contentW(state));
   const lh = sizePt * 1.4;
   ensureSpace(state, lines.length * lh + 6);
   doc.text(lines, margin, state.y + lh);
@@ -312,7 +349,7 @@ function bullets(state: PdfState, items: string[], accent = state.accent) {
     if (!item) continue;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    const lines = doc.splitTextToSize(item, contentW(state) - 14);
+    const lines = doc.splitTextToSize(pdfSafe(item), contentW(state) - 14);
     const lh = 13.5;
     ensureSpace(state, lines.length * lh + 3);
     // tick mark
@@ -329,7 +366,7 @@ function subHeader(state: PdfState, label: string, color = INK) {
   state.doc.setFont("helvetica", "bold");
   state.doc.setFontSize(12);
   state.doc.setTextColor(color);
-  state.doc.text(label, state.margin, state.y + 13);
+  state.doc.text(pdfSafe(label), state.margin, state.y + 13);
   state.y += 22;
 }
 
@@ -348,13 +385,17 @@ function sourceNote(state: PdfState, text: string) {
   state.doc.setFont("helvetica", "italic");
   state.doc.setFontSize(7.5);
   state.doc.setTextColor(FAINT);
-  const lines = state.doc.splitTextToSize(`Source: ${text}`, contentW(state));
+  const lines = state.doc.splitTextToSize(pdfSafe(`Source: ${text}`), contentW(state));
   state.doc.text(lines, state.margin, state.y + 9);
   state.y += lines.length * 10 + 6;
 }
 
 /** Shared table renderer — navy header, horizontal rules, zebra, auto header/footer. */
 function table(state: PdfState, opts: any, autoTable: any) {
+  // Sanitize every string cell so no glyph (e.g. "→") renders as mojibake.
+  const san = (rows: any) =>
+    Array.isArray(rows) ? rows.map((r: any[]) => r.map((c) => (typeof c === "string" ? pdfSafe(c) : c))) : rows;
+  opts = { ...opts, body: san(opts.body), head: san(opts.head) };
   autoTable(state.doc, {
     startY: state.y,
     theme: "plain",
@@ -930,7 +971,7 @@ export async function exportClientDeck(
       const x = MX + i * cellW;
       slide.addShape("line", { x, y: 4.5, w: 0, h: 1.0, line: { color: P.line, width: 1 } } as any);
       txt(slide,label, { x: x + 0.15, y: 4.55, w: cellW - 0.3, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
-      txt(slide,truncate(value, 16), { x: x + 0.15, y: 4.85, w: cellW - 0.3, h: 0.6, fontFace: F, fontSize: 19, bold: true, color: hi ? P.accent2 : P.ink });
+      txt(slide,value, { x: x + 0.15, y: 4.8, w: cellW - 0.3, h: 0.7, fontFace: F, fontSize: 19, bold: true, color: hi ? P.accent2 : P.ink });
     });
 
     txt(slide,`${BRAND}  ·  ${TODAY()}  ·  Confidential`, { x: MX, y: 6.6, w: MW, h: 0.3, fontFace: F, fontSize: 10, color: P.faint });
@@ -955,7 +996,7 @@ export async function exportClientDeck(
         slide.addShape("rect", { x, y: 5.15, w: cw, h: 1.15, fill: { color: P.panel }, line: { type: "none" } });
         slide.addShape("rect", { x, y: 5.15, w: 0.06, h: 1.15, fill: { color: P.accent } });
         txt(slide,`#${r.priorityRank}  ${r.targetRegion}`, { x: x + 0.2, y: 5.28, w: cw - 0.35, h: 0.35, fontFace: F, fontSize: 14, bold: true, color: P.ink });
-        txt(slide,truncate(r.recommendedDealStructure ?? "", 58), { x: x + 0.2, y: 5.6, w: cw - 0.35, h: 0.6, fontFace: F, fontSize: 11, color: P.muted, valign: "top" });
+        txt(slide,truncate(r.recommendedDealStructure ?? "", 90), { x: x + 0.2, y: 5.6, w: cw - 0.35, h: 0.6, fontFace: F, fontSize: 11, color: P.muted, valign: "top" });
       });
     }
   }
@@ -1028,7 +1069,7 @@ export async function exportClientDeck(
       { title: "Market & epidemiology", color: P.ink, lines: [
         region.market?.sizeUSD ? `Size — ${region.market.sizeUSD}` : "",
         region.market?.growthRate ? `Growth — ${region.market.growthRate}` : "",
-        region.market?.unmetNeed ? `Unmet need — ${truncate(region.market.unmetNeed, 120)}` : "",
+        region.market?.unmetNeed ? `Unmet need — ${truncate(region.market.unmetNeed, 170)}` : "",
       ].filter(Boolean) },
       { title: "Regulatory pathway", color: P.muted, lines: [
         region.legal?.regulatoryAuthority ? `Authority — ${region.legal.regulatoryAuthority}` : "",
@@ -1036,9 +1077,9 @@ export async function exportClientDeck(
         region.legal?.estimatedTimeline ? `Timeline — ${region.legal.estimatedTimeline}` : "",
       ].filter(Boolean) },
       { title: "Access & competition", color: P.accent2, lines: [
-        region.commercial?.competitorActivity ? `Competition — ${truncate(region.commercial.competitorActivity, 130)}` : "",
-        region.commercial?.pricingDynamics ? `Pricing — ${truncate(region.commercial.pricingDynamics, 110)}` : "",
-        region.commercial?.reimbursementLandscape ? `Access — ${truncate(region.commercial.reimbursementLandscape, 90)}` : "",
+        region.commercial?.competitorActivity ? `Competition — ${truncate(region.commercial.competitorActivity, 170)}` : "",
+        region.commercial?.pricingDynamics ? `Pricing — ${truncate(region.commercial.pricingDynamics, 150)}` : "",
+        region.commercial?.reimbursementLandscape ? `Access — ${truncate(region.commercial.reimbursementLandscape, 140)}` : "",
       ].filter(Boolean) },
       { title: "IP & exclusivity", color: P.accent, lines: [
         region.ip?.patentStrength ? `Patent — ${region.ip.patentStrength}` : "",
@@ -1088,11 +1129,11 @@ export async function exportClientDeck(
       ...sortedRecs.map((r) => [
         { text: String(r.priorityRank), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
         { text: r.targetRegion, options: cellBody({ bold: true, color: P.ink }) },
-        { text: truncate(r.recommendedDealStructure ?? "—", 38), options: cellBody() },
+        { text: truncate(r.recommendedDealStructure ?? "—", 72), options: cellBody() },
         { text: r.estimatedValue?.upfront ?? "—", options: cellBody({ color: P.accent2, bold: true }) },
         { text: r.estimatedValue?.total ?? "—", options: cellBody({ color: P.accent2, bold: true }) },
         { text: r.estimatedValue?.royaltyRange ?? "—", options: cellBody({ color: P.accent2 }) },
-        { text: truncate((r.topPartnerCandidates ?? []).slice(0, 3).join(", ") || "—", 46), options: cellBody({ fontSize: 10 }) },
+        { text: truncate((r.topPartnerCandidates ?? []).slice(0, 3).join(", ") || "—", 72), options: cellBody({ fontSize: 10 }) },
       ]),
     ];
     slide.addTable(rows, {
@@ -1206,9 +1247,9 @@ export async function exportClientDeck(
       const y = 1.75 + i * 0.95;
       slide.addShape("rect", { x: MX, y: y + 0.02, w: 0.07, h: 0.62, fill: { color: P.accent2 } });
       txt(slide,[
-        { text: truncate(r.label, 120), options: { fontSize: 12.5, bold: true, color: P.ink } },
+        { text: truncate(r.label, 160), options: { fontSize: 12.5, bold: true, color: P.ink } },
         { text: `   ${r.source}${r.impact ? " · " + r.impact + " impact" : ""}`, options: { fontSize: 10, color: P.accent2 } },
-        { text: `\n→ ${truncate(r.mitigation ?? "—", 130)}`, options: { fontSize: 11, color: P.muted } },
+        { text: `\n→ ${truncate(r.mitigation ?? "—", 170)}`, options: { fontSize: 11, color: P.muted } },
       ], { x: MX + 0.25, y, w: MW - 0.25, h: 0.78, fontFace: F, valign: "top" });
     });
   }
