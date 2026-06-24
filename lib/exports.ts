@@ -166,30 +166,37 @@ function coverPage(
   doc.setTextColor(MUTED);
   doc.text(BRAND.toUpperCase(), pageWidth - margin, 110, { align: "right", charSpace: 2 });
 
-  // Title
+  // Title — FLOWS down by measured line count (never fixed offsets), so a
+  // wrapped title or subtitle can never overlap the element beneath it.
+  let cy = 180;
+  const titleLH = 37;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(33);
+  doc.setFontSize(30);
   doc.setTextColor(INK);
   const titleLines = doc.splitTextToSize(title, contentW(state));
-  doc.text(titleLines, margin, 200);
+  doc.text(titleLines, margin, cy);
+  cy += (titleLines.length - 1) * titleLH + 8;
 
   // Gold premium rule
-  const ruleY = 200 + titleLines.length * 36 + 8;
   doc.setDrawColor(GOLD);
   doc.setLineWidth(1.5);
-  doc.line(margin, ruleY, margin + 64, ruleY);
+  doc.line(margin, cy + 14, margin + 64, cy + 14);
+  cy += 34;
 
-  // Subtitle
+  // Subtitle — flows
+  const subLH = 16;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(13);
+  doc.setFontSize(12.5);
   doc.setTextColor(MUTED);
-  doc.text(doc.splitTextToSize(subtitle, contentW(state)), margin, ruleY + 28);
+  const subLines = doc.splitTextToSize(subtitle, contentW(state));
+  doc.text(subLines, margin, cy);
+  cy += (subLines.length - 1) * subLH + 30;
 
-  // Asset (the subject)
+  // Asset (the subject) — flows; clamped so it can never reach the KPI band
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
   doc.setTextColor(accent);
-  doc.text(doc.splitTextToSize(asset, contentW(state)), margin, ruleY + 78);
+  doc.text(doc.splitTextToSize(asset, contentW(state)), margin, Math.min(cy, pageHeight - 290));
 
   // KPI band
   if (kpis.length) {
@@ -204,9 +211,14 @@ function coverPage(
       doc.setFontSize(8);
       doc.setTextColor(MUTED);
       doc.text(k.label.toUpperCase(), x, bandY + 22, { charSpace: 1 });
-      doc.setFontSize(23);
+      // value — shrink to the cell width so it never bleeds into the next KPI cell
+      const val = truncate(k.value, 22);
+      let vfs = 23;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(vfs);
+      while (vfs > 11 && doc.getTextWidth(val) > cellW - 12) { vfs -= 1; doc.setFontSize(vfs); }
       doc.setTextColor(INK);
-      doc.text(truncate(k.value, 14), x, bandY + 50);
+      doc.text(val, x, bandY + 50);
     });
     doc.line(margin, bandY + 66, pageWidth - margin, bandY + 66);
   }
@@ -394,7 +406,7 @@ export async function exportStrategyReportPDF(
     state,
     "Market Opportunity Assessment",
     "Global Drug Opportunity Assessment",
-    "Regulatory · IP · Market & Epidemiology · Access · Competition · Manufacturing — US, EU national markets (DE/FR/IT/ES), Japan, China & ROW",
+    "Six-vector opportunity scoring across the US, EU-4 (DE/FR/IT/ES), Japan, China & ROW",
     assetName,
     [
       { label: "Verdict", value: report.verdict ?? "—" },
@@ -799,6 +811,16 @@ const dotScale = (score: number): string => {
   return "●".repeat(filled) + "○".repeat(5 - filled);
 };
 
+/**
+ * Anti-overlap text writer. Every text box is fixed-size and shrinks its text
+ * to fit (PowerPoint/LibreOffice/Google honour `normAutofit`), so copy can never
+ * spill out of its box and collide with a neighbour. Internal margins give the
+ * words breathing room; wrap is on so long lines never run off the box edge.
+ */
+function txt(slide: any, text: any, opts: any = {}): any {
+  return slide.addText(text, { fontFace: F, wrap: true, fit: "shrink", margin: 5, lineSpacingMultiple: 1.1, ...opts });
+}
+
 export async function exportClientDeck(
   assetName: string,
   strategy: OutLicensingReport | null,
@@ -832,14 +854,14 @@ export async function exportClientDeck(
     slide.addShape("rect", { x: 0, y: 0, w: 0.16, h: 7.5, fill: { color: P.ink } });
     slide.addShape("rect", { x: 0, y: 0, w: 0.16, h: 1.6, fill: { color: P.accent } });
 
-    slide.addText("GLOBAL DRUG OPPORTUNITY ASSESSMENT", {
+    txt(slide,"GLOBAL DRUG OPPORTUNITY ASSESSMENT", {
       x: MX, y: 0.9, w: MW, h: 0.4, fontFace: F, fontSize: 13, bold: true, color: P.accent, charSpacing: 3,
     });
-    slide.addText(assetName, {
+    txt(slide,assetName, {
       x: MX, y: 1.55, w: MW, h: 1.4, fontFace: F, fontSize: 40, bold: true, color: P.ink, valign: "top",
     });
     slide.addShape("rect", { x: MX + 0.02, y: 3.05, w: 0.9, h: 0.04, fill: { color: P.accent } });
-    slide.addText("Board briefing — market-opportunity assessment and go-to-market plan", {
+    txt(slide,"Board briefing — market-opportunity assessment and go-to-market plan", {
       x: MX, y: 3.25, w: MW, h: 0.6, fontFace: F, fontSize: 16, color: P.muted,
     });
 
@@ -853,11 +875,11 @@ export async function exportClientDeck(
     kpis.forEach(([label, value, hi], i) => {
       const x = MX + i * cellW;
       slide.addShape("line", { x, y: 4.5, w: 0, h: 1.0, line: { color: P.line, width: 1 } } as any);
-      slide.addText(label, { x: x + 0.15, y: 4.55, w: cellW - 0.3, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
-      slide.addText(truncate(value, 16), { x: x + 0.15, y: 4.85, w: cellW - 0.3, h: 0.6, fontFace: F, fontSize: 23, bold: true, color: hi ? P.accent2 : P.ink });
+      txt(slide,label, { x: x + 0.15, y: 4.55, w: cellW - 0.3, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
+      txt(slide,truncate(value, 16), { x: x + 0.15, y: 4.85, w: cellW - 0.3, h: 0.6, fontFace: F, fontSize: 23, bold: true, color: hi ? P.accent2 : P.ink });
     });
 
-    slide.addText(`${BRAND}  ·  ${TODAY()}  ·  Confidential`, { x: MX, y: 6.6, w: MW, h: 0.3, fontFace: F, fontSize: 10, color: P.faint });
+    txt(slide,`${BRAND}  ·  ${TODAY()}  ·  Confidential`, { x: MX, y: 6.6, w: MW, h: 0.3, fontFace: F, fontSize: 10, color: P.faint });
   }
 
   // ─── Divider: Opportunity ───────────────────────────────────────────────
@@ -867,9 +889,9 @@ export async function exportClientDeck(
   if (strategy?.executiveSummary) {
     const slide = contentSlide(pptx, "Strategy", "Executive summary", P.accent, SRC);
     if (strategy.opportunityThesis) {
-      slide.addText(strategy.opportunityThesis, { x: MX, y: BODY_TOP + 0.05, w: MW, h: 0.7, fontFace: F, fontSize: 15, bold: true, color: P.ink, valign: "top" });
+      txt(slide,strategy.opportunityThesis, { x: MX, y: BODY_TOP + 0.05, w: MW, h: 0.7, fontFace: F, fontSize: 15, bold: true, color: P.ink, valign: "top" });
     }
-    slide.addText(strategy.executiveSummary, {
+    txt(slide,strategy.executiveSummary, {
       x: MX, y: BODY_TOP + 0.85, w: MW, h: 2.6, fontFace: F, fontSize: 13, color: P.ink, valign: "top", lineSpacingMultiple: 1.15, paraSpaceAfter: 6,
     });
     if (sortedRecs.length) {
@@ -878,8 +900,8 @@ export async function exportClientDeck(
         const x = MX + i * (cw + GUT);
         slide.addShape("rect", { x, y: 5.15, w: cw, h: 1.15, fill: { color: P.panel }, line: { type: "none" } });
         slide.addShape("rect", { x, y: 5.15, w: 0.06, h: 1.15, fill: { color: P.accent } });
-        slide.addText(`#${r.priorityRank}  ${r.targetRegion}`, { x: x + 0.2, y: 5.28, w: cw - 0.35, h: 0.35, fontFace: F, fontSize: 14, bold: true, color: P.ink });
-        slide.addText(truncate(r.recommendedDealStructure ?? "", 58), { x: x + 0.2, y: 5.6, w: cw - 0.35, h: 0.6, fontFace: F, fontSize: 11, color: P.muted, valign: "top" });
+        txt(slide,`#${r.priorityRank}  ${r.targetRegion}`, { x: x + 0.2, y: 5.28, w: cw - 0.35, h: 0.35, fontFace: F, fontSize: 14, bold: true, color: P.ink });
+        txt(slide,truncate(r.recommendedDealStructure ?? "", 58), { x: x + 0.2, y: 5.6, w: cw - 0.35, h: 0.6, fontFace: F, fontSize: 11, color: P.muted, valign: "top" });
       });
     }
   }
@@ -888,8 +910,8 @@ export async function exportClientDeck(
   if (strategy?.assetProfile) {
     const p = strategy.assetProfile;
     const slide = contentSlide(pptx, "Strategy", "Asset profile", P.accent, "Open Targets · ChEMBL · openFDA · ClinicalTrials.gov");
-    slide.addText(p.name, { x: MX, y: 1.7, w: MW, h: 0.5, fontFace: F, fontSize: 20, bold: true, color: P.ink });
-    slide.addText(p.description, { x: MX, y: 2.2, w: MW, h: 1.1, fontFace: F, fontSize: 12, color: P.muted, valign: "top" });
+    txt(slide,p.name, { x: MX, y: 1.7, w: MW, h: 0.5, fontFace: F, fontSize: 20, bold: true, color: P.ink });
+    txt(slide,p.description, { x: MX, y: 2.2, w: MW, h: 1.1, fontFace: F, fontSize: 12, color: P.muted, valign: "top" });
 
     const facts: [string, string][] = [
       ["MODALITY", p.modality ?? "—"],
@@ -900,18 +922,18 @@ export async function exportClientDeck(
     facts.forEach(([label, value], i) => {
       const x = i % 2 === 0 ? MX : COL_R;
       const y = 3.45 + Math.floor(i / 2) * 0.85;
-      slide.addText(label, { x, y, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
-      slide.addText(value, { x, y: y + 0.28, w: HALF, h: 0.5, fontFace: F, fontSize: 14, color: P.ink });
+      txt(slide,label, { x, y, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
+      txt(slide,value, { x, y: y + 0.28, w: HALF, h: 0.5, fontFace: F, fontSize: 14, color: P.ink });
     });
 
     if (p.keyStrengths?.length) {
-      slide.addText("KEY STRENGTHS", { x: MX, y: 5.2, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.accent2, charSpacing: 1 });
-      slide.addText(p.keyStrengths.slice(0, 3).map((s) => ({ text: s, options: { bullet: { code: "2022" }, fontSize: 11, color: P.ink } })),
+      txt(slide,"KEY STRENGTHS", { x: MX, y: 5.2, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.accent2, charSpacing: 1 });
+      txt(slide,p.keyStrengths.slice(0, 3).map((s) => ({ text: s, options: { bullet: { code: "2022" }, fontSize: 11, color: P.ink } })),
         { x: MX, y: 5.5, w: HALF, h: 0.85, fontFace: F, valign: "top", paraSpaceAfter: 2 });
     }
     if (p.keyChallenges?.length) {
-      slide.addText("KEY CHALLENGES", { x: COL_R, y: 5.2, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.ink, charSpacing: 1 });
-      slide.addText(p.keyChallenges.slice(0, 3).map((s) => ({ text: s, options: { bullet: { code: "2022" }, fontSize: 11, color: P.ink } })),
+      txt(slide,"KEY CHALLENGES", { x: COL_R, y: 5.2, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.ink, charSpacing: 1 });
+      txt(slide,p.keyChallenges.slice(0, 3).map((s) => ({ text: s, options: { bullet: { code: "2022" }, fontSize: 11, color: P.ink } })),
         { x: COL_R, y: 5.5, w: HALF, h: 0.85, fontFace: F, valign: "top", paraSpaceAfter: 2 });
     }
   }
@@ -937,7 +959,7 @@ export async function exportClientDeck(
     ];
     slide.addTable(rows, {
       x: MX, y: BODY_TOP + 0.15, w: MW, colW: [1.9, 2.9, 0.95, 1.75, 1.5, 1.4, 1.73],
-      rowH: 0.5, valign: "middle", border: { type: "none" }, fill: { color: P.bg }, fontFace: F,
+      rowH: 0.5, valign: "middle", border: { type: "none" }, fill: { color: P.bg }, fontFace: F, autoPage: false,
     });
   }
 
@@ -975,8 +997,8 @@ export async function exportClientDeck(
       const y = 1.7 + Math.floor(i / 2) * 2.25;
       slide.addShape("rect", { x, y, w: HALF, h: 2.05, fill: { color: P.panel }, line: { type: "none" } });
       slide.addShape("rect", { x, y, w: 0.07, h: 2.05, fill: { color: q.color } });
-      slide.addText(q.title, { x: x + 0.25, y: y + 0.13, w: HALF - 0.4, h: 0.4, fontFace: F, fontSize: 13, bold: true, color: q.color });
-      slide.addText(
+      txt(slide,q.title, { x: x + 0.25, y: y + 0.13, w: HALF - 0.4, h: 0.4, fontFace: F, fontSize: 13, bold: true, color: q.color });
+      txt(slide,
         q.lines.length
           ? q.lines.map((t) => ({ text: t, options: { bullet: { code: "2022" }, fontSize: 10.5, color: P.ink } }))
           : [{ text: "No data available", options: { fontSize: 10.5, italic: true, color: P.faint } }],
@@ -997,23 +1019,23 @@ export async function exportClientDeck(
       ...sortedRecs.map((r) => [
         { text: String(r.priorityRank), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
         { text: r.targetRegion, options: cellBody({ bold: true, color: P.ink }) },
-        { text: r.recommendedDealStructure ?? "—", options: cellBody() },
+        { text: truncate(r.recommendedDealStructure ?? "—", 38), options: cellBody() },
         { text: r.estimatedValue?.upfront ?? "—", options: cellBody({ color: P.accent2, bold: true }) },
         { text: r.estimatedValue?.total ?? "—", options: cellBody({ color: P.accent2, bold: true }) },
         { text: r.estimatedValue?.royaltyRange ?? "—", options: cellBody({ color: P.accent2 }) },
-        { text: (r.topPartnerCandidates ?? []).slice(0, 3).join(", ") || "—", options: cellBody({ fontSize: 10 }) },
+        { text: truncate((r.topPartnerCandidates ?? []).slice(0, 3).join(", ") || "—", 46), options: cellBody({ fontSize: 10 }) },
       ]),
     ];
     slide.addTable(rows, {
       x: MX, y: BODY_TOP + 0.15, w: MW, colW: [0.6, 1.4, 2.63, 1.4, 1.4, 1.4, 3.3],
-      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F,
+      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
     });
   }
 
   // ─── Lead recommendation detail ─────────────────────────────────────────
   if (topRec) {
     const slide = contentSlide(pptx, "Strategy · Lead recommendation", `#${topRec.priorityRank} priority — ${topRec.targetRegion}`, P.accent, "SEC EDGAR · comparable transactions");
-    slide.addText(topRec.rationale ?? "", { x: MX, y: 1.7, w: MW, h: 1.9, fontFace: F, fontSize: 14, color: P.ink, valign: "top", lineSpacingMultiple: 1.1 });
+    txt(slide,topRec.rationale ?? "", { x: MX, y: 1.7, w: MW, h: 1.9, fontFace: F, fontSize: 14, color: P.ink, valign: "top", lineSpacingMultiple: 1.1 });
 
     const cards: [string, string][] = [
       ["UPFRONT", topRec.estimatedValue?.upfront ?? "—"],
@@ -1024,17 +1046,17 @@ export async function exportClientDeck(
     cards.forEach(([label, value], i) => {
       const x = MX + i * (cw + GUT);
       slide.addShape("rect", { x, y: 3.95, w: cw, h: 1.45, fill: { color: P.calloutBg }, line: { color: P.accent2, width: 1 } });
-      slide.addText(label, { x: x + 0.25, y: 4.1, w: cw - 0.45, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.accent2, charSpacing: 1 });
-      slide.addText(value, { x: x + 0.25, y: 4.4, w: cw - 0.45, h: 0.85, fontFace: F, fontSize: 24, bold: true, color: P.ink, valign: "top" });
+      txt(slide,label, { x: x + 0.25, y: 4.1, w: cw - 0.45, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.accent2, charSpacing: 1 });
+      txt(slide,value, { x: x + 0.25, y: 4.4, w: cw - 0.45, h: 0.85, fontFace: F, fontSize: 24, bold: true, color: P.ink, valign: "top" });
     });
 
     if (topRec.topPartnerCandidates?.length) {
-      slide.addText("TOP PARTNERS", { x: MX, y: 5.6, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.muted, charSpacing: 1 });
-      slide.addText(topRec.topPartnerCandidates.join("   ·   "), { x: MX, y: 5.88, w: HALF, h: 0.4, fontFace: F, fontSize: 13, color: P.ink });
+      txt(slide,"TOP PARTNERS", { x: MX, y: 5.6, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.muted, charSpacing: 1 });
+      txt(slide,topRec.topPartnerCandidates.join("   ·   "), { x: MX, y: 5.88, w: HALF, h: 0.4, fontFace: F, fontSize: 13, color: P.ink });
     }
     if (topRec.estimatedTimeline) {
-      slide.addText("TIMELINE", { x: COL_R, y: 5.6, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.muted, charSpacing: 1 });
-      slide.addText(topRec.estimatedTimeline, { x: COL_R, y: 5.88, w: HALF, h: 0.4, fontFace: F, fontSize: 13, color: P.ink });
+      txt(slide,"TIMELINE", { x: COL_R, y: 5.6, w: HALF, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.muted, charSpacing: 1 });
+      txt(slide,topRec.estimatedTimeline, { x: COL_R, y: 5.88, w: HALF, h: 0.4, fontFace: F, fontSize: 13, color: P.ink });
     }
   }
 
@@ -1055,11 +1077,11 @@ export async function exportClientDeck(
     [0, 0.25, 0.5, 0.75, 1].forEach((p) => {
       const x = trackX + trackW * p;
       slide.addShape("line", { x, y: trackY - 0.05, w: 0, h: phases.length * rowH + 0.1, line: { color: P.line, width: 0.5 } } as any);
-      slide.addText(`W${Math.round(totalWeeks * p)}`, { x: x - 0.35, y: trackY - 0.4, w: 0.7, h: 0.25, fontFace: F, fontSize: 9, color: P.faint, align: "center" });
+      txt(slide,`W${Math.round(totalWeeks * p)}`, { x: x - 0.35, y: trackY - 0.4, w: 0.7, h: 0.25, fontFace: F, fontSize: 9, color: P.faint, align: "center" });
     });
     phases.forEach((p, i) => {
       const y = trackY + i * rowH;
-      slide.addText(`${(i + 1).toString().padStart(2, "0")}  ${truncate(p.name, 34)}`, {
+      txt(slide,`${(i + 1).toString().padStart(2, "0")}  ${truncate(p.name, 34)}`, {
         x: MX, y, w: trackX - MX - 0.1, h: rowH, fontFace: F, fontSize: 10, color: P.ink, valign: "middle",
       });
       const left = trackX + (p.startWeek / totalWeeks) * trackW;
@@ -1069,7 +1091,7 @@ export async function exportClientDeck(
     const legendY = trackY + phases.length * rowH + 0.35;
     ["Diagnosis", "Strategy", "Execution"].forEach((pillar, i) => {
       slide.addShape("rect", { x: MX + i * 2.4, y: legendY, w: 0.22, h: 0.22, fill: { color: pillarPpt(pillar) }, line: { type: "none" } });
-      slide.addText(pillar, { x: MX + 0.28 + i * 2.4, y: legendY - 0.04, w: 2, h: 0.3, fontFace: F, fontSize: 10, color: P.ink });
+      txt(slide,pillar, { x: MX + 0.28 + i * 2.4, y: legendY - 0.04, w: 2, h: 0.3, fontFace: F, fontSize: 10, color: P.ink });
     });
   }
 
@@ -1082,10 +1104,10 @@ export async function exportClientDeck(
         { text: s.role, options: cellBody({ bold: true, color: P.ink }) },
         { text: s.involvement, options: cellBody({ color: involvementPpt(s.involvement), bold: true }) },
         { text: s.internalOrExternal, options: cellBody() },
-        { text: (s.responsibilities ?? [])[0] ?? "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: truncate((s.responsibilities ?? [])[0] ?? "—", 92), options: cellBody({ fontSize: 10, color: P.muted }) },
       ]),
     ];
-    slide.addTable(rows, { x: MX, y: BODY_TOP + 0.15, w: MW, colW: [2.9, 1.9, 1.5, 5.83], rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F });
+    slide.addTable(rows, { x: MX, y: BODY_TOP + 0.15, w: MW, colW: [2.9, 1.9, 1.5, 5.83], rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false });
   }
 
   // ─── Milestones ─────────────────────────────────────────────────────────
@@ -1095,8 +1117,8 @@ export async function exportClientDeck(
     sorted.forEach((m, i) => {
       const y = 1.75 + i * 0.56;
       slide.addShape("rect", { x: MX, y, w: 1.1, h: 0.45, fill: { color: P.ink }, line: { type: "none" } });
-      slide.addText(`W${m.week}`, { x: MX, y, w: 1.1, h: 0.45, fontFace: F, fontSize: 12, bold: true, color: P.white, align: "center", valign: "middle" });
-      slide.addText([
+      txt(slide,`W${m.week}`, { x: MX, y, w: 1.1, h: 0.45, fontFace: F, fontSize: 12, bold: true, color: P.white, align: "center", valign: "middle" });
+      txt(slide,[
         { text: `${m.milestone}   `, options: { fontSize: 13, bold: true, color: P.ink } },
         { text: `${m.owner} · ${m.deliverable}`, options: { fontSize: 11, color: P.muted } },
       ], { x: MX + 1.35, y, w: MW - 1.35, h: 0.45, fontFace: F, valign: "middle" });
@@ -1110,15 +1132,15 @@ export async function exportClientDeck(
   if (allRisks.length) {
     const slide = contentSlide(pptx, "Risk", "Flaws and fatal blockers to address", P.accent2, SRC);
     const high = allRisks.filter((r) => r.impact === "High");
-    const list = (high.length ? high : allRisks).slice(0, 6);
+    const list = (high.length ? high : allRisks).slice(0, 5);
     list.forEach((r, i) => {
-      const y = 1.75 + i * 0.72;
-      slide.addShape("rect", { x: MX, y: y + 0.02, w: 0.07, h: 0.6, fill: { color: P.accent2 } });
-      slide.addText([
-        { text: `${r.label}`, options: { fontSize: 12.5, bold: true, color: P.ink } },
+      const y = 1.75 + i * 0.95;
+      slide.addShape("rect", { x: MX, y: y + 0.02, w: 0.07, h: 0.62, fill: { color: P.accent2 } });
+      txt(slide,[
+        { text: truncate(r.label, 120), options: { fontSize: 12.5, bold: true, color: P.ink } },
         { text: `   ${r.source}${r.impact ? " · " + r.impact + " impact" : ""}`, options: { fontSize: 10, color: P.accent2 } },
-        { text: `\n→ ${r.mitigation ?? "—"}`, options: { fontSize: 11, color: P.muted } },
-      ], { x: MX + 0.25, y, w: MW - 0.25, h: 0.7, fontFace: F, valign: "top" });
+        { text: `\n→ ${truncate(r.mitigation ?? "—", 130)}`, options: { fontSize: 11, color: P.muted } },
+      ], { x: MX + 0.25, y, w: MW - 0.25, h: 0.78, fontFace: F, valign: "top" });
     });
   }
 
@@ -1141,8 +1163,8 @@ export async function exportClientDeck(
     steps.forEach((s, i) => {
       const y = 1.75 + i * 0.72;
       slide.addShape("rect", { x: MX, y, w: 0.5, h: 0.5, fill: { color: P.accent2 }, line: { type: "none" } });
-      slide.addText(String(i + 1), { x: MX, y, w: 0.5, h: 0.5, fontFace: F, fontSize: 16, bold: true, color: P.white, align: "center", valign: "middle" });
-      slide.addText(s, { x: MX + 0.8, y, w: MW - 0.8, h: 0.5, fontFace: F, fontSize: 15, color: P.ink, valign: "middle" });
+      txt(slide,String(i + 1), { x: MX, y, w: 0.5, h: 0.5, fontFace: F, fontSize: 16, bold: true, color: P.white, align: "center", valign: "middle" });
+      txt(slide,s, { x: MX + 0.8, y, w: MW - 0.8, h: 0.5, fontFace: F, fontSize: 15, color: P.ink, valign: "middle" });
     });
   }
 
@@ -1154,10 +1176,10 @@ export async function exportClientDeck(
 function contentSlide(pptx: any, kicker: string, title: string, accent: string, source?: string): any {
   const slide = pptx.addSlide({ masterName: MASTER });
   slide.addShape("rect", { x: 0, y: 0, w: SLIDE_W, h: 0.14, fill: { color: accent } });
-  slide.addText(kicker.toUpperCase(), { x: MX, y: 0.42, w: MW, h: 0.3, fontFace: F, fontSize: 12, bold: true, color: P.muted, charSpacing: 2 });
-  slide.addText(title, { x: MX, y: 0.74, w: MW, h: 0.78, fontFace: F, fontSize: 24, bold: true, color: P.ink, valign: "top" });
+  txt(slide,kicker.toUpperCase(), { x: MX, y: 0.42, w: MW, h: 0.3, fontFace: F, fontSize: 12, bold: true, color: P.muted, charSpacing: 2 });
+  txt(slide,title, { x: MX, y: 0.74, w: MW, h: 0.78, fontFace: F, fontSize: 24, bold: true, color: P.ink, valign: "top" });
   slide.addShape("line", { x: MX, y: 1.55, w: MW, h: 0, line: { color: P.line, width: 1 } } as any);
-  slide.addText(`Source: ${source ?? "CartaOS — public regulatory, clinical, IP & pricing sources"}`, {
+  txt(slide,`Source: ${source ?? "CartaOS — public regulatory, clinical, IP & pricing sources"}`, {
     x: MX, y: FOOTER_Y, w: MW - 1, h: 0.3, fontFace: F, fontSize: 8, color: P.faint,
   });
   return slide;
@@ -1167,10 +1189,10 @@ function dividerSlide(pptx: any, num: string, label: string, takeaway: string, a
   const slide = pptx.addSlide();
   slide.background = { color: P.ink };
   slide.addShape("rect", { x: 0, y: 0, w: SLIDE_W, h: 0.14, fill: { color: accent } });
-  slide.addText(num, { x: MX, y: 2.0, w: 4, h: 2.2, fontFace: F, fontSize: 120, bold: true, color: "3A3A3A" });
-  slide.addText(label, { x: MX + 0.05, y: 4.1, w: MW, h: 0.9, fontFace: F, fontSize: 32, bold: true, color: P.white });
+  txt(slide,num, { x: MX, y: 2.0, w: 4, h: 2.2, fontFace: F, fontSize: 120, bold: true, color: "3A3A3A" });
+  txt(slide,label, { x: MX + 0.05, y: 4.1, w: MW, h: 0.9, fontFace: F, fontSize: 32, bold: true, color: P.white });
   slide.addShape("rect", { x: MX + 0.1, y: 5.0, w: 0.9, h: 0.05, fill: { color: accent } });
-  slide.addText(takeaway, { x: MX + 0.1, y: 5.2, w: MW, h: 0.6, fontFace: F, fontSize: 17, color: "C9C9C9" });
+  txt(slide,takeaway, { x: MX + 0.1, y: 5.2, w: MW, h: 0.6, fontFace: F, fontSize: 17, color: "C9C9C9" });
 }
 
 function cellHead(): any {
