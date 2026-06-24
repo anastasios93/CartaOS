@@ -37,7 +37,6 @@ import type { HubIntakeForm, AgentResult } from "@/types/hub";
 import { BenchmarkingResults } from "@/components/hub/results/benchmarking-results";
 import { PartnerResults } from "@/components/hub/results/partner-results";
 import { NegotiationResults } from "@/components/hub/results/negotiation-results";
-import { TermSheetResults } from "@/components/hub/results/termsheet-results";
 import { ContractResults } from "@/components/hub/results/contract-results";
 import { DiligenceResults } from "@/components/hub/results/diligence-results";
 import { DataPackageResults } from "@/components/hub/results/datapackage-results";
@@ -93,7 +92,6 @@ export default function PortfolioOverview() {
   const benchmarkResult = agents.benchmarking?.result as Extract<AgentResult, { agentId: "benchmarking" }> | null;
   const partnerResult = agents.partner?.result as Extract<AgentResult, { agentId: "partner" }> | null;
   const negotiationResult = agents.negotiation?.result as Extract<AgentResult, { agentId: "negotiation" }> | null;
-  const termSheetResult = agents.termsheet?.result as Extract<AgentResult, { agentId: "termsheet" }> | null;
 
   return (
     <div className="space-y-6">
@@ -282,11 +280,6 @@ export default function PortfolioOverview() {
               agentState: agents.executionPlan,
             },
             {
-              label: "Term Sheet & Contract",
-              description: submitted ? "Draft agreement from comparable deals" : "AI-drafted from precedents & best practices",
-              agentState: agents.termsheet,
-            },
-            {
               label: "Due Diligence & Data Room",
               description: submitted ? "Synthesized package from all agents" : "Question prep, data package, smart intelligence",
               agentState: agents.synthesis,
@@ -392,16 +385,6 @@ export default function PortfolioOverview() {
                     <ErrorBlock message={agents.executionPlan.error} />
                   ) : (
                     <SkeletonBlock label="Execution plan agent generating timeline & stakeholders..." />
-                  )}
-                </div>
-                <div>
-                  <SectionHeader icon={<FileSignature className="h-4 w-4" />} title="Term Sheet & Clauses" color={PILLAR_COLORS.execution} />
-                  {termSheetResult ? (
-                    <TermSheetResults data={termSheetResult} />
-                  ) : agents.termsheet?.status === "error" ? (
-                    <ErrorBlock message={agents.termsheet.error} />
-                  ) : (
-                    <SkeletonBlock label="Term sheet agent running..." />
                   )}
                 </div>
                 {synthesisComplete && (

@@ -87,7 +87,6 @@ export default function SimulatedPlanPage() {
     { id: "benchmarking" as const, label: "Diagnosis: Comparable Deals", color: PILLAR_COLORS.diagnosis },
     { id: "partner" as const, label: "Strategy: Partners & Synergies", color: PILLAR_COLORS.strategy },
     { id: "negotiation" as const, label: "Strategy: Negotiation Leverage", color: PILLAR_COLORS.strategy },
-    { id: "termsheet" as const, label: "Strategy: Term Sheet", color: PILLAR_COLORS.strategy },
   ];
 
   return (

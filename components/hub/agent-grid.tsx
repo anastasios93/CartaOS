@@ -3,7 +3,7 @@
 import type { AgentsMap, AgentId } from "@/types/hub";
 import { AgentCard } from "./agent-card";
 
-const AGENT_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "termsheet"];
+const AGENT_IDS: AgentId[] = ["benchmarking", "partner", "negotiation"];
 
 export function AgentGrid({ agents }: { agents: AgentsMap }) {
   return (

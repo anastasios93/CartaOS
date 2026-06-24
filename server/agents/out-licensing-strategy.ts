@@ -6,11 +6,14 @@
  * competitive density, manufacturing) with a Commercial Opportunity Score (COS)
  * — grounded in the full live evidence base from the wired data sources.
  *
- * Runs in parallel with synthesis + execution plan after the 4 core agents.
+ * Runs after the core agents (alongside synthesis + execution plan). To keep it
+ * fast, the heavy per-region analysis is fanned out across parallel Opus calls
+ * (one per region shard) while the cross-market synthesis runs concurrently, then
+ * the pieces are merged into a single report.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { HubIntakeForm, OutLicensingReport, AgentResult } from "@/types/hub";
+import type { HubIntakeForm, OutLicensingReport, AgentResult, RegionalAnalysis } from "@/types/hub";
 import type { AgentWriter } from "./index";
 import { withGrounding } from "@/server/services/source-reference";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
@@ -63,6 +66,17 @@ Return ONLY valid JSON with this exact structure:
       "commercial": { "competitorActivity": "filer count & competitive intensity (ANDA / EU MA / biosimilar applicants)", "pricingDynamics": "erosion + tender/payer dynamics", "reimbursementLandscape": "channel access & tender mechanics", "keyPartnerCandidates": ["named API/CDMO/MAH/EU-buyer/supply-side partners"], "distributionChannels": "retail / hospital-tender / specialty" },
       "ip": { "patentStrength": "Strong|Moderate|Weak", "ftoStatus": "Clear|Some Risk|Significant Risk", "expirationRisks": ["secondary patents, SPC, formulation patents"], "opportunities": ["505(b)(2) / device / interchangeability angle"], "estimatedExclusivityYears": 8 },
       "manufacturing": { "complexity": "Low|Moderate|High", "notes": "API source & concentration risk, CDMO capability, comparability burden" },
+      "marketWorthiness": {
+        "rating": "Highly Worthy | Worthy | Marginal | Not Worthy",
+        "score": 76,
+        "thesis": "One line: is THIS market commercially worth entering, and the single reason why.",
+        "healthcareLandscape": "The CURRENT healthcare landscape that shapes uptake — the health-system / payer model (single-payer, statutory sickness funds, private+public mix, out-of-pocket), funding & budget pressure, infrastructure and prescriber/channel behaviour, and the demand backdrop. Ground it in the region's real system (e.g. Germany GKV/AMNOG, France Assurance Maladie/HAS, US commercial+Medicare/Medicaid+PBMs, Japan NHI, China NRDL/VBP, India largely out-of-pocket/trade).",
+        "legalLandscape": "The CURRENT legal & regulatory commercial landscape relevant to ENTRY — market-shaping law beyond the approval pathway: pricing & procurement rules, tender/substitution law, IP-enforcement climate, data/market-exclusivity regime, and any litigation/policy shifts now in play.",
+        "marketSizeVsCompetitors": "The addressable market size set explicitly AGAINST the competitive field — the pool vs the number/strength of incumbents and filers, so worthiness is size-per-competitor, not gross size.",
+        "partnershipRoom": "Whether there is ROOM to establish partnerships here — is the partner field open or saturated, who the credible counterparties are (named MAH / distributor / CDMO / specialty-pharma / local champion), and how reachable they are.",
+        "distributionChannels": "Which distribution channels are actually OPEN and reachable here (retail / hospital & tender / specialty / mail-order / trade / wholesale), and what it takes to access them.",
+        "novelPaths": ["2-4 NOVEL or unconventional routes to capture this market — e.g. 505(b)(2) reformulation, device/interchangeability angle, tender-consortium entry, direct-to-payer, branded-generic in trade markets, authorised-generic, digital/telehealth channel"]
+      },
       "businessCase": { "valueProposition": "the rational value proposition for THIS region — why it is (or isn't) attractive, synthesising market, regulatory, IP, access, competition and manufacturing into one clear thesis", "profitWedge": "exactly WHERE and HOW a profitable business case is made here — the specific channel, the timing against the exclusivity window, and the differentiation / capture lever that protects margin", "economics": "the economics — the share of the pool you can realistically capture (SOM), the gross margin it supports, and the investment and erosion it must beat to be profitable", "verdict": "Pursue | Watch | Pass" }
     }
   ],
@@ -91,6 +105,7 @@ Return ONLY valid JSON with this exact structure:
       { "step": 1, "action": "the concrete move", "geography": "lead geo", "approach": "In-license | Originate | Co-develop | Build | Partner | Tender", "timing": "when, relative to the exclusivity window", "owner": "who runs it" }
     ]
   },
+  "marketWorthinessSummary": "1-2 sentences: which geographies are commercially WORTH entering and why — purely on market grounds (legal + healthcare landscape, partnership room, channels, size-vs-competition, novel paths), naming the worthiest market(s) and the least worthy.",
   "dataConfidence": "High|Medium|Low",
   "sourcesUsed": ["named authorities underpinning the assessment"]
 }
@@ -105,9 +120,62 @@ CRITICAL RULES:
 7. Set dataConfidence by evidence quality and the confidence tiering (US/EU high; China medium; deal/pricing/sales low) — never by a count of sources.
 8. Write as a finished CartaOS client report — flowing, natural, decisive prose, attributed to CartaOS where natural. Lead with the answer.
 9. For EVERY region, populate businessCase — synthesise ALL six vectors into a clear, rational value proposition and state EXACTLY where (and how) a profitable business case can be made, or why it cannot, with the concrete economics (capturable SOM, margin, the investment/erosion it must beat) and a per-region Pursue / Watch / Pass call. This is the so-what a BD principal acts on; make it specific, not generic.
-10. Populate commercialPlan — the consolidated business case. Cover EVERY relevant commercial channel (retail pharmacy, hospital & tender, specialty, mail-order, trade / branded generics, wholesale distribution) across the target geographies, stating where the value sits, the exact access mechanics (tender cycles, PBM/formulary, AMNOG/HAS, NRDL/VBP, Japan NHI, India trade) and named players where known. Then give a clear, sequenced "how to proceed" plan: step → action → geography → build/partner/in-license → timing vs the window → owner. Ground every channel, pricing and access claim in the evidence base (CMS spend, HTA bodies, NRDL/VBP, NHI, tender data, originator filings) — never generic.
+10. For EVERY region, populate marketWorthiness — a PURELY commercial / market-facing read on whether the geography is worth entering, judged against its CURRENT legal AND healthcare landscape. This is distinct from businessCase (the investment thesis): here you (a) describe the live healthcare landscape (health-system / payer model, funding pressure, infrastructure, demand) and the live legal/commercial landscape (pricing & procurement law, tender/substitution rules, IP-enforcement climate, exclusivity regime); (b) judge whether there is ROOM to establish partnerships and name credible counterparties; (c) state which distribution channels are open and reachable; (d) size the market AGAINST the competitive field (worthiness = size-per-competitor, not gross size); and (e) surface 2-4 NOVEL paths to capture it. Set rating + a 0–100 score consistently. Then write marketWorthinessSummary naming the worthiest and least-worthy markets. Ground every landscape, partner, channel and sizing claim in the evidence base and the named real systems (AMNOG/HAS/AIFA/AEMPS, US PBM+Medicare/Medicaid, Japan NHI, China NRDL/VBP, India trade) — never generic.
+11. Populate commercialPlan — the consolidated business case. Cover EVERY relevant commercial channel (retail pharmacy, hospital & tender, specialty, mail-order, trade / branded generics, wholesale distribution) across the target geographies, stating where the value sits, the exact access mechanics (tender cycles, PBM/formulary, AMNOG/HAS, NRDL/VBP, Japan NHI, India trade) and named players where known. Then give a clear, sequenced "how to proceed" plan: step → action → geography → build/partner/in-license → timing vs the window → owner. Ground every channel, pricing and access claim in the evidence base (CMS spend, HTA bodies, NRDL/VBP, NHI, tender data, originator filings) — never generic.
 
 This is a CartaOS in-license / originate / pass decision. Be rigorous, honest and client-ready.`;
+
+// To keep the headline assessment fast, the per-region analysis is generated in
+// parallel shards while the cross-market synthesis runs concurrently. These two
+// directives partition the shared prompt above into the two call types.
+const REGION_DIRECTIVE = `
+
+OUTPUT MODE — REGIONAL ANALYSIS ONLY.
+For THIS call you assess ONLY the geographies named in the user message. Return ONLY valid JSON of the form:
+{ "regionalAnalysis": [ /* one entry per named geography, in the SAME order */ ] }
+Each entry must be FULLY populated exactly as specified above — all six vectors, the cos sub-scores, manufacturing, marketWorthiness AND businessCase — using the exact region codes and labels given. Do NOT output verdict, opportunityThesis, executiveSummary, assetProfile, recommendations, portfolioRisks, commercialPlan, marketWorthinessSummary, dataConfidence or sourcesUsed in this call — those are produced separately. Apply every CRITICAL RULE that concerns a region (individual national markets, cos consistency, post-LoE pool arithmetic, real names/dates, and a populated businessCase AND marketWorthiness for every region).`;
+
+const WRAPPER_DIRECTIVE = `
+
+OUTPUT MODE — SYNTHESIS ONLY (the per-region analysis is produced separately and merged in).
+Return ONLY valid JSON with EXACTLY these top-level keys: "verdict", "opportunityThesis", "executiveSummary", "assetProfile", "recommendations", "portfolioRisks", "commercialPlan", "marketWorthinessSummary", "dataConfidence", "sourcesUsed". DO NOT output a "regionalAnalysis" key at all. Your recommendations, risks, commercialPlan and summaries must span the FULL geography set named in the user message (refer to those markets by name). Apply every CRITICAL RULE that concerns the cross-market synthesis (verdict mapping, ranking compounds, kill criteria, real names/dates, McKinsey voice, no bracket tags).`;
+
+// Deterministic expansion of the intake geographies into the individual national
+// markets the assessment covers (EU → DE/FR/IT/ES; India corridor always added).
+const REGION_EXPANSION: Record<string, { code: string; label: string }[]> = {
+  US: [{ code: "US", label: "United States" }],
+  EU: [
+    { code: "DE", label: "Germany" },
+    { code: "FR", label: "France" },
+    { code: "IT", label: "Italy" },
+    { code: "ES", label: "Spain" },
+  ],
+  JP: [{ code: "JP", label: "Japan" }],
+  CN: [{ code: "CN", label: "China" }],
+  ROW: [{ code: "ROW", label: "Rest of World" }],
+};
+
+function expandRegions(geos: string[]): { code: string; label: string }[] {
+  const out: { code: string; label: string }[] = [];
+  const seen = new Set<string>();
+  for (const g of geos) {
+    for (const r of REGION_EXPANSION[g] ?? []) {
+      if (!seen.has(r.code)) { seen.add(r.code); out.push(r); }
+    }
+  }
+  // India is the in-license / origination corridor for the off-patent thesis.
+  if (!seen.has("IN")) out.push({ code: "IN", label: "India" });
+  if (out.length === 0) out.push({ code: "US", label: "United States" });
+  return out;
+}
+
+// Round-robin split so shards stay balanced (and each call stays small & fast).
+function shardRegions<T>(arr: T[], maxPerShard = 4): T[][] {
+  const shardCount = Math.max(1, Math.ceil(arr.length / maxPerShard));
+  const shards: T[][] = Array.from({ length: shardCount }, () => []);
+  arr.forEach((item, i) => shards[i % shardCount].push(item));
+  return shards;
+}
 
 export async function runOutLicensingStrategyAgent(
   intake: HubIntakeForm,
@@ -141,11 +209,6 @@ export async function runOutLicensingStrategyAgent(
           `- ${l.term}: Market ${l.marketRange} → Recommend ${l.recommendedPosition}`
         ).join("\n")}`;
       }
-      if (r.agentId === "termsheet") {
-        return `## Term Sheet Clauses (${r.clauses.length})\n${r.clauses.slice(0, 5).map(c =>
-          `- ${c.clause}: ${c.proposedTerm}`
-        ).join("\n")}`;
-      }
       return "";
     }).filter(Boolean).join("\n\n");
 
@@ -169,35 +232,116 @@ export async function runOutLicensingStrategyAgent(
       // Proceed on the diagnostic outputs alone if the aggregate pull fails.
     }
 
-    write({ agent: agentId, type: "status", status: "analyzing", message: `Assessing the off-patent opportunity for ${compounds.length > 1 ? `${compounds.length} compounds` : "the compound"} across all target markets...` });
+    // Deterministic market set, sharded so the heavy per-region generation runs
+    // in parallel instead of one long serial completion.
+    const regions = expandRegions(intake.geographies);
+    const regionList = regions.map(r => `${r.code} (${r.label})`).join(", ");
+    const shards = shardRegions(regions, 4);
 
-    const response = await anthropic.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 12000,
-      system: withGrounding(STRATEGY_PROMPT),
-      messages: [{
-        role: "user",
-        content: `## Compound(s) to assess
+    write({ agent: agentId, type: "status", status: "analyzing", message: `Assessing ${regions.length} markets in parallel for ${compounds.length > 1 ? `${compounds.length} compounds` : "the compound"}...` });
+
+    const compoundBlock = `## Compound(s) to assess
 ${compounds.map((c, i) => `${i + 1}. ${c}`).join("\n") || intake.assetName}
 Therapeutic area / ATC: ${intake.therapeuticArea || "auto-detect from the evidence"}
 Status: ${intake.developmentStage || "auto-detect (off-patent / loss of exclusivity)"}
-Target geographies: ${intake.geographies.join(", ")}  (assess the EU as Germany, France, Italy and Spain individually)
-${intake.context ? "BD context / angle: " + intake.context : ""}
+${intake.context ? "BD context / angle: " + intake.context : ""}`;
+
+    const evidenceBlock = evidenceBase || "Evidence base unavailable — rely on the diagnostic outputs and clearly-worded estimates.";
+
+    // One Opus call per region shard — each returns only its regionalAnalysis
+    // entries. Failures degrade to an empty shard rather than killing the run.
+    const regionCalls = shards.map(shard =>
+      anthropic.messages.create({
+        model: "claude-opus-4-8",
+        max_tokens: 9000,
+        system: withGrounding(STRATEGY_PROMPT + REGION_DIRECTIVE),
+        messages: [{
+          role: "user",
+          content: `${compoundBlock}
+
+## Geographies to assess in THIS call (assess ONLY these, in this exact order)
+${shard.map(r => `- ${r.code} — ${r.label}`).join("\n")}
+
+## Live Evidence Base
+${evidenceBlock}
+
+---
+
+Return ONLY {"regionalAnalysis":[...]} for the geographies above — one fully-populated entry each (all six vectors, cos sub-scores, manufacturing, marketWorthiness and businessCase). For every market give the market-worthiness read against its current legal and healthcare landscape, partnership room, open distribution channels, market size vs competitors and novel paths. Natural, client-ready prose in every field; never use bracket tags.`,
+        }],
+      }).then(res => {
+        const text = res.content.find(b => b.type === "text")?.text ?? "";
+        try {
+          return extractJSON<{ regionalAnalysis: RegionalAnalysis[] }>(text).regionalAnalysis ?? [];
+        } catch {
+          return [] as RegionalAnalysis[];
+        }
+      }),
+    );
+
+    // Cross-market synthesis runs concurrently with the region shards. It keeps
+    // the prior diagnostic-agent context so recommendations stay grounded.
+    const wrapperCall = anthropic.messages.create({
+      model: "claude-opus-4-8",
+      max_tokens: 7000,
+      system: withGrounding(STRATEGY_PROMPT + WRAPPER_DIRECTIVE),
+      messages: [{
+        role: "user",
+        content: `${compoundBlock}
+Target geographies (full set, assessed individually): ${regionList}
 
 ## Prior Diagnostic Agent Outputs
 ${agentContext || "None available."}
 
 ## Live Evidence Base
-${evidenceBase || "Evidence base unavailable — rely on the diagnostic outputs and clearly-worded estimates."}
+${evidenceBlock}
 
 ---
 
-Produce the CartaOS off-patent market opportunity assessment now: classify each compound, size the post-LoE addressable pool, assess competitive intensity and where margin sits, name partners and channels, and recommend an in-license / originate / pass call. Cover the target geographies individually (the EU as Germany, France, Italy, Spain; add India where the corridor applies). If more than one compound is supplied, rank them. Write it as a finished, client-ready CartaOS report in natural prose — never use bracket tags.`,
+Produce the SYNTHESIS ONLY (NO regionalAnalysis key): verdict, opportunityThesis, executive summary, asset profile, prioritised recommendations across the full geography set above, kill-criteria portfolioRisks, the consolidated commercialPlan, the marketWorthinessSummary, dataConfidence and sourcesUsed. If more than one compound is supplied, rank them. Write it as a finished, client-ready CartaOS report in natural prose — never use bracket tags.`,
       }],
+    }).then(res => {
+      const text = res.content.find(b => b.type === "text")?.text ?? "";
+      try {
+        return extractJSON<Omit<OutLicensingReport, "regionalAnalysis">>(text);
+      } catch {
+        return null;
+      }
     });
 
-    const text = response.content.find(b => b.type === "text")?.text ?? "";
-    const report = extractJSON<OutLicensingReport>(text);
+    const [wrapper, regionResults] = await Promise.all([wrapperCall, Promise.all(regionCalls)]);
+    const regionalAnalysis = regionResults.flat();
+
+    if (!wrapper && regionalAnalysis.length === 0) {
+      throw new Error("The opportunity assessment produced no usable content.");
+    }
+
+    // Merge the parallel pieces into one report; fall back gracefully if the
+    // synthesis call failed but regions succeeded.
+    const report: OutLicensingReport = {
+      verdict: wrapper?.verdict,
+      opportunityThesis: wrapper?.opportunityThesis,
+      executiveSummary: wrapper?.executiveSummary ?? "",
+      assetProfile: wrapper?.assetProfile ?? {
+        name: compounds.join(", ") || intake.assetName,
+        description: "",
+        modality: "",
+        therapeuticArea: intake.therapeuticArea || "",
+        developmentStage: intake.developmentStage || "",
+        mechanism: "",
+        currentMarkets: [],
+        keyStrengths: [],
+        keyChallenges: [],
+        keyDataPoints: [],
+      },
+      regionalAnalysis,
+      recommendations: wrapper?.recommendations ?? [],
+      portfolioRisks: wrapper?.portfolioRisks ?? [],
+      commercialPlan: wrapper?.commercialPlan,
+      marketWorthinessSummary: wrapper?.marketWorthinessSummary,
+      dataConfidence: wrapper?.dataConfidence ?? "Low",
+      sourcesUsed: wrapper?.sourcesUsed ?? [],
+    };
 
     write({ agent: agentId, type: "result", data: { agentId: "outLicensingStrategy", report } });
     write({ agent: agentId, type: "status", status: "complete", message: `Opportunity assessment complete — verdict: ${report.verdict ?? "see report"} across ${report.regionalAnalysis?.length || 0} markets` });

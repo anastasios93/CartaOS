@@ -90,7 +90,6 @@ export async function POST(req: Request) {
         { runBenchmarkingAgent },
         { runPartnerAgent },
         { runNegotiationAgent },
-        { runTermSheetAgent },
         { runSynthesisAgent },
         { runExecutionPlanAgent },
         { runOutLicensingStrategyAgent },
@@ -98,19 +97,17 @@ export async function POST(req: Request) {
         import("@/server/agents/benchmarking"),
         import("@/server/agents/partner"),
         import("@/server/agents/negotiation"),
-        import("@/server/agents/termsheet"),
         import("@/server/agents/synthesis"),
         import("@/server/agents/execution-plan"),
         import("@/server/agents/out-licensing-strategy"),
       ]);
 
-      const CORE_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "termsheet"];
+      const CORE_IDS: AgentId[] = ["benchmarking", "partner", "negotiation"];
 
       const agents: { id: AgentId; run: (intake: any, write: (e: SSEEvent) => void) => Promise<void> }[] = [
         { id: "benchmarking", run: runBenchmarkingAgent },
         { id: "partner", run: runPartnerAgent },
         { id: "negotiation", run: runNegotiationAgent },
-        { id: "termsheet", run: runTermSheetAgent },
       ];
 
       // Send initial status for all agents (including synthesis, execution plan & out-licensing strategy)

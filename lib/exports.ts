@@ -534,6 +534,11 @@ export async function exportStrategyReportPDF(
     }, autoTable);
     sourceNote(state, (report.sourcesUsed ?? []).join(", ") || "CartaOS global data aggregation");
 
+    if (report.marketWorthinessSummary) {
+      subHeader(state, "Market worthiness — commercial read", STRATEGY_COLOR);
+      paragraph(state, report.marketWorthinessSummary, 10.5, INK);
+    }
+
     // One detailed page per region
     for (const region of regions) {
       newPage(state);
@@ -583,6 +588,31 @@ export async function exportStrategyReportPDF(
         ["FTO status", region.ip?.ftoStatus],
         ["Est. exclusivity", region.ip?.estimatedExclusivityYears != null ? `${region.ip.estimatedExclusivityYears} years` : null],
       ], region.ip?.opportunities, region.ip?.expirationRisks);
+
+      // Market worthiness — purely-commercial read against the live legal &
+      // healthcare landscape, with partnership room, channels, sizing-vs-
+      // competition and novel paths.
+      if (region.marketWorthiness) {
+        const w = region.marketWorthiness;
+        ensureSpace(state, 60);
+        subHeader(state, `Market Worthiness — ${w.rating ?? "—"}${w.score != null ? `  (${w.score}/100)` : ""}`, STRATEGY_COLOR);
+        if (w.thesis) paragraph(state, w.thesis, 10.5, INK);
+        const wRows: [string, string | undefined | null][] = [
+          ["Healthcare landscape", w.healthcareLandscape],
+          ["Legal landscape", w.legalLandscape],
+          ["Market size vs competitors", w.marketSizeVsCompetitors],
+          ["Room for partnerships", w.partnershipRoom],
+          ["Distribution channels", w.distributionChannels],
+        ];
+        table(state, {
+          body: wRows.map(([k, v]) => [k, v ?? "—"]),
+          columnStyles: { 0: { fontStyle: "bold", textColor: INK, cellWidth: 150 } },
+        }, autoTable);
+        if (w.novelPaths?.length) {
+          tinyLabel(state, "Novel paths to capture the market");
+          bullets(state, w.novelPaths, STRATEGY_COLOR);
+        }
+      }
     }
   }
 
@@ -1155,6 +1185,46 @@ export async function exportClientDeck(
     });
   }
 
+  // ─── Market worthiness — purely-commercial read by market ────────────────
+  const worthy = regions.filter((r) => r.marketWorthiness);
+  if (worthy.length) {
+    const sortedWorthy = worthy
+      .slice()
+      .sort((a, b) => (b.marketWorthiness?.score ?? 0) - (a.marketWorthiness?.score ?? 0));
+    const lead = sortedWorthy[0];
+    const slide = contentSlide(
+      pptx, "Strategy · Market worthiness",
+      lead ? `${lead.regionLabel} is the worthiest market on commercial grounds` : "Market worthiness — commercial read",
+      P.accent, "openFDA · EMA · NRDL/VBP · NHI · HTA bodies · ClinicalTrials.gov",
+    );
+
+    let tableTop = BODY_TOP + 0.15;
+    if (strategy?.marketWorthinessSummary) {
+      slide.addShape("rect", { x: MX, y: tableTop, w: MW, h: 0.66, fill: { color: P.calloutBg }, line: { type: "none" } });
+      slide.addShape("rect", { x: MX, y: tableTop, w: 0.07, h: 0.66, fill: { color: P.accent } });
+      txt(slide, strategy.marketWorthinessSummary, { x: MX + 0.25, y: tableTop + 0.05, w: MW - 0.5, h: 0.56, fontFace: F, fontSize: 10.5, color: P.ink, valign: "middle" });
+      tableTop += 0.86;
+    }
+
+    const rows: any[][] = [
+      ["Market", "Worthiness", "Healthcare & legal landscape", "Partnerships & channels", "Novel path"].map((t) => ({ text: t, options: cellHead() })),
+      ...sortedWorthy.map((r) => {
+        const w = r.marketWorthiness!;
+        return [
+          { text: r.regionLabel, options: cellBody({ bold: true, color: P.ink }) },
+          { text: `${dotScale(w.score ?? 0)}  ${w.rating ?? "—"}`, options: cellBody({ color: worthinessPpt(w.rating), bold: true }) },
+          { text: truncate([w.healthcareLandscape, w.legalLandscape].filter(Boolean).join(" · "), 150), options: cellBody({ fontSize: 9.5 }) },
+          { text: truncate([w.partnershipRoom, w.distributionChannels].filter(Boolean).join(" · "), 130), options: cellBody({ fontSize: 9.5 }) },
+          { text: truncate(w.novelPaths?.[0] ?? "—", 70), options: cellBody({ fontSize: 9.5, color: P.accent2 }) },
+        ];
+      }),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: tableTop, w: MW, colW: [1.6, 1.9, 3.5, 3.0, 2.13],
+      rowH: 0.5, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
   // ─── Recommendations table ──────────────────────────────────────────────
   if (sortedRecs.length) {
     const slide = contentSlide(
@@ -1384,6 +1454,9 @@ function cellBody(extra: any = {}): any {
 
 const attractivenessPpt = (level: string): string =>
   level === "Very High" ? "C2410C" : level === "High" ? "F97316" : level === "Medium" ? "6E6E6E" : "9A9A9A";
+
+const worthinessPpt = (rating?: string): string =>
+  rating === "Highly Worthy" ? "C2410C" : rating === "Worthy" ? "F97316" : rating === "Marginal" ? "6E6E6E" : "9A9A9A";
 
 const involvementPpt = (level: string): string =>
   level === "Lead" ? "C2410C" : level === "Contributor" ? "1A1A1A" : level === "Approver" ? "6E6E6E" : "9A9A9A";

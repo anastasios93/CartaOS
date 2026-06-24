@@ -125,11 +125,6 @@ export async function runSynthesisAgent(
           `- ${l.term}: Market ${l.marketRange} | Recommend: ${l.recommendedPosition} | Leverage: ${l.leverageLevel} | Precedent: ${l.precedentSource}`
         ).join("\n")}`;
       }
-      if (r.agentId === "termsheet") {
-        return `## Term Sheet Agent Results\nClauses: ${r.clauses.map(c =>
-          `- ${c.clause}: ${c.proposedTerm} (${c.flag}) | Benchmark: ${c.marketBenchmark}`
-        ).join("\n")}\n\nFull Term Sheet:\n${r.termSheet}`;
-      }
       return "";
     }).join("\n\n");
 

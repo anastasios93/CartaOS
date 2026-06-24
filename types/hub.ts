@@ -34,7 +34,7 @@ export const GEOGRAPHY_COLORS: Record<Geography, string> = {
 
 // ─── Agent IDs & Status ─────────────────────────────────────────────────────
 
-export type AgentId = "benchmarking" | "partner" | "negotiation" | "termsheet" | "synthesis" | "executionPlan" | "outLicensingStrategy";
+export type AgentId = "benchmarking" | "partner" | "negotiation" | "synthesis" | "executionPlan" | "outLicensingStrategy";
 
 export type AgentStatus = "idle" | "scraping" | "analyzing" | "complete" | "error";
 
@@ -42,7 +42,6 @@ export const AGENT_META: Record<AgentId, { label: string; description: string; c
   benchmarking: { label: "Deal Benchmarking", description: "SEC EDGAR + Clinical Trials → Comparable deals", color: "#3B82F6", icon: "BarChart3" },
   partner:      { label: "Partner Identification", description: "Multi-source scan → Ranked partners", color: "#10B981", icon: "Users" },
   negotiation:  { label: "Negotiation Intelligence", description: "Deal terms + leverage analysis", color: "#F59E0B", icon: "Scale" },
-  termsheet:    { label: "Term Sheet Drafting", description: "All sources → Draft term sheet", color: "#A855F7", icon: "FileText" },
   synthesis:    { label: "Deal Package", description: "Contract, DD, data room & intelligence", color: "#EC4899", icon: "Briefcase" },
   executionPlan:{ label: "Execution Plan", description: "Timeline, stakeholders & dependencies", color: "#F97316", icon: "Rocket" },
   outLicensingStrategy: { label: "Out-Licensing Strategy", description: "Per-region market, legal, commercial & IP assessment", color: "#0EA5E9", icon: "Globe" },
@@ -69,7 +68,6 @@ export type AgentResult =
   | { agentId: "benchmarking"; comparables: DealComparable[] }
   | { agentId: "partner"; partners: PartnerScore[] }
   | { agentId: "negotiation"; leveragePoints: NegotiationLeverage[] }
-  | { agentId: "termsheet"; clauses: TermSheetClause[]; termSheet: string }
   | { agentId: "synthesis"; contract: string; dueDiligence: DDSection[]; dataPackage: DataPackageItem[]; intelligence: IntelSection[] }
   | { agentId: "executionPlan"; plan: ExecutionPlanOutput }
   | { agentId: "outLicensingStrategy"; report: OutLicensingReport };
@@ -86,6 +84,11 @@ export interface OutLicensingReport {
   regionalAnalysis: RegionalAnalysis[];
   recommendations: OutLicensingRecommendation[];
   portfolioRisks: PortfolioRisk[];
+  /** Cross-market market-worthiness synthesis — a 1-2 sentence read on which
+   *  geographies are commercially worth entering and why, purely on market /
+   *  commercial grounds (legal + healthcare landscape, partnerships, channels,
+   *  competitive sizing, novel paths). */
+  marketWorthinessSummary?: string;
   /** Consolidated business case — every commercial channel across geographies
    *  (with how to win each) and the sequenced go-to-market plan ("how to proceed"). */
   commercialPlan?: {
@@ -179,6 +182,35 @@ export interface RegionalAnalysis {
     profitWedge: string;
     economics: string;
     verdict: "Pursue" | "Watch" | "Pass";
+  };
+  /** Market Worthiness — a PURELY commercial / market-facing verdict on whether
+   *  this geography is worth entering, read against the region's CURRENT legal
+   *  and healthcare landscape: where partnerships can be struck, which
+   *  distribution channels are open, the market size set against the competitive
+   *  field, and any novel routes to capture value. Distinct from businessCase
+   *  (which is the investment thesis) — this is the market-readiness lens. */
+  marketWorthiness?: {
+    /** Purely-commercial worthiness rating for the market. */
+    rating: "Highly Worthy" | "Worthy" | "Marginal" | "Not Worthy";
+    /** 0–100 commercial market-worthiness score (independent of the COS). */
+    score: number;
+    /** One-line so-what: is this market commercially worth it, and why. */
+    thesis: string;
+    /** The current HEALTHCARE landscape — payer/health-system model, funding,
+     *  infrastructure, demand and the access environment that shapes uptake. */
+    healthcareLandscape: string;
+    /** The current LEGAL / regulatory commercial landscape relevant to entry —
+     *  market-shaping law, pricing/procurement rules, IP enforcement climate. */
+    legalLandscape: string;
+    /** Addressable market size set explicitly against the competitive field. */
+    marketSizeVsCompetitors: string;
+    /** Room to establish partnerships — is the partner field open or saturated,
+     *  and with whom (named candidates / archetypes). */
+    partnershipRoom: string;
+    /** Distribution channels available here and how reachable they are. */
+    distributionChannels: string;
+    /** Novel / unconventional paths to capture this market. */
+    novelPaths: string[];
   };
 }
 
@@ -316,14 +348,6 @@ export interface NegotiationLeverage {
   leverageLevel: "Strong" | "Moderate" | "Weak";
   geoVariance: Record<string, string>;
   precedentSource: string;
-}
-
-export interface TermSheetClause {
-  clause: string;
-  proposedTerm: string;
-  marketBenchmark: string;
-  flag: "Aligned" | "Upper Range" | "Below Market" | "Negotiate" | "Non-Standard";
-  geoNotes: string;
 }
 
 // ─── Client-Side Agent State ────────────────────────────────────────────────

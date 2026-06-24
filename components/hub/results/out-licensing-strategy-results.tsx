@@ -16,6 +16,11 @@ import {
   DollarSign,
   CheckCircle2,
   Factory,
+  Gauge,
+  HeartPulse,
+  Handshake,
+  Truck,
+  Sparkles,
 } from "lucide-react";
 
 const REGION_FLAGS: Record<string, string> = {
@@ -68,7 +73,7 @@ export function OutLicensingStrategyResults({
   data: Extract<AgentResult, { agentId: "outLicensingStrategy" }>;
 }) {
   const { report } = data;
-  const [view, setView] = useState<"overview" | "regions" | "recommendations" | "business" | "risks">("overview");
+  const [view, setView] = useState<"overview" | "regions" | "worthiness" | "recommendations" | "business" | "risks">("overview");
 
   if (!report) return <p className="text-sm text-muted-foreground">No report generated.</p>;
 
@@ -113,6 +118,7 @@ export function OutLicensingStrategyResults({
       <div className="flex gap-1 p-1 bg-[#F8F9FA] rounded-lg overflow-x-auto">
         <ViewTab id="overview" current={view} icon={Award} label="Asset & Overview" onClick={setView} />
         <ViewTab id="regions" current={view} icon={Globe} label="Regional Assessments" onClick={setView} />
+        <ViewTab id="worthiness" current={view} icon={Gauge} label="Market Worthiness" onClick={setView} />
         <ViewTab id="recommendations" current={view} icon={Target} label="Market Priorities" onClick={setView} />
         <ViewTab id="business" current={view} icon={DollarSign} label="Business Case" onClick={setView} />
         <ViewTab id="risks" current={view} icon={AlertTriangle} label="Flaws & Blockers" onClick={setView} />
@@ -121,6 +127,7 @@ export function OutLicensingStrategyResults({
       {/* Content */}
       {view === "overview" && <OverviewView report={report} />}
       {view === "regions" && <RegionsView regions={report.regionalAnalysis || []} />}
+      {view === "worthiness" && <MarketWorthinessView regions={report.regionalAnalysis || []} summary={report.marketWorthinessSummary} />}
       {view === "recommendations" && <RecommendationsView recommendations={report.recommendations || []} />}
       {view === "business" && <CommercialPlanView plan={report.commercialPlan} />}
       {view === "risks" && <RisksView risks={report.portfolioRisks || []} />}
@@ -464,6 +471,136 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{label}</p>
       <p className="text-[12px] font-medium text-[#1A1A2E] mt-0.5">{value || "—"}</p>
+    </div>
+  );
+}
+
+// ─── Market Worthiness View ─────────────────────────────────────────────────
+
+// Purely-commercial worthiness rating → tonal orange/black/white.
+const WORTHINESS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  "Highly Worthy": { bg: "#9A341215", text: "#9A3412", border: "#9A3412" },
+  Worthy: { bg: "#EA580C15", text: "#EA580C", border: "#F97316" },
+  Marginal: { bg: "#6B6B6B15", text: "#6B6B6B", border: "#9A9A9A" },
+  "Not Worthy": { bg: "#14141412", text: "#141414", border: "#C4C4C4" },
+};
+
+function MarketWorthinessView({
+  regions,
+  summary,
+}: {
+  regions: RegionalAnalysis[];
+  summary?: string;
+}) {
+  const scored = regions.filter(r => r.marketWorthiness);
+  if (scored.length === 0) {
+    return <p className="text-sm text-muted-foreground">No market-worthiness assessment generated.</p>;
+  }
+  const sorted = [...scored].sort(
+    (a, b) => (b.marketWorthiness?.score ?? 0) - (a.marketWorthiness?.score ?? 0),
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Cross-market synthesis */}
+      <div className="rounded-xl border border-border/40 border-l-4 bg-[#FFF7ED] p-4" style={{ borderLeftColor: "#F97316" }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Gauge className="h-4 w-4 text-[#C2410C]" />
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#C2410C]">
+            Market Worthiness — commercial verdict
+          </p>
+        </div>
+        <p className="text-[13px] text-[#1A1A2E] leading-relaxed">
+          {summary || "Markets ranked purely on commercial worthiness — the current legal and healthcare landscape, room for partnerships, open distribution channels, market size against competitors, and novel paths to capture value."}
+        </p>
+      </div>
+
+      {sorted.map(region => {
+        const w = region.marketWorthiness!;
+        const c = WORTHINESS_COLORS[w.rating] ?? WORTHINESS_COLORS.Marginal;
+        const score = Math.max(0, Math.min(100, w.score ?? 0));
+        return (
+          <div key={region.region} className="rounded-xl border-2 bg-white overflow-hidden" style={{ borderColor: c.border }}>
+            {/* Header band */}
+            <div className="flex items-center justify-between gap-4 p-5 border-b border-border/30">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-2xl shrink-0">{REGION_FLAGS[region.region] ?? "🌐"}</span>
+                <div className="min-w-0">
+                  <h4 className="text-base font-bold text-[#1A1A2E]">{region.regionLabel}</h4>
+                  {w.thesis && <p className="text-[12px] text-muted-foreground leading-snug">{w.thesis}</p>}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="px-3 py-1 rounded-full text-[11px] font-bold" style={{ backgroundColor: c.bg, color: c.text }}>
+                  {w.rating}
+                </span>
+                <div className="text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Worthiness</p>
+                  <p className="text-2xl font-bold font-mono tracking-tight" style={{ color: c.text }}>{score}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Score bar */}
+            <div className="px-5 pt-4">
+              <div className="h-1.5 rounded-full bg-[#E3E3E3] overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${score}%`, backgroundColor: score >= 70 ? "#C2410C" : score >= 45 ? "#F97316" : "#9A9A9A" }} />
+              </div>
+            </div>
+
+            {/* Landscape grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
+              <WorthinessField icon={HeartPulse} title="Healthcare Landscape" color="#C2410C" value={w.healthcareLandscape} />
+              <WorthinessField icon={Scale} title="Legal Landscape" color="#6B6B6B" value={w.legalLandscape} />
+              <WorthinessField icon={TrendingUp} title="Market Size vs Competitors" color="#141414" value={w.marketSizeVsCompetitors} />
+              <WorthinessField icon={Handshake} title="Room for Partnerships" color="#EA580C" value={w.partnershipRoom} />
+              <WorthinessField icon={Truck} title="Distribution Channels" color="#9A3412" value={w.distributionChannels} />
+              {w.novelPaths?.length > 0 && (
+                <div className="rounded-lg border border-border/30 bg-[#FFF7ED] p-4">
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#F97316]/15">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md" style={{ backgroundColor: "#F9731615", color: "#F97316" }}>
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </div>
+                    <h5 className="text-sm font-bold text-[#1A1A2E]">Novel Paths</h5>
+                  </div>
+                  <ul className="space-y-1.5">
+                    {w.novelPaths.map((p, i) => (
+                      <li key={i} className="text-[12px] text-[#1A1A2E] leading-relaxed flex gap-2">
+                        <span className="text-[#F97316] shrink-0">✦</span>
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WorthinessField({
+  icon: Icon,
+  title,
+  color,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  color: string;
+  value?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border/30 bg-white p-4">
+      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/30">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md" style={{ backgroundColor: `${color}15`, color }}>
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+        <h5 className="text-sm font-bold text-[#1A1A2E]">{title}</h5>
+      </div>
+      <p className="text-[12px] text-[#1A1A2E] leading-relaxed">{value || "—"}</p>
     </div>
   );
 }

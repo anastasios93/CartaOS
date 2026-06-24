@@ -119,7 +119,7 @@ export async function runExecutionPlanAgent(
 
     write({ agent: agentId, type: "status", status: "scraping", message: "Combining diagnosis + strategy outputs..." });
 
-    // Serialize the diagnosis (benchmarking) and strategy (partner + negotiation + termsheet) results
+    // Serialize the diagnosis (benchmarking) and strategy (partner + negotiation) results
     const resultsContext = agentResults.map(r => {
       if (r.agentId === "benchmarking") {
         return `## PILLAR 1 — Diagnosis: Comparable Deals (${r.comparables.length})\n${r.comparables.slice(0, 8).map(c =>
@@ -134,11 +134,6 @@ export async function runExecutionPlanAgent(
       if (r.agentId === "negotiation") {
         return `## PILLAR 2b — Strategy: Leverage Points (${r.leveragePoints.length})\n${r.leveragePoints.slice(0, 6).map(l =>
           `- ${l.term}: Market ${l.marketRange} → Recommend ${l.recommendedPosition} | Leverage: ${l.leverageLevel}`
-        ).join("\n")}`;
-      }
-      if (r.agentId === "termsheet") {
-        return `## PILLAR 2c — Strategy: Term Sheet Clauses (${r.clauses.length})\n${r.clauses.slice(0, 6).map(c =>
-          `- ${c.clause}: ${c.proposedTerm} (${c.flag})`
         ).join("\n")}`;
       }
       return "";

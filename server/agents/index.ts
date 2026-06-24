@@ -14,7 +14,6 @@ export type AgentRunner = (
 export { runBenchmarkingAgent } from "./benchmarking";
 export { runPartnerAgent } from "./partner";
 export { runNegotiationAgent } from "./negotiation";
-export { runTermSheetAgent } from "./termsheet";
 export { runSynthesisAgent } from "./synthesis";
 export { runExecutionPlanAgent } from "./execution-plan";
 export { runOutLicensingStrategyAgent } from "./out-licensing-strategy";
