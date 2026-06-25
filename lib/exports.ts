@@ -451,9 +451,9 @@ export async function exportStrategyReportPDF(
     assetName,
     [
       { label: "Verdict", value: report.verdict ?? "—" },
+      { label: "Archetype", value: report.archetype?.mode ?? "—" },
+      { label: "Verdict confidence", value: report.verdictConfidence ?? report.dataConfidence ?? "—" },
       { label: "Lead market", value: topRegion?.regionLabel ?? "—" },
-      { label: "Peak value", value: topRec?.estimatedValue?.total ?? "—" },
-      { label: "Data confidence", value: report.dataConfidence ?? "—" },
     ],
   );
 
@@ -464,6 +464,27 @@ export async function exportStrategyReportPDF(
     report.opportunityThesis ?? (topRegion ? `${topRegion.regionLabel} presents the strongest market opportunity` : "Opportunity overview"),
   );
   lead(state, report.executiveSummary ?? "");
+
+  // Opportunity framing — the narrow trade vs the client's broad question
+  if (report.opportunityFraming) {
+    const f = report.opportunityFraming;
+    subHeader(state, "Framing — two distinct questions", STRATEGY_COLOR);
+    if (f.narrowVerdict) { tinyLabel(state, "Narrow — off-patent in-license trade"); paragraph(state, f.narrowVerdict); }
+    if (f.broadVerdict) { tinyLabel(state, "Broad — any real market value"); paragraph(state, f.broadVerdict); }
+    if (f.note) paragraph(state, f.note, 9.5, MUTED);
+  }
+  if (report.archetype?.rubricNote) {
+    tinyLabel(state, "Scoring lens (archetype-adjusted)");
+    paragraph(state, report.archetype.rubricNote, 9.5, MUTED);
+  }
+  if (report.whatWouldFlipIt?.length) {
+    subHeader(state, "What would flip the verdict", STRATEGY_COLOR);
+    bullets(state, report.whatWouldFlipIt, STRATEGY_COLOR);
+  }
+  if (report.consideredAndRejected?.length) {
+    subHeader(state, "Considered & rejected (steelman)", INK);
+    bullets(state, report.consideredAndRejected.map(c => `${c.opportunity} — ${c.reason}`), INK);
+  }
 
   // Asset Profile
   if (report.assetProfile) {
@@ -1066,6 +1087,43 @@ export async function exportClientDeck(
         txt(slide,`#${r.priorityRank}  ${r.targetRegion}`, { x: x + 0.2, y: 5.28, w: cw - 0.35, h: 0.35, fontFace: F, fontSize: 14, bold: true, color: P.ink });
         txt(slide,truncate(r.recommendedDealStructure ?? "", 90), { x: x + 0.2, y: 5.6, w: cw - 0.35, h: 0.6, fontFace: F, fontSize: 11, color: P.muted, valign: "top" });
       });
+    }
+  }
+
+  // ─── Framing & calibration (archetype, two-question framing, falsifiers, steelman) ──
+  if (strategy?.archetype || strategy?.opportunityFraming || strategy?.whatWouldFlipIt?.length || strategy?.consideredAndRejected?.length) {
+    const slide = contentSlide(
+      pptx, "Strategy · Framing",
+      strategy?.archetype?.mode ? `Archetype — ${strategy.archetype.mode}` : "Framing & calibration",
+      P.accent, "CartaOS quality framework",
+    );
+    let y = BODY_TOP + 0.1;
+    if (strategy?.archetype?.rubricNote) {
+      slide.addShape("rect", { x: MX, y, w: MW, h: 0.62, fill: { color: P.calloutBg }, line: { type: "none" } });
+      slide.addShape("rect", { x: MX, y, w: 0.07, h: 0.62, fill: { color: P.accent } });
+      txt(slide, [
+        { text: "SCORING LENS   ", options: { fontSize: 9, bold: true, color: P.accent2, charSpacing: 1 } },
+        { text: strategy.archetype.rubricNote, options: { fontSize: 10.5, color: P.ink } },
+      ], { x: MX + 0.25, y: y + 0.04, w: MW - 0.45, h: 0.54, fontFace: F, valign: "middle" });
+      y += 0.82;
+    }
+    const f = strategy?.opportunityFraming;
+    if (f) {
+      txt(slide, "NARROW — off-patent in-license trade", { x: MX, y, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
+      txt(slide, "BROAD — any real market value", { x: COL_R, y, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
+      txt(slide, truncate(f.narrowVerdict ?? "—", 320), { x: MX, y: y + 0.3, w: HALF - 0.2, h: 1.2, fontFace: F, fontSize: 10.5, color: P.ink, valign: "top", lineSpacingMultiple: 1.1 });
+      txt(slide, truncate(f.broadVerdict ?? "—", 320), { x: COL_R, y: y + 0.3, w: HALF - 0.2, h: 1.2, fontFace: F, fontSize: 10.5, bold: true, color: P.ink, valign: "top", lineSpacingMultiple: 1.1 });
+      y += 1.7;
+    }
+    if (strategy?.whatWouldFlipIt?.length) {
+      txt(slide, "WHAT WOULD FLIP THE VERDICT", { x: MX, y, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
+      txt(slide, strategy.whatWouldFlipIt.slice(0, 4).map(t => ({ text: truncate(t, 150), options: { bullet: { code: "2022" }, fontSize: 10, color: P.ink } })),
+        { x: MX, y: y + 0.3, w: HALF - 0.2, h: 1.6, fontFace: F, valign: "top", paraSpaceAfter: 3 });
+    }
+    if (strategy?.consideredAndRejected?.length) {
+      txt(slide, "CONSIDERED & REJECTED", { x: COL_R, y, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.ink, charSpacing: 1 });
+      txt(slide, strategy.consideredAndRejected.slice(0, 4).map(c => ({ text: truncate(`${c.opportunity} — ${c.reason}`, 150), options: { bullet: { code: "2022" }, fontSize: 10, color: P.ink } })),
+        { x: COL_R, y: y + 0.3, w: HALF - 0.2, h: 1.6, fontFace: F, valign: "top", paraSpaceAfter: 3 });
     }
   }
 

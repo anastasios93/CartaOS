@@ -79,6 +79,36 @@ export interface OutLicensingReport {
   verdict?: "Go" | "Conditional Go" | "No-Go";
   /** One-sentence so-what: where the opportunity is strongest and the biggest blocker. */
   opportunityThesis?: string;
+  /** Priority 1 — value-capture archetype the asset was classified into, which
+   *  selects the scoring rubric (so a long-off-patent commodity isn't measured
+   *  against an exclusivity rubric it can only fail). */
+  archetype?: {
+    mode:
+      | "Novel patented asset"
+      | "LoE-timing play"
+      | "Off-patent reformulation / hybrid"
+      | "Off-patent commodity supply"
+      | "Lifecycle management / repositioning"
+      | "Cash-pay / consumer-health";
+    rationale: string;
+    /** How the rubric was adapted (e.g. exclusivity down-weighted, channel/galenic up-weighted). */
+    rubricNote: string;
+  };
+  /** Priority 1 / §0 — never conflate the two questions: the narrow off-patent
+   *  in-license trade vs the client's actual broad "is there ANY value here?". */
+  opportunityFraming?: {
+    narrowVerdict: string;
+    broadVerdict: string;
+    note: string;
+  };
+  /** Priority 6 — confidence in the VERDICT (distinct from dataConfidence, which
+   *  rates the evidence base). */
+  verdictConfidence?: "High" | "Medium" | "Low";
+  /** Priority 6 — the specific evidence that would flip the verdict (falsifiability). */
+  whatWouldFlipIt?: string[];
+  /** Priority 5 — adversarial steelman: the strongest opportunities CONSIDERED
+   *  and explicitly rejected, with the reason. */
+  consideredAndRejected?: { opportunity: string; reason: string }[];
   executiveSummary: string;
   assetProfile: AssetProfile;
   regionalAnalysis: RegionalAnalysis[];
@@ -123,7 +153,18 @@ export interface AssetProfile {
   currentMarkets: string[];
   keyStrengths: string[];
   keyChallenges: string[];
-  keyDataPoints: { label: string; value: string; source: string }[];
+  /** Priority 2 — each load-bearing fact carries source + reliability tier.
+   *  tier: "Tier 1" primary regulator/peer-reviewed/official stats; "Tier 2"
+   *  reputable secondary; "Tier 3" convenient-but-unreliable (e.g. ChEMBL/Orange
+   *  Book "first approval" dates for legacy molecules). basis distinguishes an
+   *  evidence-based finding from a prior-based inference. */
+  keyDataPoints: {
+    label: string;
+    value: string;
+    source: string;
+    tier?: "Tier 1" | "Tier 2" | "Tier 3";
+    basis?: "evidence" | "inference";
+  }[];
 }
 
 export interface RegionalAnalysis {
@@ -174,6 +215,10 @@ export interface RegionalAnalysis {
     complexity: "Low" | "Moderate" | "High";
     notes: string;
   };
+  /** Priority 2 — sanity-check flags for this market: contradictions or shaky
+   *  facts surfaced (not smoothed over), e.g. a Tier-3 first-approval date that
+   *  conflicts with documented clinical history, or a channel mischaracterisation. */
+  provenanceFlags?: string[];
   /** Synthesised investment thesis for this region — the rational value
    *  proposition, exactly where a profitable business case sits, the economics,
    *  and the per-region call. Pulls together all six vectors. */

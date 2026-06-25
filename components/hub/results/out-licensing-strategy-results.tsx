@@ -21,6 +21,10 @@ import {
   Handshake,
   Truck,
   Sparkles,
+  Layers,
+  Swords,
+  Flag,
+  FileSearch,
 } from "lucide-react";
 
 const REGION_FLAGS: Record<string, string> = {
@@ -86,15 +90,22 @@ export function OutLicensingStrategyResults({
             <Globe className="h-6 w-6" />
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-1.5">
-              <h3 className="text-lg font-bold text-[#1A1A2E]">Market Opportunity Assessment</h3>
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              <h3 className="text-lg font-bold text-[#1A1A2E] mr-1">Market Opportunity Assessment</h3>
+              {report.archetype?.mode && <ArchetypeBadge mode={report.archetype.mode} />}
               {report.verdict && <VerdictBadge verdict={report.verdict} />}
+              {report.verdictConfidence && <VerdictConfidenceBadge confidence={report.verdictConfidence} />}
               <ConfidenceBadge confidence={report.dataConfidence} />
             </div>
             {report.opportunityThesis && (
               <p className="text-[13px] font-semibold text-[#1A1A2E] leading-relaxed mb-1.5">{report.opportunityThesis}</p>
             )}
             <p className="text-[13px] text-muted-foreground leading-relaxed">{report.executiveSummary}</p>
+            {report.archetype?.rubricNote && (
+              <p className="text-[11px] text-muted-foreground/80 leading-relaxed mt-1.5 italic">
+                Scoring lens: {report.archetype.rubricNote}
+              </p>
+            )}
           </div>
         </div>
 
@@ -149,6 +160,37 @@ function ConfidenceBadge({ confidence }: { confidence: string }) {
     >
       <CheckCircle2 className="h-2.5 w-2.5" />
       {confidence} Confidence
+    </span>
+  );
+}
+
+function ArchetypeBadge({ mode }: { mode: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border"
+      style={{ backgroundColor: "#FFF7ED", color: "#9A3412", borderColor: "#F9731633" }}
+      title="Value-capture archetype — selects the scoring rubric"
+    >
+      <Layers className="h-2.5 w-2.5" />
+      {mode}
+    </span>
+  );
+}
+
+function VerdictConfidenceBadge({ confidence }: { confidence: "High" | "Medium" | "Low" }) {
+  const colors: Record<string, { bg: string; text: string }> = {
+    High: { bg: "#C2410C18", text: "#9A3412" },
+    Medium: { bg: "#F9731618", text: "#C2410C" },
+    Low: { bg: "#6B6B6B18", text: "#6B6B6B" },
+  };
+  const c = colors[confidence] ?? colors.Medium;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+      style={{ backgroundColor: c.bg, color: c.text }}
+      title="Confidence in the verdict (distinct from evidence-base confidence)"
+    >
+      Verdict: {confidence}
     </span>
   );
 }
@@ -369,6 +411,67 @@ function OverviewView({ report }: { report: any }) {
 
   return (
     <div className="space-y-4">
+      {/* Verdict framing — narrow trade vs the client's broad question */}
+      {report.opportunityFraming && (
+        <div className="rounded-xl border border-border/40 bg-white overflow-hidden">
+          <div className="px-5 py-3 border-b border-border/30 flex items-center gap-2">
+            <Flag className="h-4 w-4 text-[#C2410C]" />
+            <h5 className="text-sm font-bold text-[#1A1A2E]">Two Questions — Framing the Verdict</h5>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/30">
+            <div className="p-4">
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">Narrow — off-patent in-license trade</p>
+              <p className="text-[12px] text-[#1A1A2E] leading-relaxed">{report.opportunityFraming.narrowVerdict || "—"}</p>
+            </div>
+            <div className="p-4 bg-[#FFF7ED]/50">
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-[#C2410C] mb-1">Broad — any real market value?</p>
+              <p className="text-[12px] text-[#1A1A2E] leading-relaxed font-medium">{report.opportunityFraming.broadVerdict || "—"}</p>
+            </div>
+          </div>
+          {report.opportunityFraming.note && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed px-5 pb-3 pt-2">{report.opportunityFraming.note}</p>
+          )}
+        </div>
+      )}
+
+      {/* Calibration + steelman */}
+      {(report.whatWouldFlipIt?.length > 0 || report.consideredAndRejected?.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {report.whatWouldFlipIt?.length > 0 && (
+            <div className="rounded-xl border border-border/40 bg-white p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <FileSearch className="h-4 w-4 text-[#C2410C]" />
+                <h5 className="text-sm font-bold text-[#1A1A2E]">What Would Flip the Verdict</h5>
+              </div>
+              <ul className="space-y-2">
+                {report.whatWouldFlipIt.map((f: string, i: number) => (
+                  <li key={i} className="text-[12px] text-[#1A1A2E] leading-relaxed flex gap-2">
+                    <span className="text-[#C2410C] shrink-0">⤳</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {report.consideredAndRejected?.length > 0 && (
+            <div className="rounded-xl border border-border/40 bg-[#F7F6F4] p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Swords className="h-4 w-4 text-[#141414]" />
+                <h5 className="text-sm font-bold text-[#141414]">Considered & Rejected</h5>
+              </div>
+              <ul className="space-y-2.5">
+                {report.consideredAndRejected.map((c: { opportunity: string; reason: string }, i: number) => (
+                  <li key={i} className="text-[12px] leading-relaxed">
+                    <span className="font-semibold text-[#1A1A2E]">{c.opportunity}</span>
+                    <span className="text-muted-foreground"> — {c.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Asset profile card */}
       <div className="rounded-xl border border-border/40 bg-white p-5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -439,9 +542,15 @@ function OverviewView({ report }: { report: any }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {profile.keyDataPoints.map((dp: any, i: number) => (
               <div key={i} className="rounded-lg bg-[#FAFAFA] p-3 border border-border/30">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{dp.label}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{dp.label}</p>
+                  {dp.tier && <TierChip tier={dp.tier} />}
+                </div>
                 <p className="text-[14px] font-bold text-[#1A1A2E] font-mono mt-1">{dp.value}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Source: {dp.source}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Source: {dp.source}
+                  {dp.basis === "inference" && <span className="italic text-muted-foreground/80"> · inferred</span>}
+                </p>
               </div>
             ))}
           </div>
@@ -472,6 +581,26 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{label}</p>
       <p className="text-[12px] font-medium text-[#1A1A2E] mt-0.5">{value || "—"}</p>
     </div>
+  );
+}
+
+// Provenance reliability tier (Priority 2) — Tier 1 strongest, Tier 3 = convenient
+// but unreliable for the use (e.g. legacy "first approval" date fields).
+function TierChip({ tier }: { tier: "Tier 1" | "Tier 2" | "Tier 3" }) {
+  const map: Record<string, { bg: string; text: string }> = {
+    "Tier 1": { bg: "#C2410C18", text: "#9A3412" },
+    "Tier 2": { bg: "#6B6B6B18", text: "#6B6B6B" },
+    "Tier 3": { bg: "#14141412", text: "#141414" },
+  };
+  const c = map[tier] ?? map["Tier 2"];
+  return (
+    <span
+      className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+      style={{ backgroundColor: c.bg, color: c.text }}
+      title={tier === "Tier 3" ? "Convenient but unreliable for this use — verify independently" : "Reliability tier"}
+    >
+      {tier}
+    </span>
   );
 }
 
@@ -654,6 +783,22 @@ function RegionsView({ regions }: { regions: RegionalAnalysis[] }) {
             {/* Expanded six-vector assessment */}
             {isExpanded && (
               <div className="border-t border-border/30 p-5 space-y-4">
+                {region.provenanceFlags && region.provenanceFlags.length > 0 && (
+                  <div className="rounded-lg border border-[#141414]/15 bg-[#F7F6F4] p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Flag className="h-3.5 w-3.5 text-[#141414]" />
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#141414]">Provenance Flags — verify before relying</p>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {region.provenanceFlags.map((f, i) => (
+                        <li key={i} className="text-[11px] text-[#1A1A2E] leading-relaxed flex gap-2">
+                          <span className="text-[#141414] shrink-0">⚑</span>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {region.businessCase && <RegionBusinessCase bc={region.businessCase} />}
                 {region.cos && <CosBreakdown cos={region.cos} />}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

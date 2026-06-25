@@ -38,7 +38,22 @@ Return ONLY valid JSON with this exact structure:
 {
   "verdict": "Go | Conditional Go | No-Go",
   "opportunityThesis": "One sentence: the sharpest capture wedge — which compound, which geography, and the single biggest blocker.",
-  "executiveSummary": "2-3 flowing paragraphs in a CartaOS partner's voice: the off-patent opportunity, the lead compound x geography, the value-capture logic, and the decisive risks.",
+  "archetype": {
+    "mode": "Novel patented asset | LoE-timing play | Off-patent reformulation / hybrid | Off-patent commodity supply | Lifecycle management / repositioning | Cash-pay / consumer-health",
+    "rationale": "Why the asset classifies here — the evidence (LoE distance, formulation/route, channel) that fixes the value-capture mode.",
+    "rubricNote": "How scoring was adapted to the archetype — e.g. 'LoE >10y past: exclusivity/IP dimensions down-weighted; reformulation, channel and galenic/supply dimensions up-weighted.'"
+  },
+  "opportunityFraming": {
+    "narrowVerdict": "The answer to the NARROW question — is there an off-patent in-license / origination TRADE? (often the weak one)",
+    "broadVerdict": "The answer to the client's ACTUAL broad question — is there ANY real market value / business opportunity (reformulation, cash-pay, supplement, repositioning)?",
+    "note": "One line reconciling the two so a flat narrow No-Go is never mistaken for 'no opportunity exists'."
+  },
+  "verdictConfidence": "High | Medium | Low",
+  "whatWouldFlipIt": ["The SPECIFIC evidence that would change the verdict — falsifiable, e.g. 'German cash-pay procaine volume exceeds EUR Xm' or 'a 505(b)(2)/Article 10(3) route clears reference pricing'"],
+  "consideredAndRejected": [
+    { "opportunity": "A credible angle you steelmanned (e.g. 'DACH cash-pay procaine via IGeL/Neuraltherapie')", "reason": "Why it was ultimately excluded — concrete, not dismissive" }
+  ],
+  "executiveSummary": "2-3 flowing paragraphs in a CartaOS partner's voice: the off-patent opportunity, the lead compound x geography, the value-capture logic, and the decisive risks. Answer the BROAD question, not only the narrow trade.",
   "assetProfile": {
     "name": "Compound, or 'Portfolio: A, B, C' when several are assessed",
     "description": "Classification (commodity generic / complex-specialty / biosimilar), originator brand, mechanism, dosage forms/routes, value proposition",
@@ -50,8 +65,8 @@ Return ONLY valid JSON with this exact structure:
     "keyStrengths": ["3-5: capture wedge, barriers protecting margin, supply security"],
     "keyChallenges": ["3-5: erosion, crowding, comparability, timing"],
     "keyDataPoints": [
-      {"label": "EU LoE / SPC expiry", "value": "2027", "source": "EPO INPADOC / patent register"},
-      {"label": "Originator EU revenue", "value": "~EUR 1.2B", "source": "originator annual report"}
+      {"label": "EU LoE / SPC expiry", "value": "2027", "source": "EPO INPADOC / patent register", "tier": "Tier 1", "basis": "evidence"},
+      {"label": "Originator EU revenue", "value": "~EUR 1.2B", "source": "originator annual report", "tier": "Tier 2", "basis": "evidence"}
     ]
   },
   "regionalAnalysis": [
@@ -61,11 +76,12 @@ Return ONLY valid JSON with this exact structure:
       "attractiveness": "Very High|High|Medium|Low",
       "attractivenessScore": 82,
       "cos": { "marketSize": 80, "regulatory": 78, "ip": 72, "marketAccess": 70, "competition": 55 },
-      "market": { "sizeUSD": "post-LoE pool, e.g. $X", "growthRate": "erosion curve assumed", "drivers": ["demand, tender, unmet supply"], "barriers": ["price/volume erosion, oversupply"], "unmetNeed": "TAM -> SAM -> SOM with the arithmetic" },
+      "market": { "sizeUSD": "post-LoE pool with the CHANNEL it measures stated (e.g. '$X retail Part D' vs '$Y hospital Part B / tender') — the figure must match the recommended go-to-market", "growthRate": "erosion curve assumed", "drivers": ["demand, tender, unmet supply"], "barriers": ["price/volume erosion, oversupply"], "unmetNeed": "TAM -> SAM -> SOM on CONSISTENT channel definitions" },
       "legal": { "regulatoryAuthority": "FDA", "pathway": "ANDA / 505(b)(2) / biosimilar (BPCIA)", "estimatedTimeline": "time-to-launch", "exclusivityOpportunities": ["window opens YYYY — LoE/SPC/data-exclusivity basis"], "barriers": ["paragraph IV / SPC litigation, comparability"] },
       "commercial": { "competitorActivity": "filer count & competitive intensity (ANDA / EU MA / biosimilar applicants)", "pricingDynamics": "erosion + tender/payer dynamics", "reimbursementLandscape": "channel access & tender mechanics", "keyPartnerCandidates": ["named API/CDMO/MAH/EU-buyer/supply-side partners"], "distributionChannels": "retail / hospital-tender / specialty" },
       "ip": { "patentStrength": "Strong|Moderate|Weak", "ftoStatus": "Clear|Some Risk|Significant Risk", "expirationRisks": ["secondary patents, SPC, formulation patents"], "opportunities": ["505(b)(2) / device / interchangeability angle"], "estimatedExclusivityYears": 8 },
       "manufacturing": { "complexity": "Low|Moderate|High", "notes": "API source & concentration risk, CDMO capability, comparability burden" },
+      "provenanceFlags": ["Sanity-check flags for THIS market — contradictions surfaced not smoothed: a Tier-3 first-approval date conflicting with documented clinical history, an originator/holder conflict across sources, a channel mischaracterisation, or a regulatory-mechanism mismatch. Empty array if none."],
       "marketWorthiness": {
         "rating": "Highly Worthy | Worthy | Marginal | Not Worthy",
         "score": 76,
@@ -121,9 +137,15 @@ CRITICAL RULES:
 8. Write as a finished CartaOS client report — flowing, natural, decisive prose, attributed to CartaOS where natural. Lead with the answer.
 9. For EVERY region, populate businessCase — synthesise ALL six vectors into a clear, rational value proposition and state EXACTLY where (and how) a profitable business case can be made, or why it cannot, with the concrete economics (capturable SOM, margin, the investment/erosion it must beat) and a per-region Pursue / Watch / Pass call. This is the so-what a BD principal acts on; make it specific, not generic.
 10. For EVERY region, populate marketWorthiness — a PURELY commercial / market-facing read on whether the geography is worth entering, judged against its CURRENT legal AND healthcare landscape. This is distinct from businessCase (the investment thesis): here you (a) describe the live healthcare landscape (health-system / payer model, funding pressure, infrastructure, demand) and the live legal/commercial landscape (pricing & procurement law, tender/substitution rules, IP-enforcement climate, exclusivity regime); (b) judge whether there is ROOM to establish partnerships and name credible counterparties; (c) state which distribution channels are open and reachable; (d) size the market AGAINST the competitive field (worthiness = size-per-competitor, not gross size); and (e) surface 2-4 NOVEL paths to capture it. Set rating + a 0–100 score consistently. Then write marketWorthinessSummary naming the worthiest and least-worthy markets. Ground every landscape, partner, channel and sizing claim in the evidence base and the named real systems (AMNOG/HAS/AIFA/AEMPS, US PBM+Medicare/Medicaid, Japan NHI, China NRDL/VBP, India trade) — never generic.
-11. Populate commercialPlan — the consolidated business case. Cover EVERY relevant commercial channel (retail pharmacy, hospital & tender, specialty, mail-order, trade / branded generics, wholesale distribution) across the target geographies, stating where the value sits, the exact access mechanics (tender cycles, PBM/formulary, AMNOG/HAS, NRDL/VBP, Japan NHI, India trade) and named players where known. Then give a clear, sequenced "how to proceed" plan: step → action → geography → build/partner/in-license → timing vs the window → owner. Ground every channel, pricing and access claim in the evidence base (CMS spend, HTA bodies, NRDL/VBP, NHI, tender data, originator filings) — never generic.
+11. Populate commercialPlan — the consolidated business case. Cover EVERY relevant commercial channel (retail pharmacy, hospital & tender, specialty, mail-order, trade / branded generics, wholesale distribution, AND the cash-pay / self-pay, supplement, hybrid/reformulation and compounding channels per the channel-completeness map) across the target geographies, stating where the value sits, the exact access mechanics (tender cycles, PBM/formulary, Festbeträge §35 + Rabattverträge §130a for off-patent DE, HAS, NRDL/VBP, Japan NHI, India trade) and named players where known. Then give a clear, sequenced "how to proceed" plan: step → action → geography → build/partner/in-license → timing vs the window → owner. Ground every channel, pricing and access claim in the evidence base — never generic.
+12. ARCHETYPE FIRST (Priority 1). Classify the asset into the value-capture archetype BEFORE scoring and populate archetype. When LoE is more than ~10 years past, DOWN-WEIGHT exclusivity/IP dimensions and UP-WEIGHT reformulation, channel and galenic/supply dimensions — do not measure an empty dimension and then declare the opportunity dead. Map the verdict to the archetype.
+13. ANSWER THE BROAD QUESTION (Priority 1 / framing). Populate opportunityFraming: never collapse the client's broad "is there ANY value here?" into the narrow "is there an off-patent in-license trade?". A long-off-patent portfolio is typically No-Go as an in-license but Conditional as a reformulation / cash-channel play — say that, don't emit a flat No-Go implying no opportunity exists.
+14. PROVENANCE & SANITY (Priority 2). Tier load-bearing keyDataPoints (Tier 1/2/3) and mark basis evidence vs inference. Treat ChEMBL / Orange-Book "first approval" dates for legacy molecules as Tier 3 — never as fact (procaine/Novocain ~1905 not 1948; B12 clinical early-1950s not 1982). Cross-check approval history / originator / mechanism and surface contradictions in provenanceFlags rather than smoothing them. Mark prior-based inference explicitly in the prose; never launder reasoning-from-absence into sourced-sounding findings.
+15. NO CATEGORY ERRORS (Priority 3). Type every regulatory/access mechanism correctly per drug class from the per-jurisdiction reference — for OFF-PATENT generics use Festbeträge §35 + Rabattverträge §130a (NOT AMNOG §35a, which governs new patented actives), 505(b)(2)/Article 10(3) for hybrids, NRDL+VBP for China. Actively check the cash-pay/IGeL, supplement, hybrid and compounding channels for every geography.
+16. NUMBER-TO-THESIS (Priority 4). Every market-size figure states the channel it measures, and that channel must match the recommended go-to-market — never anchor a hospital-injectable thesis on a retail Part D figure. Keep TAM → SAM → SOM on consistent channels.
+17. CALIBRATE + STEELMAN (Priorities 5 & 6). Set verdictConfidence honestly and list whatWouldFlipIt (specific, falsifiable). Populate consideredAndRejected — the strongest opportunity you steelmanned and why you excluded it. Where country sections are the same template reasoned from priors, say so once rather than implying independent assessments.
 
-This is a CartaOS in-license / originate / pass decision. Be rigorous, honest and client-ready.`;
+This is a CartaOS in-license / originate / pass decision. Be rigorous, honest, calibrated and client-ready — it must withstand inspection by the most experienced pharma BD executive.`;
 
 // To keep the headline assessment fast, the per-region analysis is generated in
 // parallel shards while the cross-market synthesis runs concurrently. These two
@@ -133,12 +155,12 @@ const REGION_DIRECTIVE = `
 OUTPUT MODE — REGIONAL ANALYSIS ONLY.
 For THIS call you assess ONLY the geographies named in the user message. Return ONLY valid JSON of the form:
 { "regionalAnalysis": [ /* one entry per named geography, in the SAME order */ ] }
-Each entry must be FULLY populated exactly as specified above — all six vectors, the cos sub-scores, manufacturing, marketWorthiness AND businessCase — using the exact region codes and labels given. Do NOT output verdict, opportunityThesis, executiveSummary, assetProfile, recommendations, portfolioRisks, commercialPlan, marketWorthinessSummary, dataConfidence or sourcesUsed in this call — those are produced separately. Apply every CRITICAL RULE that concerns a region (individual national markets, cos consistency, post-LoE pool arithmetic, real names/dates, and a populated businessCase AND marketWorthiness for every region).`;
+Each entry must be FULLY populated exactly as specified above — all six vectors, the cos sub-scores, manufacturing, provenanceFlags, marketWorthiness AND businessCase — using the exact region codes and labels given. Do NOT output verdict, opportunityThesis, archetype, opportunityFraming, verdictConfidence, whatWouldFlipIt, consideredAndRejected, executiveSummary, assetProfile, recommendations, portfolioRisks, commercialPlan, marketWorthinessSummary, dataConfidence or sourcesUsed in this call — those are produced separately. Apply every CRITICAL RULE that concerns a region: individual national markets; cos consistency; post-LoE pool arithmetic; REAL legacy dates (never a Tier-3 ChEMBL/Orange-Book "first approval" date presented as fact); CORRECT regulatory mechanisms per the per-jurisdiction reference (off-patent DE = Festbeträge §35 + Rabattverträge §130a, NOT AMNOG); the full channel-completeness check INCLUDING cash-pay/IGeL, supplement, hybrid (505(b)(2)/Article 10(3)) and compounding; market.sizeUSD stating its channel and matching the GTM; surfacing contradictions in provenanceFlags; and a populated businessCase AND marketWorthiness for every region.`;
 
 const WRAPPER_DIRECTIVE = `
 
 OUTPUT MODE — SYNTHESIS ONLY (the per-region analysis is produced separately and merged in).
-Return ONLY valid JSON with EXACTLY these top-level keys: "verdict", "opportunityThesis", "executiveSummary", "assetProfile", "recommendations", "portfolioRisks", "commercialPlan", "marketWorthinessSummary", "dataConfidence", "sourcesUsed". DO NOT output a "regionalAnalysis" key at all. Your recommendations, risks, commercialPlan and summaries must span the FULL geography set named in the user message (refer to those markets by name). Apply every CRITICAL RULE that concerns the cross-market synthesis (verdict mapping, ranking compounds, kill criteria, real names/dates, McKinsey voice, no bracket tags).`;
+Return ONLY valid JSON with EXACTLY these top-level keys: "verdict", "opportunityThesis", "archetype", "opportunityFraming", "verdictConfidence", "whatWouldFlipIt", "consideredAndRejected", "executiveSummary", "assetProfile", "recommendations", "portfolioRisks", "commercialPlan", "marketWorthinessSummary", "dataConfidence", "sourcesUsed". DO NOT output a "regionalAnalysis" key at all. Your recommendations, risks, commercialPlan and summaries must span the FULL geography set named in the user message (refer to those markets by name). Apply every CRITICAL RULE that concerns the cross-market synthesis: classify the ARCHETYPE first and adapt the rubric (down-weight exclusivity when LoE >10y past); answer the BROAD question in opportunityFraming, not only the narrow trade; tier load-bearing keyDataPoints (Tier 1/2/3, basis evidence vs inference — legacy "first approval" dates are Tier 3); set verdictConfidence and list specific falsifiers in whatWouldFlipIt; populate consideredAndRejected (steelman); rank compounds; state kill criteria; correct regulatory mechanisms (no AMNOG on generics); real names/dates; McKinsey voice; no bracket tags.`;
 
 // Deterministic expansion of the intake geographies into the individual national
 // markets the assessment covers (EU → DE/FR/IT/ES; India corridor always added).
@@ -283,7 +305,7 @@ Return ONLY {"regionalAnalysis":[...]} for the geographies above — one fully-p
     // the prior diagnostic-agent context so recommendations stay grounded.
     const wrapperCall = anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 7000,
+      max_tokens: 9000,
       system: withGrounding(STRATEGY_PROMPT + WRAPPER_DIRECTIVE),
       messages: [{
         role: "user",
@@ -298,7 +320,7 @@ ${evidenceBlock}
 
 ---
 
-Produce the SYNTHESIS ONLY (NO regionalAnalysis key): verdict, opportunityThesis, executive summary, asset profile, prioritised recommendations across the full geography set above, kill-criteria portfolioRisks, the consolidated commercialPlan, the marketWorthinessSummary, dataConfidence and sourcesUsed. If more than one compound is supplied, rank them. Write it as a finished, client-ready CartaOS report in natural prose — never use bracket tags.`,
+Produce the SYNTHESIS ONLY (NO regionalAnalysis key): classify the archetype and adapt the rubric; the verdict mapped to it with verdictConfidence and falsifiable whatWouldFlipIt; opportunityThesis; opportunityFraming answering BOTH the narrow off-patent-trade question and the client's broad "is there any value here?" question; the adversarial consideredAndRejected steelman; executive summary; asset profile with tiered keyDataPoints (evidence vs inference); prioritised recommendations across the full geography set above; kill-criteria portfolioRisks; the consolidated commercialPlan (covering cash-pay/hybrid/supplement/compounding channels with correctly-typed mechanisms — no AMNOG on generics); the marketWorthinessSummary; dataConfidence and sourcesUsed. If more than one compound is supplied, rank them. Write it as a finished, client-ready CartaOS report in natural prose — never use bracket tags.`,
       }],
     }).then(res => {
       const text = res.content.find(b => b.type === "text")?.text ?? "";
@@ -321,6 +343,11 @@ Produce the SYNTHESIS ONLY (NO regionalAnalysis key): verdict, opportunityThesis
     const report: OutLicensingReport = {
       verdict: wrapper?.verdict,
       opportunityThesis: wrapper?.opportunityThesis,
+      archetype: wrapper?.archetype,
+      opportunityFraming: wrapper?.opportunityFraming,
+      verdictConfidence: wrapper?.verdictConfidence,
+      whatWouldFlipIt: wrapper?.whatWouldFlipIt,
+      consideredAndRejected: wrapper?.consideredAndRejected,
       executiveSummary: wrapper?.executiveSummary ?? "",
       assetProfile: wrapper?.assetProfile ?? {
         name: compounds.join(", ") || intake.assetName,
