@@ -119,6 +119,9 @@ export interface OutLicensingReport {
    *  commercial grounds (legal + healthcare landscape, partnerships, channels,
    *  competitive sizing, novel paths). */
   marketWorthinessSummary?: string;
+  /** The ten-lever value-maximisation scan — where residual/incremental value
+   *  leaks out of an already-approved, off-patent medicine and how to plug it. */
+  valueLevers?: ValueLever[];
   /** Consolidated business case — every commercial channel across geographies
    *  (with how to win each) and the sequenced go-to-market plan ("how to proceed"). */
   commercialPlan?: {
@@ -141,6 +144,40 @@ export interface OutLicensingReport {
   };
   dataConfidence: "High" | "Medium" | "Low";
   sourcesUsed: string[];
+}
+
+/** One of the ten value levers through which an already-approved, off-patent
+ *  medicine leaks (or can recapture) commercial value. Scored 0–100 with an
+ *  honest confidence; a low score with a stated data gap is preferred over a
+ *  confident guess — the engine's credibility dies on false positives. */
+export type ValueLeverType =
+  | "Geographic expansion"
+  | "Indication expansion / repurposing"
+  | "Distribution channels"
+  | "Formulary positioning"
+  | "Administration / formulation"
+  | "Reimbursement / pricing"
+  | "Sales-force effectiveness"
+  | "Lifecycle / IP defense"
+  | "Supply / COGS arbitrage"
+  | "Portfolio synergy";
+
+export interface ValueLever {
+  lever: ValueLeverType;
+  /** 0–100 opportunity score for this lever. */
+  score: number;
+  confidence: "High" | "Medium" | "Low";
+  /** What we found, and where it came from (named source). */
+  evidence: { finding: string; source: string }[];
+  /** Concrete, quantified plays that capture the value. */
+  recommendedActions: string[];
+  /** e.g. "EUR 2-4M incremental net revenue over 3 years" — honest ranges, not false precision. */
+  estValueRange: string;
+  /** What is missing to raise confidence. Empty when the lever is well evidenced. */
+  dataGap?: string;
+  /** True when the evidence base cannot compute this lever for the chosen market —
+   *  shown greyed out rather than faked. */
+  notComputable?: boolean;
 }
 
 export interface AssetProfile {

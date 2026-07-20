@@ -103,10 +103,10 @@ export default function SimulatedPlanPage() {
           </Link>
           <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E] flex items-center gap-2">
             <Globe className="h-6 w-6 text-[#F97316]" />
-            Market Opportunity Assessment
+            Off-Patent Value Assessment
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Live go/no-go opportunity assessment per geography — regulatory, IP, market & epidemiology, access, competition & manufacturing, with a Commercial Opportunity Score
+            Find the residual and incremental value in an already-approved, off-patent medicine — scanned across ten value levers and scored per geography
           </p>
         </div>
         {submitted && (
@@ -126,11 +126,13 @@ export default function SimulatedPlanPage() {
                 <Globe className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-[#1A1A2E]">How the Market Opportunity Assessment works</h3>
+                <h3 className="text-base font-bold text-[#1A1A2E]">How the Off-Patent Value Assessment works</h3>
                 <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
-                  Provide an asset, compound, or company and the AI agents pull live data from authoritative global regulatory,
-                  clinical, IP and commercial sources (openFDA · ClinicalTrials.gov · Orange &amp; Purple Book · EMA · CTIS · NMPA/CDE · PMDA · Health Canada · SEC EDGAR · The Lens · WHO ICTRP),
-                  then score each major market on regulatory feasibility, IP &amp; exclusivity, market size &amp; epidemiology, access &amp; pricing, competitive density and manufacturing — producing a Commercial Opportunity Score and a board-level go/no-go verdict.
+                  A mature brand or generic is not a dead asset — value leaks out through un-entered geographies, untapped indications,
+                  mis-positioned channels, sub-optimal formulary tiers, dated formulations and leaky gross-to-net. Provide an
+                  already-approved compound or portfolio and the AI agents pull live data from authoritative global regulatory,
+                  clinical, IP and commercial sources (openFDA · DailyMed · ClinicalTrials.gov · Orange &amp; Purple Book · EMA · CMS pricing &amp; formulary · WHO nEML · SEC EDGAR · The Lens),
+                  scan all ten value levers, and score each market — producing quantified plays to maximise what the asset is still worth.
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
                   <DimensionPreview emoji="📈" label="Market & Epi" desc="Size, growth, incidence/prevalence, unmet need" color="#141414" />

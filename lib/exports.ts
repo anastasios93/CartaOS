@@ -437,7 +437,7 @@ export async function exportStrategyReportPDF(
   assetName: string,
 ) {
   const { jsPDF, autoTable } = await loadPdfDeps();
-  const state = newPdf(jsPDF, "Market Opportunity Assessment", assetName, STRATEGY_COLOR);
+  const state = newPdf(jsPDF, "Off-Patent Value Assessment", assetName, STRATEGY_COLOR);
 
   const regions = report.regionalAnalysis ?? [];
   const topRegion = regions.slice().sort((a, b) => (b.attractivenessScore ?? 0) - (a.attractivenessScore ?? 0))[0];
@@ -445,9 +445,9 @@ export async function exportStrategyReportPDF(
 
   coverPage(
     state,
-    "Market Opportunity Assessment",
-    "Global Drug Opportunity Assessment",
-    "Six-vector opportunity scoring across the US, EU-4 (DE/FR/IT/ES), Japan, China & ROW",
+    "Off-Patent Value Assessment",
+    "Maximising the value of an already-approved medicine",
+    "Ten-lever value scan and six-vector market scoring across the US, EU-4 (DE/FR/IT/ES), Japan, China & ROW",
     assetName,
     [
       { label: "Verdict", value: report.verdict ?? "—" },
@@ -457,11 +457,19 @@ export async function exportStrategyReportPDF(
     ],
   );
 
+  // Compliance — decision support, not advice (required on every export)
+  paragraph(
+    state,
+    "Internal strategic decision support only. Not medical advice, not promotional material, and not a substitute for regulatory or legal review. Any off-label or pricing analysis is for internal strategy only and requires regulatory and legal review before action.",
+    8.5,
+    MUTED,
+  );
+
   // Executive Summary — governing thought
   sectionTitle(
     state,
     "Executive Summary",
-    report.opportunityThesis ?? (topRegion ? `${topRegion.regionLabel} presents the strongest market opportunity` : "Opportunity overview"),
+    report.opportunityThesis ?? (topRegion ? `${topRegion.regionLabel} presents the strongest value opportunity` : "Value overview"),
   );
   lead(state, report.executiveSummary ?? "");
 
@@ -518,6 +526,49 @@ export async function exportStrategyReportPDF(
         body: p.keyDataPoints.map((d: any) => [d.label, d.value, d.source]),
         columnStyles: { 2: { textColor: MUTED, fontSize: 8 } },
       }, autoTable);
+    }
+  }
+
+  // Ten-lever value scan — where value still sits in the approved asset
+  if (report.valueLevers?.length) {
+    newPage(state);
+    const live = report.valueLevers.filter(l => !l.notComputable);
+    const lead = live.slice().sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+    sectionTitle(
+      state,
+      "Value Levers",
+      lead ? `${lead.lever} is the strongest value play` : "Ten-lever value scan",
+      "Residual and incremental value in an already-approved, off-patent medicine. Levers that cannot be computed from the evidence base are marked rather than estimated.",
+    );
+    table(state, {
+      head: [["Lever", "Score", "Confidence", "Est. value", "Status"]],
+      body: report.valueLevers.map(l => [
+        l.lever,
+        String(l.score ?? "—"),
+        l.confidence ?? "—",
+        l.estValueRange ?? "—",
+        l.notComputable ? "Not computable" : "Scored",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK },
+        1: { halign: "right", fontStyle: "bold" },
+        4: { textColor: MUTED, fontSize: 8 },
+      },
+    }, autoTable);
+
+    for (const l of report.valueLevers.filter(x => !x.notComputable).sort((a, b) => (b.score ?? 0) - (a.score ?? 0))) {
+      ensureSpace(state, 70);
+      subHeader(state, `${l.lever} — ${l.score ?? "—"}/100`, STRATEGY_COLOR);
+      if (l.evidence?.length) {
+        tinyLabel(state, "Evidence");
+        bullets(state, l.evidence.map(e => (e.source ? `${e.finding} — ${e.source}` : e.finding)));
+      }
+      if (l.recommendedActions?.length) {
+        tinyLabel(state, "Recommended plays");
+        bullets(state, l.recommendedActions, STRATEGY_COLOR);
+      }
+      if (l.estValueRange) { tinyLabel(state, "Estimated value"); paragraph(state, l.estValueRange); }
+      if (l.dataGap) { tinyLabel(state, "Evidence needed"); paragraph(state, l.dataGap, 9.5, MUTED); }
     }
   }
 
@@ -1127,6 +1178,34 @@ export async function exportClientDeck(
     }
   }
 
+  // ─── Ten-lever value scan ───────────────────────────────────────────────
+  if (strategy?.valueLevers?.length) {
+    const levers = strategy.valueLevers;
+    const live = levers.filter((l: any) => !l.notComputable);
+    const lead = live.slice().sort((a: any, b: any) => (b.score ?? 0) - (a.score ?? 0))[0];
+    const slide = contentSlide(
+      pptx, "Strategy · Value levers",
+      lead ? `${lead.lever} is the strongest value play` : "Ten-lever value scan",
+      P.accent, "openFDA · DailyMed · Orange Book · CMS pricing & formulary · WHO nEML",
+    );
+    const rows: any[][] = [
+      ["Value lever", "Score", "Confidence", "Estimated value"].map(t => ({ text: t, options: cellHead() })),
+      ...levers
+        .slice()
+        .sort((a: any, b: any) => (a.notComputable === b.notComputable ? (b.score ?? 0) - (a.score ?? 0) : a.notComputable ? 1 : -1))
+        .map((l: any) => [
+          { text: l.lever, options: cellBody({ bold: true, color: l.notComputable ? P.faint : P.ink }) },
+          { text: l.notComputable ? "—" : ` ${dotScale(l.score ?? 0)}  ${l.score ?? "—"}`, options: cellBody({ bold: true, color: l.notComputable ? P.faint : P.accent2 }) },
+          { text: l.notComputable ? "Not computable" : (l.confidence ?? "—"), options: cellBody({ color: l.notComputable ? P.faint : P.muted, fontSize: 10 }) },
+          { text: truncate(l.notComputable ? (l.dataGap ?? "Evidence needed") : (l.estValueRange ?? "—"), 90), options: cellBody({ fontSize: 10, color: l.notComputable ? P.faint : P.ink }) },
+        ]),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.6, 1.7, 1.8, 5.03],
+      rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
   // ─── Asset profile ──────────────────────────────────────────────────────
   if (strategy?.assetProfile) {
     const p = strategy.assetProfile;
@@ -1475,7 +1554,7 @@ export async function exportClientDeck(
     });
   }
 
-  await pptx.writeFile({ fileName: `${safeFilename(assetName)}_Opportunity_Assessment.pptx` });
+  await pptx.writeFile({ fileName: `${safeFilename(assetName)}_Value_Assessment.pptx` });
 }
 
 // ─── PPT helpers ─────────────────────────────────────────────────────────────

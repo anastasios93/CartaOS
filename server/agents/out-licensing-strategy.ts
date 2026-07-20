@@ -1,10 +1,14 @@
 /**
- * Agent 7: Global Drug Opportunity Assessment
- * Produces a board-level, go/no-go MARKET-OPPORTUNITY assessment for the OWNER
- * of a compound/biologic: per-region scoring across six vectors (regulatory
- * feasibility, IP/exclusivity, market size & epidemiology, market access/HTA,
- * competitive density, manufacturing) with a Commercial Opportunity Score (COS)
- * — grounded in the full live evidence base from the wired data sources.
+ * Agent 7: Off-Patent Value-Maximisation Assessment
+ * For a medicine that is ALREADY APPROVED and (usually) off-patent, finds the
+ * residual and incremental value still capturable and how to capture it:
+ * per-region scoring across six vectors (regulatory feasibility, IP/exclusivity,
+ * market size & epidemiology, market access/HTA, competitive density,
+ * manufacturing) with a Commercial Opportunity Score (COS), plus the ten-lever
+ * value scan (geography, indication, channel, formulary, formulation,
+ * reimbursement, promotion, lifecycle, supply, portfolio) — grounded in the full
+ * live evidence base. The governing question is how to maximise the value of an
+ * asset the holder already owns, NOT whether to acquire it.
  *
  * Runs after the core agents (alongside synthesis + execution plan). To keep it
  * fast, the heavy per-region analysis is fanned out across parallel Opus calls
@@ -19,9 +23,11 @@ import { withGrounding } from "@/server/services/source-reference";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
 import { extractJSON, cleanError, parseCompounds } from "./utils";
 
-const STRATEGY_PROMPT = `You are a CartaOS pharmaceutical business-development analyst specialising in OFF-PATENT VALUE CAPTURE — small-molecule generics, complex/specialty & 505(b)(2) generics, and biosimilars — preparing a decision-grade market opportunity assessment for a sophisticated BD principal. The output is a finished CartaOS client deliverable, ready to present.
+const STRATEGY_PROMPT = `You are a CartaOS commercial pharma veteran assessing how to MAXIMISE THE VALUE OF AN ALREADY-APPROVED, OFF-PATENT MEDICINE — a mature brand or generic the holder already owns. This is NOT a discovery, pipeline or novel-asset assessment: the molecule is approved and on the market, and the question is where residual and incremental value still sits and how to capture it. The output is a finished CartaOS client deliverable, ready to present.
 
-You are given ONE OR MORE compounds to assess (a portfolio search). For EACH compound run the CartaOS off-patent method, then synthesise: classify the molecule (commodity small-molecule generic | complex/specialty or 505(b)(2) | biosimilar), size the POST-LoE addressable pool, gauge competitive intensity (the main determinant of capturable value), locate where margin sits in the value chain, name partners, map channels and the regulatory path, recommend a go-to-market sequence, and state explicit kill criteria. If several compounds are supplied, the verdict and recommendations RANK them.
+A generic or mature brand is not a dead asset. Value leaks out through un-entered geographies, untapped indications, mis-positioned channels, sub-optimal formulary tiers, dated formulations, leaky gross-to-net and mis-targeted promotion. Hunt those leaks systematically across the TEN VALUE LEVERS, and express the result as a valuation memo an experienced commercial lead would recognise.
+
+You are given ONE OR MORE approved compounds to assess (a portfolio search). For EACH compound: classify the molecule (commodity small-molecule generic | complex/specialty or 505(b)(2) | biosimilar), size the addressable pool that is actually still capturable, gauge competitive intensity, locate where margin sits in the value chain, scan all ten value levers, map channels, formulary position and the regulatory route for any reformulation or new-geography play, recommend a sequenced set of quantified plays, and state explicit kill criteria. If several compounds are supplied, the verdict and recommendations RANK them.
 
 You receive (a) outputs from prior diagnostic agents and (b) a live evidence base (openFDA, Orange/Purple Book, ClinicalTrials.gov, EMA, ChEMBL, Open Targets, PubChem, SEC EDGAR, CMS spend, Spain CIMA, WHO GHO, patents, news).
 
@@ -39,14 +45,14 @@ Return ONLY valid JSON with this exact structure:
   "verdict": "Go | Conditional Go | No-Go",
   "opportunityThesis": "One sentence: the sharpest capture wedge — which compound, which geography, and the single biggest blocker.",
   "archetype": {
-    "mode": "Novel patented asset | LoE-timing play | Off-patent reformulation / hybrid | Off-patent commodity supply | Lifecycle management / repositioning | Cash-pay / consumer-health",
-    "rationale": "Why the asset classifies here — the evidence (LoE distance, formulation/route, channel) that fixes the value-capture mode.",
-    "rubricNote": "How scoring was adapted to the archetype — e.g. 'LoE >10y past: exclusivity/IP dimensions down-weighted; reformulation, channel and galenic/supply dimensions up-weighted.'"
+    "mode": "LoE-timing play | Off-patent reformulation / hybrid | Off-patent commodity supply | Lifecycle management / repositioning | Cash-pay / consumer-health",
+    "rationale": "Why the approved asset classifies here — the evidence (LoE distance, formulation/route, channel) that fixes the value-maximisation mode.",
+    "rubricNote": "How scoring was adapted to the archetype — e.g. 'LoE >10y past: exclusivity/IP dimensions down-weighted; reformulation, channel, formulary and galenic/supply dimensions up-weighted.'"
   },
   "opportunityFraming": {
-    "narrowVerdict": "The answer to the NARROW question — is there an off-patent in-license / origination TRADE? (often the weak one)",
-    "broadVerdict": "The answer to the client's ACTUAL broad question — is there ANY real market value / business opportunity (reformulation, cash-pay, supplement, repositioning)?",
-    "note": "One line reconciling the two so a flat narrow No-Go is never mistaken for 'no opportunity exists'."
+    "narrowVerdict": "The answer to the NARROW question — is there an off-patent in-license / origination TRADE? (often the weak one, and only ONE of the ten levers)",
+    "broadVerdict": "The answer to the holder's ACTUAL question — how much value can still be MAXIMISED out of this already-approved medicine across all ten levers (geography, indication, channel, formulary, formulation, reimbursement, promotion, lifecycle, supply, portfolio)?",
+    "note": "One line reconciling the two so a flat narrow No-Go is never mistaken for 'there is no value left in this asset'."
   },
   "verdictConfidence": "High | Medium | Low",
   "whatWouldFlipIt": ["The SPECIFIC evidence that would change the verdict — falsifiable, e.g. 'German cash-pay procaine volume exceeds EUR Xm' or 'a 505(b)(2)/Article 10(3) route clears reference pricing'"],
@@ -122,6 +128,18 @@ Return ONLY valid JSON with this exact structure:
     ]
   },
   "marketWorthinessSummary": "1-2 sentences: which geographies are commercially WORTH entering and why — purely on market grounds (legal + healthcare landscape, partnership room, channels, size-vs-competition, novel paths), naming the worthiest market(s) and the least worthy.",
+  "valueLevers": [
+    {
+      "lever": "Geographic expansion | Indication expansion / repurposing | Distribution channels | Formulary positioning | Administration / formulation | Reimbursement / pricing | Sales-force effectiveness | Lifecycle / IP defense | Supply / COGS arbitrage | Portfolio synergy",
+      "score": 72,
+      "confidence": "High | Medium | Low",
+      "evidence": [{ "finding": "What was actually found for THIS molecule on this lever", "source": "Named source — openFDA, DailyMed, Orange Book, NADAC, CMS Part D formulary, WHO nEML, ClinicalTrials.gov, EMA" }],
+      "recommendedActions": ["Concrete, quantified plays that capture the value — what to do, in which market, and roughly what it is worth"],
+      "estValueRange": "Honest range, e.g. 'EUR 2-4M incremental net revenue over 3 years' — never false precision",
+      "dataGap": "What is missing to raise confidence (omit or leave empty when well evidenced)",
+      "notComputable": false
+    }
+  ],
   "dataConfidence": "High|Medium|Low",
   "sourcesUsed": ["named authorities underpinning the assessment"]
 }
@@ -145,7 +163,11 @@ CRITICAL RULES:
 16. NUMBER-TO-THESIS (Priority 4). Every market-size figure states the channel it measures, and that channel must match the recommended go-to-market — never anchor a hospital-injectable thesis on a retail Part D figure. Keep TAM → SAM → SOM on consistent channels.
 17. CALIBRATE + STEELMAN (Priorities 5 & 6). Set verdictConfidence honestly and list whatWouldFlipIt (specific, falsifiable). Populate consideredAndRejected — the strongest opportunity you steelmanned and why you excluded it. Where country sections are the same template reasoned from priors, say so once rather than implying independent assessments.
 
-This is a CartaOS in-license / originate / pass decision. Be rigorous, honest, calibrated and client-ready — it must withstand inspection by the most experienced pharma BD executive.`;
+18. SCAN ALL TEN VALUE LEVERS (the intellectual core). Populate valueLevers with ONE ENTRY PER LEVER — all ten, every time, in the taxonomy order. For each: an honest 0-100 score, a confidence, the evidence with NAMED sources, concrete quantified recommendedActions, and an estValueRange. Where the evidence base cannot compute a lever for this molecule/market, set notComputable true, score it low, and state the dataGap — NEVER fabricate a lever finding. An under-confident score with a clear evidence-needed flag ALWAYS beats a confident guess; this engine's credibility dies on false positives.
+19. ASSUME THE MOLECULE IS ALREADY APPROVED AND ON THE MARKET. The governing question is how to MAXIMISE the value of an asset the holder already owns — not whether to acquire it. An in-license / origination trade is only ONE lever among ten; never let it become the whole verdict. If the narrow trade is weak but geography, indication, channel, formulary, formulation, reimbursement, promotion, lifecycle, supply or portfolio levers hold value, the report must say so loudly.
+20. DECISION SUPPORT ONLY. Off-label and pricing analysis is internal strategy, never promotional. Where a play rests on off-label use or a pricing move, state plainly that it requires regulatory and legal review before action.
+
+This is a CartaOS value-maximisation assessment for an already-approved, off-patent medicine. Be rigorous, honest, calibrated and client-ready — it must withstand inspection by the most experienced commercial pharma executive.`;
 
 // To keep the headline assessment fast, the per-region analysis is generated in
 // parallel shards while the cross-market synthesis runs concurrently. These two
@@ -160,7 +182,7 @@ Each entry must be FULLY populated exactly as specified above — all six vector
 const WRAPPER_DIRECTIVE = `
 
 OUTPUT MODE — SYNTHESIS ONLY (the per-region analysis is produced separately and merged in).
-Return ONLY valid JSON with EXACTLY these top-level keys: "verdict", "opportunityThesis", "archetype", "opportunityFraming", "verdictConfidence", "whatWouldFlipIt", "consideredAndRejected", "executiveSummary", "assetProfile", "recommendations", "portfolioRisks", "commercialPlan", "marketWorthinessSummary", "dataConfidence", "sourcesUsed". DO NOT output a "regionalAnalysis" key at all. Your recommendations, risks, commercialPlan and summaries must span the FULL geography set named in the user message (refer to those markets by name). Apply every CRITICAL RULE that concerns the cross-market synthesis: classify the ARCHETYPE first and adapt the rubric (down-weight exclusivity when LoE >10y past); answer the BROAD question in opportunityFraming, not only the narrow trade; tier load-bearing keyDataPoints (Tier 1/2/3, basis evidence vs inference — legacy "first approval" dates are Tier 3); set verdictConfidence and list specific falsifiers in whatWouldFlipIt; populate consideredAndRejected (steelman); rank compounds; state kill criteria; correct regulatory mechanisms (no AMNOG on generics); real names/dates; McKinsey voice; no bracket tags.`;
+Return ONLY valid JSON with EXACTLY these top-level keys: "verdict", "opportunityThesis", "archetype", "opportunityFraming", "verdictConfidence", "whatWouldFlipIt", "consideredAndRejected", "executiveSummary", "assetProfile", "recommendations", "portfolioRisks", "commercialPlan", "marketWorthinessSummary", "valueLevers", "dataConfidence", "sourcesUsed". DO NOT output a "regionalAnalysis" key at all. valueLevers MUST contain all TEN levers in taxonomy order, each scored with named-source evidence, quantified actions and an honest value range (notComputable + dataGap where the evidence cannot support it). Your recommendations, risks, commercialPlan and summaries must span the FULL geography set named in the user message (refer to those markets by name). Apply every CRITICAL RULE that concerns the cross-market synthesis: classify the ARCHETYPE first and adapt the rubric (down-weight exclusivity when LoE >10y past); answer the BROAD question in opportunityFraming, not only the narrow trade; tier load-bearing keyDataPoints (Tier 1/2/3, basis evidence vs inference — legacy "first approval" dates are Tier 3); set verdictConfidence and list specific falsifiers in whatWouldFlipIt; populate consideredAndRejected (steelman); rank compounds; state kill criteria; correct regulatory mechanisms (no AMNOG on generics); real names/dates; McKinsey voice; no bracket tags.`;
 
 // Deterministic expansion of the intake geographies into the individual national
 // markets the assessment covers (EU → DE/FR/IT/ES; India corridor always added).
@@ -305,7 +327,7 @@ Return ONLY {"regionalAnalysis":[...]} for the geographies above — one fully-p
     // the prior diagnostic-agent context so recommendations stay grounded.
     const wrapperCall = anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 9000,
+      max_tokens: 12000,
       system: withGrounding(STRATEGY_PROMPT + WRAPPER_DIRECTIVE),
       messages: [{
         role: "user",
@@ -320,7 +342,7 @@ ${evidenceBlock}
 
 ---
 
-Produce the SYNTHESIS ONLY (NO regionalAnalysis key): classify the archetype and adapt the rubric; the verdict mapped to it with verdictConfidence and falsifiable whatWouldFlipIt; opportunityThesis; opportunityFraming answering BOTH the narrow off-patent-trade question and the client's broad "is there any value here?" question; the adversarial consideredAndRejected steelman; executive summary; asset profile with tiered keyDataPoints (evidence vs inference); prioritised recommendations across the full geography set above; kill-criteria portfolioRisks; the consolidated commercialPlan (covering cash-pay/hybrid/supplement/compounding channels with correctly-typed mechanisms — no AMNOG on generics); the marketWorthinessSummary; dataConfidence and sourcesUsed. If more than one compound is supplied, rank them. Write it as a finished, client-ready CartaOS report in natural prose — never use bracket tags.`,
+Produce the SYNTHESIS ONLY (NO regionalAnalysis key): classify the archetype and adapt the rubric; the verdict mapped to it with verdictConfidence and falsifiable whatWouldFlipIt; opportunityThesis; opportunityFraming answering BOTH the narrow off-patent-trade question and the client's broad "is there any value here?" question; the adversarial consideredAndRejected steelman; executive summary; asset profile with tiered keyDataPoints (evidence vs inference); prioritised recommendations across the full geography set above; kill-criteria portfolioRisks; the consolidated commercialPlan (covering cash-pay/hybrid/supplement/compounding channels with correctly-typed mechanisms — no AMNOG on generics); the marketWorthinessSummary; the FULL ten-lever valueLevers scan (all ten, scored, evidenced, quantified, with data gaps flagged rather than guessed); dataConfidence and sourcesUsed. If more than one compound is supplied, rank them. Write it as a finished, client-ready CartaOS report in natural prose — never use bracket tags.`,
       }],
     }).then(res => {
       const text = res.content.find(b => b.type === "text")?.text ?? "";
@@ -366,6 +388,7 @@ Produce the SYNTHESIS ONLY (NO regionalAnalysis key): classify the archetype and
       portfolioRisks: wrapper?.portfolioRisks ?? [],
       commercialPlan: wrapper?.commercialPlan,
       marketWorthinessSummary: wrapper?.marketWorthinessSummary,
+      valueLevers: wrapper?.valueLevers,
       dataConfidence: wrapper?.dataConfidence ?? "Low",
       sourcesUsed: wrapper?.sourcesUsed ?? [],
     };

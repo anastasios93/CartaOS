@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { AgentResult, RegionalAnalysis, OutLicensingRecommendation, PortfolioRisk, OutLicensingReport } from "@/types/hub";
+import type { AgentResult, RegionalAnalysis, OutLicensingRecommendation, PortfolioRisk, OutLicensingReport, ValueLever } from "@/types/hub";
 import {
   Globe,
   TrendingUp,
@@ -77,7 +77,7 @@ export function OutLicensingStrategyResults({
   data: Extract<AgentResult, { agentId: "outLicensingStrategy" }>;
 }) {
   const { report } = data;
-  const [view, setView] = useState<"overview" | "regions" | "worthiness" | "recommendations" | "business" | "risks">("overview");
+  const [view, setView] = useState<"overview" | "levers" | "regions" | "worthiness" | "recommendations" | "business" | "risks">("overview");
 
   if (!report) return <p className="text-sm text-muted-foreground">No report generated.</p>;
 
@@ -91,7 +91,7 @@ export function OutLicensingStrategyResults({
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
-              <h3 className="text-lg font-bold text-[#1A1A2E] mr-1">Market Opportunity Assessment</h3>
+              <h3 className="text-lg font-bold text-[#1A1A2E] mr-1">Off-Patent Value Assessment</h3>
               {report.archetype?.mode && <ArchetypeBadge mode={report.archetype.mode} />}
               {report.verdict && <VerdictBadge verdict={report.verdict} />}
               {report.verdictConfidence && <VerdictConfidenceBadge confidence={report.verdictConfidence} />}
@@ -128,6 +128,7 @@ export function OutLicensingStrategyResults({
       {/* View tabs */}
       <div className="flex gap-1 p-1 bg-[#F8F9FA] rounded-lg overflow-x-auto">
         <ViewTab id="overview" current={view} icon={Award} label="Asset & Overview" onClick={setView} />
+        <ViewTab id="levers" current={view} icon={Layers} label="Value Levers" onClick={setView} />
         <ViewTab id="regions" current={view} icon={Globe} label="Regional Assessments" onClick={setView} />
         <ViewTab id="worthiness" current={view} icon={Gauge} label="Market Worthiness" onClick={setView} />
         <ViewTab id="recommendations" current={view} icon={Target} label="Market Priorities" onClick={setView} />
@@ -137,11 +138,19 @@ export function OutLicensingStrategyResults({
 
       {/* Content */}
       {view === "overview" && <OverviewView report={report} />}
+      {view === "levers" && <ValueLeversView levers={report.valueLevers || []} />}
       {view === "regions" && <RegionsView regions={report.regionalAnalysis || []} />}
       {view === "worthiness" && <MarketWorthinessView regions={report.regionalAnalysis || []} summary={report.marketWorthinessSummary} />}
       {view === "recommendations" && <RecommendationsView recommendations={report.recommendations || []} />}
       {view === "business" && <CommercialPlanView plan={report.commercialPlan} />}
       {view === "risks" && <RisksView risks={report.portfolioRisks || []} />}
+
+      {/* Compliance — decision support, not advice */}
+      <p className="text-[10px] text-muted-foreground/70 leading-relaxed border-t border-border/30 pt-3">
+        Internal strategic decision support only. This assessment is not medical advice, not promotional
+        material, and not a substitute for regulatory or legal review. Any off-label or pricing analysis is
+        for internal strategy only and requires regulatory and legal review before action.
+      </p>
     </div>
   );
 }
@@ -601,6 +610,128 @@ function TierChip({ tier }: { tier: "Tier 1" | "Tier 2" | "Tier 3" }) {
     >
       {tier}
     </span>
+  );
+}
+
+// ─── Value Levers View ──────────────────────────────────────────────────────
+
+// The ten levers through which an already-approved, off-patent medicine leaks
+// (or recaptures) value. Rendered highest-opportunity first; non-computable
+// levers are shown greyed out rather than faked.
+function ValueLeversView({ levers }: { levers: ValueLever[] }) {
+  if (!levers.length) {
+    return <p className="text-sm text-muted-foreground">No value-lever scan generated.</p>;
+  }
+  const sorted = [...levers].sort((a, b) => {
+    if (!!a.notComputable !== !!b.notComputable) return a.notComputable ? 1 : -1;
+    return (b.score ?? 0) - (a.score ?? 0);
+  });
+  const live = sorted.filter(l => !l.notComputable);
+  const topScore = live[0]?.score ?? 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border/40 border-l-4 bg-[#FFF7ED] p-4" style={{ borderLeftColor: "#F97316" }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Layers className="h-4 w-4 text-[#C2410C]" />
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#C2410C]">
+            Value-lever scan — where value still sits in an approved asset
+          </p>
+        </div>
+        <p className="text-[13px] text-[#1A1A2E] leading-relaxed">
+          {live.length} of {sorted.length} levers computable from the current evidence base
+          {live.length > 0 && <> · strongest play scores <span className="font-bold font-mono">{topScore}</span></>}.
+          Levers that cannot be computed are greyed out with the data gap stated rather than estimated.
+        </p>
+      </div>
+
+      {sorted.map((l, i) => {
+        const score = Math.max(0, Math.min(100, l.score ?? 0));
+        const dim = !!l.notComputable;
+        const barColor = dim ? "#C4C4C4" : score >= 70 ? "#C2410C" : score >= 45 ? "#F97316" : "#9A9A9A";
+        return (
+          <div
+            key={i}
+            className="rounded-xl border bg-white overflow-hidden"
+            style={{ borderColor: dim ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.10)", opacity: dim ? 0.7 : 1 }}
+          >
+            <div className="flex items-center justify-between gap-4 p-4 border-b border-border/30">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[12px] font-bold"
+                  style={{ backgroundColor: dim ? "#F1F1F1" : "#FFF7ED", color: dim ? "#9A9A9A" : "#C2410C" }}
+                >
+                  {i + 1}
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-[14px] font-bold text-[#1A1A2E]">{l.lever}</h4>
+                  {l.estValueRange && !dim && (
+                    <p className="text-[11px] text-muted-foreground">Est. value: {l.estValueRange}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                {dim ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F1F1F1] text-[#6B6B6B]">
+                    Not computable
+                  </span>
+                ) : (
+                  l.confidence && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F8F9FA] border border-border/40 text-muted-foreground">
+                      {l.confidence} confidence
+                    </span>
+                  )
+                )}
+                <p className="text-xl font-bold font-mono tracking-tight" style={{ color: dim ? "#9A9A9A" : barColor }}>
+                  {score}
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 pt-3">
+              <div className="h-1.5 rounded-full bg-[#E3E3E3] overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${score}%`, backgroundColor: barColor }} />
+              </div>
+            </div>
+
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {l.evidence?.length > 0 && (
+                <div>
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">Evidence</p>
+                  <ul className="space-y-1.5">
+                    {l.evidence.map((e, j) => (
+                      <li key={j} className="text-[12px] text-[#1A1A2E] leading-relaxed">
+                        {e.finding}
+                        {e.source && <span className="text-muted-foreground"> — {e.source}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {l.recommendedActions?.length > 0 && (
+                <div>
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">Recommended plays</p>
+                  <ul className="space-y-1.5">
+                    {l.recommendedActions.map((a, j) => (
+                      <li key={j} className="text-[12px] text-[#1A1A2E] leading-relaxed flex gap-2">
+                        <span className="text-[#C2410C] shrink-0">→</span>
+                        {a}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {l.dataGap && (
+                <div className="md:col-span-2 rounded-lg bg-[#F7F6F4] border border-border/30 p-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-[#141414] mb-1">Evidence needed</p>
+                  <p className="text-[12px] text-[#1A1A2E] leading-relaxed">{l.dataGap}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
