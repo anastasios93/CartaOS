@@ -22,9 +22,19 @@ import { getNadacSeriesBatch, type NadacSeries } from "@/server/services/adapter
 import { forecastErosion, type ErosionResult } from "@/server/services/forecast/erosion";
 import { getEmlFootprint, type EmlMatch } from "@/server/services/adapters/who-eml";
 import { getPartDProfile, type PartDProfile } from "@/server/services/adapters/part-d";
+import { getDrugsFdaProfile, type DrugsFdaProfile } from "@/server/services/adapters/drugsfda";
+import { getDailyMedProfile, type DailyMedProfile } from "@/server/services/adapters/dailymed";
+import { getPartDGeoProfile, type PartDGeoProfile } from "@/server/services/adapters/part-d-geo";
 
 export interface ComputedLever {
-  lever: "Reimbursement / pricing" | "Geographic expansion" | "Formulary positioning";
+  lever:
+    | "Reimbursement / pricing"
+    | "Geographic expansion"
+    | "Formulary positioning"
+    | "Administration / formulation"
+    | "Lifecycle / IP defense"
+    | "Distribution channels"
+    | "Sales-force effectiveness";
   computed: true;
   score: number;
   confidence: "High" | "Medium" | "Low";
@@ -401,6 +411,381 @@ function formularyLever(profile: PartDProfile | null): ComputedLever {
   };
 }
 
+// ─── Administration / formulation ───────────────────────────────────────────
+
+function formulationLever(fda: DrugsFdaProfile | null, dm: DailyMedProfile | null): ComputedLever {
+  if (!fda && !dm) {
+    return {
+      lever: "Administration / formulation",
+      computed: true,
+      score: 0,
+      confidence: "Low",
+      notComputable: true,
+      evidence: [],
+      recommendedActions: [],
+      estValueRange: "Not computable from the open label layer",
+      dataGap:
+        "Neither Drugs@FDA nor DailyMed returned records for this molecule, so the marketed dosage-form and route set could not be established. This is expected for a product not registered in the US.",
+    };
+  }
+
+  const evidence: { finding: string; source: string }[] = [];
+  const actions: string[] = [];
+  const forms = fda?.dosageForms ?? [];
+  const routes = fda?.routes ?? [];
+
+  if (fda) {
+    evidence.push({
+      finding: `Marketed in ${forms.length} distinct dosage form(s) — ${forms.join(", ") || "none reported"} — across ${routes.length} route(s) of administration: ${routes.join(", ") || "none reported"}. ${fda.strengths.length} distinct strengths are approved.`,
+      source: "openFDA Drugs@FDA",
+    });
+  }
+  if (dm) {
+    // Deliberately reporting label and labeller counts only: DailyMed title
+    // parsing picks up combination-product and brand residue, so openFDA's
+    // structured dosageForms above is the authoritative form list.
+    evidence.push({
+      finding: `DailyMed carries ${dm.totalLabels} distinct product labels for this molecule from ${dm.labelers.length} labellers — a direct read on how many companies are actually marketing it.`,
+      source: "DailyMed (NLM)",
+    });
+  }
+
+  // The reformulation wedge is widest where the molecule is stuck in one plain
+  // form and one route — that is genuine galenic whitespace.
+  let score = 45;
+  const oralOnly = routes.length === 1 && /ORAL/i.test(routes[0] ?? "");
+  const fewForms = forms.length <= 2;
+
+  if (oralOnly && fewForms) {
+    score = 78;
+    actions.push(
+      `Only ${forms.join(" and ") || "one form"} on a single oral route — this is the clearest reformulation whitespace. Test an extended/delayed-release, fixed-dose-combination or alternative-route (e.g. transdermal, SC) 505(b)(2) route, which carries its own regulatory exclusivity.`,
+    );
+  } else if (routes.length >= 3 || forms.length >= 5) {
+    score = 35;
+    actions.push(
+      `The molecule already spans ${forms.length} forms and ${routes.length} routes — galenic space is well covered, so differentiation must come from device, adherence or presentation rather than a new dosage form.`,
+    );
+  } else {
+    score = 58;
+    actions.push(
+      `Moderate formulation coverage (${forms.length} forms, ${routes.length} routes) — screen the unoccupied route/release profiles against the indication before committing to a 505(b)(2).`,
+    );
+  }
+
+  if (dm && dm.labelers.length >= 15) {
+    actions.push(
+      `${dm.labelers.length} labellers market this molecule; a plain-form entry adds no differentiation, so any formulation play must be genuinely novel to be worth the filing.`,
+    );
+    score = clamp(score - 8);
+  }
+
+  return {
+    lever: "Administration / formulation",
+    computed: true,
+    score: clamp(score),
+    confidence: fda && dm ? "High" : "Medium",
+    evidence,
+    recommendedActions: actions,
+    estValueRange: oralOnly && fewForms
+      ? "Reformulation route open — a 505(b)(2) carries 3-year exclusivity on the new form"
+      : "Formulation space largely occupied; value sits in device/adherence differentiation",
+    dataGap:
+      "Approved forms and routes are established fact here, but whether a specific reformulation is technically feasible or clinically differentiating requires formulation and medical assessment.",
+  };
+}
+
+// ─── Lifecycle / IP defence ─────────────────────────────────────────────────
+
+function lifecycleLever(fda: DrugsFdaProfile | null): ComputedLever {
+  if (!fda) {
+    return {
+      lever: "Lifecycle / IP defense",
+      computed: true,
+      score: 0,
+      confidence: "Low",
+      notComputable: true,
+      evidence: [],
+      recommendedActions: [],
+      estValueRange: "Not computable from the open approval layer",
+      dataGap:
+        "No Drugs@FDA applications matched this molecule, so generic-entrant depth could not be counted. Expected for a molecule not registered in the US.",
+    };
+  }
+
+  const evidence: { finding: string; source: string }[] = [];
+  const actions: string[] = [];
+
+  evidence.push({
+    finding: `${fda.totalApplications} FDA applications on file: ${fda.andaCount} ANDA (generic), ${fda.ndaCount} NDA (brand)${fda.blaCount ? `, ${fda.blaCount} BLA (biologic)` : ""}. ${fda.activeProductCount} products are actively marketed and ${fda.discontinuedProductCount} are discontinued.`,
+    source: "openFDA Drugs@FDA",
+  });
+  if (fda.teCodes.length) {
+    evidence.push({
+      finding: `Therapeutic-equivalence codes present: ${fda.teCodes.join(", ")}. ${fda.hasSubstitutableAB ? "An A-rated code means products are substitutable at the pharmacy counter, so share moves on price and availability rather than promotion." : "No A-rated equivalence code found, which limits automatic substitution."}`,
+      source: "openFDA Drugs@FDA",
+    });
+  }
+  if (fda.sponsors.length) {
+    evidence.push({
+      finding: `Sponsors on file include ${fda.sponsors.slice(0, 8).join(", ")}${fda.sponsors.length > 8 ? ` and ${fda.sponsors.length - 8} more` : ""}.`,
+      source: "openFDA Drugs@FDA",
+    });
+  }
+
+  // Many ANDAs = exclusivity is long gone and defence is futile; few = there may
+  // still be a defensible position.
+  let score: number;
+  if (fda.andaCount >= 20) {
+    score = 18;
+    actions.push(
+      `${fda.andaCount} generic applications are on file — exclusivity is comprehensively gone and IP defence is not a live lever. Redirect to supply reliability, cost position and channel.`,
+    );
+  } else if (fda.andaCount >= 5) {
+    score = 38;
+    actions.push(
+      `${fda.andaCount} generic entrants are approved — the market is genuinely multi-source. Defence should focus on authorised-generic and contracting strategy rather than litigation.`,
+    );
+  } else if (fda.andaCount >= 1) {
+    score = 62;
+    actions.push(
+      `Only ${fda.andaCount} generic application(s) on file — entry is early. There may still be a defensible window worth protecting with lifecycle filings and contracting.`,
+    );
+  } else {
+    score = 74;
+    actions.push(
+      "No generic applications on file — the molecule is still effectively single-source in the US, so lifecycle and exclusivity strategy remain live levers.",
+    );
+  }
+
+  if (fda.discontinuedProductCount > fda.activeProductCount && fda.activeProductCount > 0) {
+    actions.push(
+      `More products are discontinued (${fda.discontinuedProductCount}) than active (${fda.activeProductCount}) — suppliers are exiting, which can open a supply-gap or shortage opportunity for a reliable manufacturer.`,
+    );
+    score = clamp(score + 10);
+  }
+
+  return {
+    lever: "Lifecycle / IP defense",
+    computed: true,
+    score: clamp(score),
+    confidence: "High",
+    evidence,
+    recommendedActions: actions,
+    estValueRange:
+      fda.andaCount >= 20
+        ? "No defensible exclusivity remains; value is in cost and supply, not IP"
+        : "Exclusivity position may still be defensible — confirm against patent and exclusivity filings",
+    dataGap:
+      "Application counts and equivalence codes are established fact, but PATENT and EXCLUSIVITY expiry dates are not: the Orange Book patent/exclusivity tables are published as downloadable files with no public API and are not wired. Confirm remaining exclusivity against the Orange Book before relying on this lever.",
+  };
+}
+
+// ─── Distribution channels ──────────────────────────────────────────────────
+
+/**
+ * CMS reports geography rows that are not addressable commercial territories:
+ * "Unknown", "Foreign Country" and the Armed Forces APO/FPO groupings. They carry
+ * tiny denominators that distort productivity ratios, and recommending a call
+ * plan weighted toward "Unknown" would be an instant credibility failure. Strip
+ * them before any commercial interpretation.
+ */
+const NON_COMMERCIAL_GEO = /^(unknown|foreign country|armed forces)/i;
+
+function commercialStates<T extends { state: string }>(rows: T[]): T[] {
+  return rows.filter(r => r.state && !NON_COMMERCIAL_GEO.test(r.state.trim()));
+}
+
+function distributionLever(geo: PartDGeoProfile | null): ComputedLever {
+  if (!geo || !commercialStates(geo.states).length) {
+    return {
+      lever: "Distribution channels",
+      computed: true,
+      score: 0,
+      confidence: "Low",
+      notComputable: true,
+      evidence: [],
+      recommendedActions: [],
+      estValueRange: "Not computable from the open utilisation layer",
+      dataGap:
+        "No Medicare Part D geographic prescribing records matched this molecule. Part D covers the US retail channel only — hospital, tender and ex-US channels are outside this dataset entirely.",
+    };
+  }
+
+  const evidence: { finding: string; source: string }[] = [];
+  const actions: string[] = [];
+  const states = commercialStates(geo.states);
+  const top = commercialStates(geo.topStates).slice(0, 5);
+
+  evidence.push({
+    finding: `US retail demand spans ${states.length} addressable states and territories. The top five — ${top.map(s => `${s.state} (${s.claims.toLocaleString()} claims)`).join(", ")} — carry ${geo.top5ClaimSharePct}% of all state-level claims.`,
+    source: "CMS Part D Prescribers by Geography",
+  });
+  evidence.push({
+    finding: `Geographic concentration of claims measures ${geo.claimConcentrationHhi} on a Herfindahl-Hirschman scale (0–10,000), where a higher value means demand is concentrated in fewer states.`,
+    source: "CMS Part D Prescribers by Geography (CartaOS concentration calculation)",
+  });
+  if (geo.national) {
+    evidence.push({
+      finding: `Nationally: ${geo.national.claims.toLocaleString()} claims from ${geo.national.prescribers.toLocaleString()} prescribers covering ${geo.national.beneficiaries.toLocaleString()} beneficiaries, at $${geo.national.drugCost.toLocaleString(undefined, { maximumFractionDigits: 0 })} total drug cost.`,
+      source: "CMS Part D Prescribers by Geography",
+    });
+  }
+
+  // Concentrated demand is cheap to serve; diffuse demand needs breadth.
+  let score: number;
+  if (geo.top5ClaimSharePct >= 45) {
+    score = 74;
+    actions.push(
+      `Demand is concentrated: ${geo.top5ClaimSharePct}% of claims sit in five states. Distribution and contracting effort should be focused there rather than spread nationally — a small number of regional payers and chains controls most of the volume.`,
+    );
+  } else if (geo.top5ClaimSharePct >= 30) {
+    score = 60;
+    actions.push(
+      `Demand is moderately concentrated (${geo.top5ClaimSharePct}% in the top five states). Prioritise those markets for wholesaler and chain negotiation while maintaining national availability.`,
+    );
+  } else {
+    score = 44;
+    actions.push(
+      `Demand is diffuse (${geo.top5ClaimSharePct}% in the top five states) — national wholesaler coverage matters more than regional targeting, and breadth of stocking is the binding constraint.`,
+    );
+  }
+
+  const costSpread = top.length > 1
+    ? Math.max(...top.map(s => s.costPerClaim)) - Math.min(...top.map(s => s.costPerClaim))
+    : 0;
+  if (costSpread > 0 && top.length > 1) {
+    const hi = top.reduce((a, b) => (a.costPerClaim > b.costPerClaim ? a : b));
+    const lo = top.reduce((a, b) => (a.costPerClaim < b.costPerClaim ? a : b));
+    evidence.push({
+      finding: `Cost per claim varies across major states — ${hi.state} at $${hi.costPerClaim.toFixed(2)} versus ${lo.state} at $${lo.costPerClaim.toFixed(2)}.`,
+      source: "CMS Part D Prescribers by Geography",
+    });
+    actions.push(
+      `Investigate why cost per claim in ${hi.state} runs above ${lo.state} — state-level plan mix and channel differences of this size usually signal a contracting or dispensing-mix opportunity.`,
+    );
+  }
+
+  return {
+    lever: "Distribution channels",
+    computed: true,
+    score: clamp(score),
+    confidence: "High",
+    evidence,
+    recommendedActions: actions,
+    estValueRange: geo.national
+      ? `$${(geo.national.drugCost / 1e6).toFixed(1)}M of US retail drug cost flows through this channel`
+      : "US retail channel sized at state level",
+    dataGap:
+      "This is the Medicare Part D retail channel only. It excludes commercial payers, cash-pay, 340B, hospital and tender channels, and says nothing about wholesaler or GPO share.",
+  };
+}
+
+// ─── Sales-force effectiveness ──────────────────────────────────────────────
+
+function salesForceLever(geo: PartDGeoProfile | null): ComputedLever {
+  if (!geo || !commercialStates(geo.states).length) {
+    return {
+      lever: "Sales-force effectiveness",
+      computed: true,
+      score: 0,
+      confidence: "Low",
+      notComputable: true,
+      evidence: [],
+      recommendedActions: [],
+      estValueRange: "Not computable from the open prescriber layer",
+      dataGap:
+        "No Medicare Part D prescriber records matched this molecule, so prescriber density and productivity could not be computed. Targeting analysis on your own book requires uploading CRM or field data.",
+    };
+  }
+
+  const evidence: { finding: string; source: string }[] = [];
+  const actions: string[] = [];
+  const states = commercialStates(geo.states);
+
+  // Recompute the median over addressable territories only — the CMS "Unknown"
+  // and Armed Forces rows would otherwise drag it.
+  const perPrescriber = states
+    .filter(s => s.prescribers > 0)
+    .map(s => s.claimsPerPrescriber)
+    .sort((a, b) => a - b);
+  const median = perPrescriber.length
+    ? Math.round(
+        (perPrescriber.length % 2
+          ? perPrescriber[(perPrescriber.length - 1) / 2]
+          : (perPrescriber[perPrescriber.length / 2 - 1] + perPrescriber[perPrescriber.length / 2]) / 2) * 100,
+      ) / 100
+    : geo.medianClaimsPerPrescriber;
+
+  evidence.push({
+    finding: `Median prescriber productivity is ${median} claims per prescriber across addressable states and territories, on a base of ${states.reduce((a, s) => a + s.prescribers, 0).toLocaleString()} prescribers.`,
+    source: "CMS Part D Prescribers by Geography (CartaOS productivity calculation)",
+  });
+
+  // States where each prescriber writes far more than median are where a rep
+  // call is worth most; the reverse indicates thin, expensive coverage.
+  const ranked = [...states]
+    .filter(s => s.prescribers > 0)
+    .sort((a, b) => b.claimsPerPrescriber - a.claimsPerPrescriber);
+  const best = ranked.slice(0, 5);
+  const worst = ranked.slice(-5).reverse();
+
+  if (best.length) {
+    evidence.push({
+      finding: `Highest prescriber productivity: ${best.map(s => `${s.state} (${s.claimsPerPrescriber} claims/prescriber)`).join(", ")}.`,
+      source: "CMS Part D Prescribers by Geography",
+    });
+    actions.push(
+      `Weight call-plan and key-account effort toward ${best.slice(0, 3).map(s => s.state).join(", ")}, where each prescriber relationship carries materially more volume than the ${median}-claim median.`,
+    );
+  }
+  if (worst.length) {
+    evidence.push({
+      finding: `Lowest prescriber productivity: ${worst.map(s => `${s.state} (${s.claimsPerPrescriber} claims/prescriber)`).join(", ")}.`,
+      source: "CMS Part D Prescribers by Geography",
+    });
+    actions.push(
+      `Coverage in ${worst.slice(0, 3).map(s => s.state).join(", ")} is thin per prescriber — serve these through digital or non-personal promotion rather than field headcount.`,
+    );
+  }
+  if (geo.ge65ClaimSharePct !== null) {
+    evidence.push({
+      finding: `${geo.ge65ClaimSharePct}% of claims come from beneficiaries aged 65 and over, which fixes the prescriber specialty mix and the channel that actually reaches them.`,
+      source: "CMS Part D Prescribers by Geography",
+    });
+  }
+
+  // A wide productivity spread means targeting can be improved; a narrow one
+  // means the field is already efficiently deployed.
+  const spread = best.length && worst.length
+    ? best[0].claimsPerPrescriber / Math.max(1, worst[worst.length - 1].claimsPerPrescriber)
+    : 1;
+  let score = 50;
+  if (spread >= 3) {
+    score = 76;
+    actions.push(
+      `Prescriber productivity varies roughly ${spread.toFixed(1)}x between the strongest and weakest states — that dispersion is the single clearest targeting inefficiency to attack.`,
+    );
+  } else if (spread >= 1.8) {
+    score = 62;
+  } else {
+    score = 42;
+    actions.push("Prescriber productivity is fairly uniform across states, so re-targeting will yield little; effort is better spent on message and channel than on territory redesign.");
+  }
+
+  return {
+    lever: "Sales-force effectiveness",
+    computed: true,
+    score: clamp(score),
+    confidence: "Medium",
+    evidence,
+    recommendedActions: actions,
+    estValueRange: "Targeting efficiency gain scales with the productivity dispersion shown above",
+    dataGap:
+      "Prescriber counts and productivity are computed from public Medicare Part D data. They do not reflect your own call plan, territory design, share of voice or commercial-payer volume — upload CRM or field data to analyse those.",
+  };
+}
+
 // ─── Assembly ───────────────────────────────────────────────────────────────
 
 function renderPromptBlock(e: Omit<ComputedEvidence, "promptBlock">): string {
@@ -443,10 +828,14 @@ export async function computeEvidence(molecule: string): Promise<ComputedEvidenc
   // Part D layers, so those run only once identity has resolved.
   const joinName = identity.ingredientName ?? molecule;
 
-  const [series, eml, partD] = await Promise.all([
+  const resolved = !!identity.ingredientRxcui;
+  const [series, eml, partD, fda, dailyMed, geo] = await Promise.all([
     identity.allNdcs.length ? getNadacSeriesBatch(identity.allNdcs, 14) : Promise.resolve([]),
-    identity.ingredientRxcui ? getEmlFootprint(joinName).catch(() => null) : Promise.resolve(null),
-    identity.ingredientRxcui ? getPartDProfile(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? getEmlFootprint(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? getPartDProfile(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? getDrugsFdaProfile(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? getDailyMedProfile(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? getPartDGeoProfile(joinName).catch(() => null) : Promise.resolve(null),
   ]);
 
   // Forecast the richest series — the most observations gives the most reliable
@@ -458,6 +847,10 @@ export async function computeEvidence(molecule: string): Promise<ComputedEvidenc
     pricingLever(identity, series, forecast, leadSeries),
     geographicLever(identity, series, eml),
     formularyLever(partD),
+    formulationLever(fda, dailyMed),
+    lifecycleLever(fda),
+    distributionLever(geo),
+    salesForceLever(geo),
   ];
 
   const base: Omit<ComputedEvidence, "promptBlock"> = {
