@@ -224,7 +224,7 @@ export async function computeSynergies(
       kind: "geographic-gap",
       molecule: molecules.join(", "),
       headline: `${extract.geographies.length} geographies present in your file`,
-      detail: `Your upload spans ${extract.geographies.join(", ")}. Country-by-country registration and reimbursed-list gaps are not yet computed — the WHO nEML and national reimbursed-list adapters are not wired, so treat cross-market gaps in this report as reasoned, not calculated.`,
+      detail: `Your upload spans ${extract.geographies.join(", ")}. National essential-medicines footprint is computed per molecule in the full assessment, but a national EML listing proves a country prioritises the molecule — it does not prove you hold a registration there, nor give tender price or volume. Confirm registration status locally before acting on a cross-market gap.`,
       matchedSources: ["Client upload"],
       severity: "Low",
     });

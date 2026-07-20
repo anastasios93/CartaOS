@@ -10,18 +10,21 @@
  *
  * Currently computed:
  *   - Reimbursement / pricing  (CMS NADAC series + backtested erosion forecast)
- *   - Geographic expansion     (US registration + marketed-product footprint)
+ *   - Geographic expansion     (WHO national EML footprint + US retail presence)
+ *   - Formulary positioning    (CMS Medicare Part D spend, utilisation, competition)
  *
- * The remaining eight levers stay LLM-reasoned until their adapters land; they
+ * The remaining seven levers stay LLM-reasoned until their adapters land; they
  * are reported as such so the two are never confused.
  */
 
 import { resolveMolecule, type MoleculeIdentity } from "@/server/services/adapters/rxnorm";
 import { getNadacSeriesBatch, type NadacSeries } from "@/server/services/adapters/nadac";
 import { forecastErosion, type ErosionResult } from "@/server/services/forecast/erosion";
+import { getEmlFootprint, type EmlMatch } from "@/server/services/adapters/who-eml";
+import { getPartDProfile, type PartDProfile } from "@/server/services/adapters/part-d";
 
 export interface ComputedLever {
-  lever: "Reimbursement / pricing" | "Geographic expansion";
+  lever: "Reimbursement / pricing" | "Geographic expansion" | "Formulary positioning";
   computed: true;
   score: number;
   confidence: "High" | "Medium" | "Low";
@@ -192,7 +195,11 @@ function pricingLever(
 
 // ─── Geographic expansion ───────────────────────────────────────────────────
 
-function geographicLever(identity: MoleculeIdentity, series: NadacSeries[]): ComputedLever {
+function geographicLever(
+  identity: MoleculeIdentity,
+  series: NadacSeries[],
+  eml: EmlMatch | null,
+): ComputedLever {
   const evidence: { finding: string; source: string }[] = [];
   const actions: string[] = [];
 
@@ -215,40 +222,182 @@ function geographicLever(identity: MoleculeIdentity, series: NadacSeries[]): Com
     finding: `Resolved to RxNorm ingredient ${identity.ingredientRxcui} (${identity.ingredientName}) with ${identity.products.length} marketed product presentations and ${identity.allNdcs.length} distinct NDCs on the US market.`,
     source: "RxNorm (NLM RxNav)",
   });
-  if (identity.atc.length) {
+
+  let score = marketedUS ? 45 : 55;
+  let confidence: "High" | "Medium" | "Low" = "Medium";
+
+  if (eml) {
+    const n = eml.countries.length;
+    const regions = Object.entries(eml.byRegion)
+      .sort((a, b) => b[1] - a[1])
+      .map(([r, c]) => `${r} ${c}`)
+      .join(", ");
+
     evidence.push({
-      finding: `ATC classification: ${identity.atc.map(a => `${a.classId} ${a.className}`).join("; ")}. This is the join key for ex-US reimbursed-list and EML comparison.`,
-      source: "RxClass / ATC",
+      finding: `${eml.medicineName} appears on the national essential medicines list of ${n} countries (${regions}).${eml.onWhoList ? " It is also on the WHO Model List of Essential Medicines." : " It is NOT on the WHO Model List."}`,
+      source: "WHO Repository of National Essential Medicines Lists",
+    });
+
+    // A wide national-EML footprint means demonstrated public-sector demand in
+    // markets the client may not serve — the clearest computed entry signal.
+    const recent = eml.countries.filter(c => c.nemlYear >= 2015);
+    if (recent.length) {
+      evidence.push({
+        finding: `${recent.length} of those national lists are from 2015 or later, including ${recent.slice(0, 8).map(c => c.name).join(", ")}${recent.length > 8 ? ` and ${recent.length - 8} more` : ""}.`,
+        source: "WHO Repository of National Essential Medicines Lists",
+      });
+    }
+
+    if (n >= 50) {
+      score = 82;
+      confidence = "High";
+      actions.push(
+        `Broad public-sector demand is demonstrated across ${n} national essential medicines lists — prioritise tender and public-procurement entry in the regions where you do not currently supply (${regions}).`,
+      );
+    } else if (n >= 15) {
+      score = 68;
+      confidence = "High";
+      actions.push(
+        `${n} countries list this molecule nationally — a mid-sized but real public-procurement footprint. Screen the ${regions} markets against your current registrations for entry gaps.`,
+      );
+    } else if (n > 0) {
+      score = 48;
+      actions.push(`Only ${n} countries list this molecule nationally; public-sector demand is narrow, so geographic upside rests on private/retail channels rather than tender.`);
+    } else {
+      score = 30;
+      actions.push("No national essential medicines listings found — treat ex-US public-sector entry as unproven for this molecule.");
+    }
+
+    if (eml.onWhoList && n < 40) {
+      actions.push(
+        "The molecule is on the WHO Model List but carried by comparatively few national lists — that divergence is a classic under-adoption gap worth testing with health ministries.",
+      );
+      score = clamp(score + 6);
+    }
+  } else {
+    evidence.push({
+      finding: "No matching entry found in the WHO national essential medicines list repository for this ingredient name.",
+      source: "WHO Repository of National Essential Medicines Lists",
     });
   }
 
-  let score = 45;
   if (marketedUS) {
     evidence.push({
-      finding: `Molecule is actively marketed in the US with live acquisition-cost reporting on ${series.length} NDCs — US entry is established, so geographic upside lies ex-US.`,
+      finding: `Molecule is actively marketed in US retail with live acquisition-cost reporting on ${series.length} NDCs — US entry is established, so the geographic upside lies ex-US.`,
       source: "CMS NADAC",
     });
-    actions.push("US presence is established; direct geographic-expansion effort at ex-US markets rather than US entry.");
-    score = 58;
+    actions.push("US retail presence is established; point geographic-expansion effort at ex-US markets rather than US entry.");
   } else {
     evidence.push({
-      finding: "No US acquisition-cost reporting found against this molecule's NDCs — consistent with a product not marketed in US retail.",
+      finding: "No US retail acquisition-cost reporting found against this molecule's NDCs — consistent with a product not sold into US retail.",
       source: "CMS NADAC",
     });
     actions.push("Assess US retail entry: the molecule resolves in RxNorm but shows no US retail acquisition-cost footprint.");
-    score = 66;
   }
 
   return {
     lever: "Geographic expansion",
     computed: true,
     score: clamp(score),
-    confidence: "Medium",
+    confidence,
     evidence,
     recommendedActions: actions,
-    estValueRange: "Sizing requires the ex-US reimbursed-list layer; US footprint is established fact",
+    estValueRange: eml
+      ? `Demonstrated public-sector demand in ${eml.countries.length} national markets; per-market sizing needs local tender volumes`
+      : "Sizing requires national tender volumes",
     dataGap:
-      "Ex-US registration status is not yet computed — the WHO nEML and national reimbursed-list adapters are not wired, so country-by-country entry gaps remain LLM-reasoned rather than calculated.",
+      "National EML listing proves a country prioritises the molecule; it does NOT prove you hold a registration there, nor give tender price or volume. Confirm registration status and local tender data before committing to a market.",
+  };
+}
+
+// ─── Formulary positioning ──────────────────────────────────────────────────
+
+function formularyLever(profile: PartDProfile | null): ComputedLever {
+  if (!profile || !profile.latest) {
+    return {
+      lever: "Formulary positioning",
+      computed: true,
+      score: 0,
+      confidence: "Low",
+      notComputable: true,
+      evidence: [],
+      recommendedActions: [],
+      estValueRange: "Not computable from the open formulary layer",
+      dataGap:
+        "No Medicare Part D spending record matched this molecule. Part D covers self-administered (retail) drugs only, so a clinician-administered or hospital-only product will legitimately have none.",
+    };
+  }
+
+  const evidence: { finding: string; source: string }[] = [];
+  const actions: string[] = [];
+  const L = profile.latest;
+
+  evidence.push({
+    finding: `Medicare Part D ${L.year}: $${(L.totalSpend / 1e6).toFixed(1)}M total spend across ${L.totalClaims.toLocaleString()} claims and ${L.totalBeneficiaries.toLocaleString()} beneficiaries, at a weighted $${L.avgSpendPerDosageUnit.toFixed(4)} per dosage unit ($${L.avgSpendPerClaim.toFixed(2)} per claim).`,
+    source: "CMS Medicare Part D Spending by Drug",
+  });
+
+  if (profile.manufacturerCount > 0) {
+    evidence.push({
+      finding: `${profile.manufacturerCount} manufacturers reported against this molecule in Part D — a direct read on competitive intensity in the retail channel.`,
+      source: "CMS Medicare Part D Spending by Drug",
+    });
+  }
+  if (profile.brandNames.length) {
+    evidence.push({
+      finding: `Brands present in Part D alongside the generic: ${profile.brandNames.slice(0, 6).join(", ")}.`,
+      source: "CMS Medicare Part D Spending by Drug",
+    });
+  }
+  if (profile.years.length > 1) {
+    const first = profile.years[0];
+    evidence.push({
+      finding: `Trend ${first.year}→${L.year}: total spend ${profile.spendCagrPct !== null ? `${profile.spendCagrPct > 0 ? "+" : ""}${profile.spendCagrPct}% CAGR` : "n/a"}, weighted cost per dosage unit ${profile.unitCostChangePct !== null ? `${profile.unitCostChangePct > 0 ? "+" : ""}${profile.unitCostChangePct}%` : "n/a"} over the window.`,
+      source: "CMS Medicare Part D Spending by Drug",
+    });
+  }
+
+  // Score: real retail demand plus room to move on access.
+  let score = 40;
+  if (L.totalSpend > 5e8) score = 80;
+  else if (L.totalSpend > 1e8) score = 70;
+  else if (L.totalSpend > 1e7) score = 58;
+  else if (L.totalSpend > 1e6) score = 46;
+
+  if (profile.manufacturerCount >= 15) {
+    score = clamp(score - 12);
+    actions.push(
+      `With ${profile.manufacturerCount} manufacturers competing, tier position is contested and price-led. Compete on supply reliability and contracting terms rather than list price.`,
+    );
+  } else if (profile.manufacturerCount > 0 && profile.manufacturerCount <= 4) {
+    score = clamp(score + 10);
+    actions.push(
+      `Only ${profile.manufacturerCount} manufacturers are active — a concentrated field gives real leverage in PBM and plan negotiations.`,
+    );
+  }
+
+  if (profile.unitCostChangePct !== null && profile.unitCostChangePct < -20) {
+    actions.push(
+      `Weighted cost per dosage unit has fallen ${Math.abs(profile.unitCostChangePct)}% across the observed window — the access battle here is volume and tier retention, not price.`,
+    );
+  }
+  if (profile.spendCagrPct !== null && profile.spendCagrPct > 5) {
+    actions.push(`Part D spend is growing at ${profile.spendCagrPct}% CAGR — demand is expanding, so defend and extend formulary coverage now.`);
+  }
+  actions.push(
+    "Pull the quarterly Part D Formulary files to confirm actual tier, prior-authorisation and step-therapy placement before acting on this lever.",
+  );
+
+  return {
+    lever: "Formulary positioning",
+    computed: true,
+    score: clamp(score),
+    confidence: profile.years.length > 1 ? "High" : "Medium",
+    evidence,
+    recommendedActions: actions,
+    estValueRange: `$${(L.totalSpend / 1e6).toFixed(1)}M addressable Part D spend in ${L.year} across ${L.totalBeneficiaries.toLocaleString()} beneficiaries`,
+    dataGap:
+      "This is spend and utilisation, NOT formulary placement. Tier, prior authorisation, step therapy and quantity limits live in the quarterly CMS Part D Formulary files, which have no public API and are not wired — placement itself remains unverified.",
   };
 }
 
@@ -281,7 +430,7 @@ function renderPromptBlock(e: Omit<ComputedEvidence, "promptBlock">): string {
 
   lines.push("");
   lines.push(
-    "The other eight levers are NOT yet computed by an adapter — reason about them from the general evidence base and mark them accordingly. Do not present a reasoned lever as if it were computed.",
+    `The other ${10 - e.levers.length} of the ten levers are NOT computed by an adapter — reason about them from the general evidence base and mark them accordingly. Do not present a reasoned lever as if it were computed.`,
   );
   return lines.join("\n");
 }
@@ -289,7 +438,16 @@ function renderPromptBlock(e: Omit<ComputedEvidence, "promptBlock">): string {
 /** Resolve a molecule and compute every lever that has a wired adapter. */
 export async function computeEvidence(molecule: string): Promise<ComputedEvidence> {
   const identity = await resolveMolecule(molecule, 12);
-  const series = identity.allNdcs.length ? await getNadacSeriesBatch(identity.allNdcs, 14) : [];
+
+  // The canonical RxNorm ingredient name is the join key into the ex-US EML and
+  // Part D layers, so those run only once identity has resolved.
+  const joinName = identity.ingredientName ?? molecule;
+
+  const [series, eml, partD] = await Promise.all([
+    identity.allNdcs.length ? getNadacSeriesBatch(identity.allNdcs, 14) : Promise.resolve([]),
+    identity.ingredientRxcui ? getEmlFootprint(joinName).catch(() => null) : Promise.resolve(null),
+    identity.ingredientRxcui ? getPartDProfile(joinName).catch(() => null) : Promise.resolve(null),
+  ]);
 
   // Forecast the richest series — the most observations gives the most reliable
   // out-of-sample validation.
@@ -298,7 +456,8 @@ export async function computeEvidence(molecule: string): Promise<ComputedEvidenc
 
   const levers: ComputedLever[] = [
     pricingLever(identity, series, forecast, leadSeries),
-    geographicLever(identity, series),
+    geographicLever(identity, series, eml),
+    formularyLever(partD),
   ];
 
   const base: Omit<ComputedEvidence, "promptBlock"> = {
