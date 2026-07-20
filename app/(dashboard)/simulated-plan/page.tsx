@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAgentStream } from "@/hooks/use-agent-stream";
 import { trpc } from "@/lib/trpc";
 import { CompactIntakeForm } from "@/components/hub/compact-intake-form";
+import { PortfolioUpload } from "@/components/hub/portfolio-upload";
 import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-results";
 import { OutLicensingStrategyResults } from "@/components/hub/results/out-licensing-strategy-results";
 import type { HubIntakeForm, AgentResult } from "@/types/hub";
@@ -162,6 +163,8 @@ export default function SimulatedPlanPage() {
           </div>
 
           <CompactIntakeForm onSubmit={handleSubmit} isLoading={isRunning} />
+
+          <PortfolioUpload />
 
           <RequestHistoryPanel
             items={history.data ?? []}

@@ -178,6 +178,22 @@ export interface ValueLever {
   /** True when the evidence base cannot compute this lever for the chosen market —
    *  shown greyed out rather than faked. */
   notComputable?: boolean;
+  /** True when this lever was CALCULATED deterministically from a wired adapter
+   *  (RxNorm + CMS NADAC + backtested forecast) rather than reasoned by the model.
+   *  Computed levers override anything the model produced for the same lever. */
+  computed?: boolean;
+  /** Measured out-of-sample performance of the forecasting model behind this
+   *  lever. Present only on computed levers whose score rests on a forecast. */
+  modelAudit?: {
+    selectedModel: string;
+    smape: number;
+    mape: number;
+    rmse: number;
+    heldOutPredictions: number;
+    liftOverNaivePp: number;
+    intervalCoverage80: number;
+    leaderboard: { model: string; smape: number }[];
+  };
 }
 
 export interface AssetProfile {

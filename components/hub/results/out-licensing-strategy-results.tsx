@@ -664,7 +664,24 @@ function ValueLeversView({ levers }: { levers: ValueLever[] }) {
                   {i + 1}
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-[14px] font-bold text-[#1A1A2E]">{l.lever}</h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-[14px] font-bold text-[#1A1A2E]">{l.lever}</h4>
+                    {l.computed ? (
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C2410C18] text-[#9A3412]"
+                        title="Calculated deterministically from a wired data adapter — not model-reasoned"
+                      >
+                        COMPUTED
+                      </span>
+                    ) : (
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#F1F1F1] text-[#6B6B6B]"
+                        title="Reasoned by the model from the evidence base — no adapter computes this lever yet"
+                      >
+                        REASONED
+                      </span>
+                    )}
+                  </div>
                   {l.estValueRange && !dim && (
                     <p className="text-[11px] text-muted-foreground">Est. value: {l.estValueRange}</p>
                   )}
@@ -719,6 +736,34 @@ function ValueLeversView({ levers }: { levers: ValueLever[] }) {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+              {l.modelAudit && (
+                <div className="md:col-span-2 rounded-lg bg-[#FFF7ED] border border-[#F97316]/20 p-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-[#C2410C] mb-1.5">
+                    Model audit — measured, not asserted
+                  </p>
+                  <p className="text-[12px] text-[#1A1A2E] leading-relaxed">
+                    <span className="font-semibold">{l.modelAudit.selectedModel}</span> selected by rolling-origin
+                    backtest against {l.modelAudit.leaderboard.length} candidates · out-of-sample sMAPE{" "}
+                    <span className="font-mono font-bold">{l.modelAudit.smape}%</span> over{" "}
+                    {l.modelAudit.heldOutPredictions} held-out predictions · RMSE{" "}
+                    <span className="font-mono">{l.modelAudit.rmse}</span> · 80% interval coverage{" "}
+                    {l.modelAudit.intervalCoverage80}%
+                    {l.modelAudit.liftOverNaivePp > 0
+                      ? ` · beats naive by ${l.modelAudit.liftOverNaivePp} pp`
+                      : " · no candidate beat the naive benchmark, so no trend is claimed"}
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {l.modelAudit.leaderboard.map((m, j) => (
+                      <span
+                        key={j}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-white border border-border/40 text-muted-foreground"
+                      >
+                        {m.model} {m.smape}%
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
               {l.dataGap && (

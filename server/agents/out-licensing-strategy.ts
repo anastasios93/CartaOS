@@ -17,11 +17,12 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { HubIntakeForm, OutLicensingReport, AgentResult, RegionalAnalysis } from "@/types/hub";
+import type { HubIntakeForm, OutLicensingReport, AgentResult, RegionalAnalysis, ValueLever } from "@/types/hub";
 import type { AgentWriter } from "./index";
 import { withGrounding } from "@/server/services/source-reference";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
 import { extractJSON, cleanError, parseCompounds } from "./utils";
+import { computeEvidenceForAll, type ComputedEvidence } from "@/server/services/levers/computed";
 
 const STRATEGY_PROMPT = `You are a CartaOS commercial pharma veteran assessing how to MAXIMISE THE VALUE OF AN ALREADY-APPROVED, OFF-PATENT MEDICINE — a mature brand or generic the holder already owns. This is NOT a discovery, pipeline or novel-asset assessment: the molecule is approved and on the market, and the question is where residual and incremental value still sits and how to capture it. The output is a finished CartaOS client deliverable, ready to present.
 
@@ -213,6 +214,57 @@ function expandRegions(geos: string[]): { code: string; label: string }[] {
   return out;
 }
 
+/**
+ * The deterministic layer wins. Where an adapter computed a lever, that entry
+ * replaces whatever the model wrote for the same lever, so a narrated number can
+ * never drift from the calculated one. Computed levers are flagged so the UI can
+ * distinguish calculated from reasoned.
+ *
+ * When several compounds were assessed we keep the highest-scoring computed
+ * result per lever (the strongest play in the portfolio) rather than averaging,
+ * which would blur a real signal from one molecule into noise across the rest.
+ */
+function mergeComputedLevers(
+  modelLevers: ValueLever[] | undefined,
+  computed: ComputedEvidence[],
+): ValueLever[] {
+  const out: ValueLever[] = [...(modelLevers ?? [])].map(l => ({ ...l, computed: false }));
+
+  const best = new Map<string, ValueLever>();
+  for (const c of computed) {
+    for (const cl of c.levers) {
+      const candidate: ValueLever = {
+        lever: cl.lever,
+        score: cl.score,
+        confidence: cl.confidence,
+        evidence: cl.evidence,
+        recommendedActions: cl.recommendedActions,
+        estValueRange: cl.estValueRange,
+        dataGap: cl.dataGap,
+        notComputable: cl.notComputable,
+        computed: true,
+        modelAudit: cl.modelAudit,
+      };
+      const prev = best.get(cl.lever);
+      // Prefer a genuinely computable result, then the higher score.
+      if (
+        !prev ||
+        (prev.notComputable && !candidate.notComputable) ||
+        (!!prev.notComputable === !!candidate.notComputable && candidate.score > prev.score)
+      ) {
+        best.set(cl.lever, candidate);
+      }
+    }
+  }
+
+  for (const [lever, computedLever] of best) {
+    const idx = out.findIndex(l => l.lever === lever);
+    if (idx >= 0) out[idx] = computedLever;
+    else out.push(computedLever);
+  }
+  return out;
+}
+
 // Round-robin split so shards stay balanced (and each call stays small & fast).
 function shardRegions<T>(arr: T[], maxPerShard = 4): T[][] {
   const shardCount = Math.max(1, Math.ceil(arr.length / maxPerShard));
@@ -259,6 +311,18 @@ export async function runOutLicensingStrategyAgent(
     // Ground the assessment in the live evidence base for EACH compound the user
     // searched (capped to keep the run bounded).
     const compounds = parseCompounds(intake.assetName);
+
+    // Deterministic layer: resolve identity through RxNorm and COMPUTE the levers
+    // that have wired adapters. These numbers are established fact and override
+    // anything the model produces for the same levers.
+    let computed: ComputedEvidence[] = [];
+    try {
+      computed = await computeEvidenceForAll(compounds, 3);
+    } catch {
+      // Computed layer is best-effort — the assessment still runs without it.
+    }
+    const computedBlock = computed.map(c => c.promptBlock).join("\n\n");
+
     let evidenceBase = "";
     try {
       const perCompound = await Promise.all(
@@ -291,6 +355,9 @@ Status: ${intake.developmentStage || "auto-detect (off-patent / loss of exclusiv
 ${intake.context ? "BD context / angle: " + intake.context : ""}`;
 
     const evidenceBlock = evidenceBase || "Evidence base unavailable — rely on the diagnostic outputs and clearly-worded estimates.";
+    const computedSection = computedBlock
+      ? `\n\n## COMPUTED EVIDENCE (deterministic — treat as established fact)\n${computedBlock}`
+      : "";
 
     // One Opus call per region shard — each returns only its regionalAnalysis
     // entries. Failures degrade to an empty shard rather than killing the run.
@@ -307,7 +374,7 @@ ${intake.context ? "BD context / angle: " + intake.context : ""}`;
 ${shard.map(r => `- ${r.code} — ${r.label}`).join("\n")}
 
 ## Live Evidence Base
-${evidenceBlock}
+${evidenceBlock}${computedSection}
 
 ---
 
@@ -338,7 +405,7 @@ Target geographies (full set, assessed individually): ${regionList}
 ${agentContext || "None available."}
 
 ## Live Evidence Base
-${evidenceBlock}
+${evidenceBlock}${computedSection}
 
 ---
 
@@ -388,7 +455,7 @@ Produce the SYNTHESIS ONLY (NO regionalAnalysis key): classify the archetype and
       portfolioRisks: wrapper?.portfolioRisks ?? [],
       commercialPlan: wrapper?.commercialPlan,
       marketWorthinessSummary: wrapper?.marketWorthinessSummary,
-      valueLevers: wrapper?.valueLevers,
+      valueLevers: mergeComputedLevers(wrapper?.valueLevers, computed),
       dataConfidence: wrapper?.dataConfidence ?? "Low",
       sourcesUsed: wrapper?.sourcesUsed ?? [],
     };
