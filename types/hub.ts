@@ -12,6 +12,33 @@ export interface HubIntakeForm {
   dealDirection: "Out-licensing" | "In-licensing" | "Co-development" | "Option Agreement" | "M&A / Acquisition";
   geographies: Geography[];
   context: string;
+  /** Optional customisation extracted from an uploaded brief / parameters document.
+   *  Drives which assets and markets are assessed, how the value levers are
+   *  weighted, and what "value" means for this client. */
+  criteria?: SearchCriteria;
+}
+
+/** Customisable search parameters — extracted from any uploaded document (a brief,
+ *  a target-product profile, a parameters sheet) or pasted text — that tailor the
+ *  market-worthiness search and the asset value assessment to the client. */
+export interface SearchCriteria {
+  /** Assets / molecules to assess. Drives the search when present. */
+  assets: string[];
+  /** Target geographies (region codes or country names); empty = default global set. */
+  geographies: string[];
+  therapeuticArea?: string;
+  /** The specific question the client wants answered — what "value" means to them. */
+  valueQuestion?: string;
+  /** Per-lever importance 0–100. Missing levers default to equal weight. Used to
+   *  compute a client-weighted worthiness score. */
+  leverWeights?: { lever: ValueLeverType; weight: number }[];
+  /** Hard constraints / must-haves / exclusions, in plain language. */
+  constraints?: string[];
+  /** Quantitative or qualitative go/no-go thresholds. */
+  thresholds?: { metric: string; operator: string; value: string }[];
+  timeHorizon?: string;
+  /** Anything relevant the extractor could not classify into the fields above. */
+  notes?: string;
 }
 
 export type Geography = "US" | "EU" | "JP" | "CN" | "ROW";
@@ -122,6 +149,18 @@ export interface OutLicensingReport {
   /** The ten-lever value-maximisation scan — where residual/incremental value
    *  leaks out of an already-approved, off-patent medicine and how to plug it. */
   valueLevers?: ValueLever[];
+  /** The client's uploaded search criteria, echoed back so the report shows what
+   *  parameters drove it. */
+  appliedCriteria?: SearchCriteria;
+  /** Worthiness score recomputed with the client's own lever weights (from the
+   *  uploaded criteria), so the verdict reflects what THIS client values. */
+  weightedWorthiness?: {
+    /** 0–100, lever scores combined under the client's weights. */
+    score: number;
+    method: string;
+    byLever: { lever: string; score: number; weight: number; computed: boolean }[];
+    note: string;
+  };
   /** Consolidated business case — every commercial channel across geographies
    *  (with how to win each) and the sequenced go-to-market plan ("how to proceed"). */
   commercialPlan?: {

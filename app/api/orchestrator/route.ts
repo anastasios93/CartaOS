@@ -13,6 +13,40 @@ import type { SSEEvent, AgentId, AgentResult } from "@/types/hub";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
+const CriteriaSchema = z
+  .object({
+    assets: z.array(z.string()).default([]),
+    geographies: z.array(z.string()).default([]),
+    therapeuticArea: z.string().optional(),
+    valueQuestion: z.string().optional(),
+    leverWeights: z
+      .array(
+        z.object({
+          lever: z.enum([
+            "Geographic expansion",
+            "Indication expansion / repurposing",
+            "Distribution channels",
+            "Formulary positioning",
+            "Administration / formulation",
+            "Reimbursement / pricing",
+            "Sales-force effectiveness",
+            "Lifecycle / IP defense",
+            "Supply / COGS arbitrage",
+            "Portfolio synergy",
+          ]),
+          weight: z.number(),
+        }),
+      )
+      .optional(),
+    constraints: z.array(z.string()).optional(),
+    thresholds: z
+      .array(z.object({ metric: z.string(), operator: z.string(), value: z.string() }))
+      .optional(),
+    timeHorizon: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  .optional();
+
 const IntakeSchema = z.object({
   assetName: z.string().min(1),
   therapeuticArea: z.string().default(""),
@@ -20,6 +54,7 @@ const IntakeSchema = z.object({
   dealDirection: z.enum(["Out-licensing", "In-licensing", "Co-development", "Option Agreement", "M&A / Acquisition"]).default("Out-licensing"),
   geographies: z.array(z.enum(["US", "EU", "JP", "CN", "ROW"])).default(["US", "EU", "JP", "CN", "ROW"]),
   context: z.string().default(""),
+  criteria: CriteriaSchema,
 });
 
 export async function POST(req: Request) {

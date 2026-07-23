@@ -1,19 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import type { HubIntakeForm } from "@/types/hub";
-import { Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
+import type { HubIntakeForm, Geography } from "@/types/hub";
+import { Sparkles, Sliders } from "lucide-react";
 
 export function CompactIntakeForm({
   onSubmit,
   isLoading,
+  prefill,
+  criteriaActive,
 }: {
   onSubmit: (form: HubIntakeForm) => void;
   isLoading: boolean;
+  prefill?: { assetName?: string; context?: string; geographies?: Geography[] };
+  criteriaActive?: boolean;
 }) {
   const [assetName, setAssetName] = useState("");
   const [context, setContext] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [geographies, setGeographies] = useState<Geography[]>(["US", "EU", "JP", "CN", "ROW"]);
+
+  // When criteria are applied upstream, prefill the form so the user can review
+  // before running. Keyed on the prefill values so re-applying refreshes them.
+  const prefillKey = `${prefill?.assetName ?? ""}|${prefill?.context ?? ""}|${(prefill?.geographies ?? []).join(",")}`;
+  useEffect(() => {
+    if (!prefill) return;
+    if (prefill.assetName !== undefined) setAssetName(prefill.assetName);
+    if (prefill.context !== undefined) { setContext(prefill.context); setShowAdvanced(true); }
+    if (prefill.geographies?.length) setGeographies(prefill.geographies);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +41,7 @@ export function CompactIntakeForm({
       therapeuticArea: "",
       developmentStage: "",
       dealDirection: "Out-licensing",
-      geographies: ["US", "EU", "JP", "CN", "ROW"],
+      geographies,
       context: context.trim(),
     });
   };
@@ -40,9 +56,19 @@ export function CompactIntakeForm({
             <Sparkles className="h-4 w-4 text-white" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-[#1A1A2E]">Run Portfolio Diagnostic</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-bold text-[#1A1A2E]">Run Portfolio Diagnostic</h2>
+              {criteriaActive && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#141414] text-white">
+                  <Sliders className="h-2.5 w-2.5" />
+                  Customised by your criteria
+                </span>
+              )}
+            </div>
             <p className="text-[12px] text-muted-foreground mt-0.5">
-              Just enter an asset, compound, brand, or company. The AI agents will pull data from 12+ global pharma databases and auto-detect everything else.
+              {criteriaActive
+                ? "Your uploaded criteria have pre-filled and will weight this assessment. Review below and deploy."
+                : "Just enter an asset, compound, brand, or company. The AI agents will pull data from 12+ global pharma databases and auto-detect everything else."}
             </p>
           </div>
         </div>

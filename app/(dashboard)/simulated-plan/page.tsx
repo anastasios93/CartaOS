@@ -8,9 +8,10 @@ import { useAgentStream } from "@/hooks/use-agent-stream";
 import { trpc } from "@/lib/trpc";
 import { CompactIntakeForm } from "@/components/hub/compact-intake-form";
 import { PortfolioUpload } from "@/components/hub/portfolio-upload";
+import { CriteriaUpload } from "@/components/hub/criteria-upload";
 import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-results";
 import { OutLicensingStrategyResults } from "@/components/hub/results/out-licensing-strategy-results";
-import type { HubIntakeForm, AgentResult } from "@/types/hub";
+import type { HubIntakeForm, AgentResult, SearchCriteria, Geography } from "@/types/hub";
 import {
   exportStrategyReportPDF,
   exportExecutionPlanPDF,
@@ -47,6 +48,8 @@ export default function SimulatedPlanPage() {
   const [assetName, setAssetName] = useState<string>("");
   const [exporting, setExporting] = useState<null | "strategy-pdf" | "execution-pdf" | "deck">(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [criteria, setCriteria] = useState<SearchCriteria | null>(null);
+  const [prefill, setPrefill] = useState<{ assetName?: string; context?: string; geographies?: Geography[] } | undefined>(undefined);
 
   // Past requests history (persisted per-user by the orchestrator).
   const history = trpc.hub.list.useQuery(undefined, { refetchOnWindowFocus: false });
@@ -62,13 +65,39 @@ export default function SimulatedPlanPage() {
   const handleSubmit = (form: HubIntakeForm) => {
     setSubmitted(true);
     setAssetName(form.assetName);
-    deploy(form);
+    // Attach the uploaded criteria (if any) so the assessment is customised to them.
+    deploy(criteria ? { ...form, criteria } : form);
   };
 
   const handleReset = () => {
     reset();
     setSubmitted(false);
     setAssetName("");
+    setCriteria(null);
+    setPrefill(undefined);
+  };
+
+  // Map the criteria's free-form geographies onto the intake region set.
+  const toIntakeGeos = (geos: string[]): Geography[] => {
+    const set = new Set<Geography>();
+    for (const g of geos) {
+      const u = g.trim().toUpperCase();
+      if (["US", "USA", "UNITED STATES", "AMERICA"].includes(u)) set.add("US");
+      else if (["DE", "FR", "IT", "ES", "EU", "GERMANY", "FRANCE", "ITALY", "SPAIN", "EUROPE", "UK", "GB"].includes(u)) set.add("EU");
+      else if (["JP", "JAPAN"].includes(u)) set.add("JP");
+      else if (["CN", "CHINA"].includes(u)) set.add("CN");
+      else set.add("ROW");
+    }
+    return set.size ? [...set] : ["US", "EU", "JP", "CN", "ROW"];
+  };
+
+  const handleApplyCriteria = (c: SearchCriteria) => {
+    setCriteria(c);
+    setPrefill({
+      assetName: c.assets.join(", ") || undefined,
+      context: c.valueQuestion || undefined,
+      geographies: c.geographies.length ? toIntakeGeos(c.geographies) : undefined,
+    });
   };
 
   // Viewing a saved report from history replaces the live flow.
@@ -162,7 +191,9 @@ export default function SimulatedPlanPage() {
             </div>
           </div>
 
-          <CompactIntakeForm onSubmit={handleSubmit} isLoading={isRunning} />
+          <CriteriaUpload onApply={handleApplyCriteria} />
+
+          <CompactIntakeForm onSubmit={handleSubmit} isLoading={isRunning} prefill={prefill} criteriaActive={!!criteria} />
 
           <PortfolioUpload />
 

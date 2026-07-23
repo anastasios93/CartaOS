@@ -25,6 +25,7 @@ import {
   Swords,
   Flag,
   FileSearch,
+  Sliders,
 } from "lucide-react";
 
 const REGION_FLAGS: Record<string, string> = {
@@ -420,6 +421,42 @@ function OverviewView({ report }: { report: any }) {
 
   return (
     <div className="space-y-4">
+      {/* Client-weighted worthiness — from the uploaded search criteria */}
+      {report.weightedWorthiness && (
+        <div className="rounded-xl border-2 border-[#141414]/15 bg-white overflow-hidden">
+          <div className="flex items-center justify-between gap-4 p-5 border-b border-border/30 bg-[#FAFAFA]">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Sliders className="h-4 w-4 text-[#141414]" />
+                <h5 className="text-sm font-bold text-[#1A1A2E]">Your Custom Worthiness Score</h5>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{report.weightedWorthiness.method}</p>
+            </div>
+            <p className="text-3xl font-bold font-mono tracking-tight text-[#141414]">{report.weightedWorthiness.score}</p>
+          </div>
+          <div className="p-4 space-y-1.5">
+            {report.weightedWorthiness.byLever.map((l: { lever: string; score: number; weight: number; computed: boolean }, i: number) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-[11px] text-[#1A1A2E] w-40 shrink-0 truncate" title={l.lever}>{l.lever}</span>
+                <div className="flex-1 h-1.5 rounded-full bg-[#E3E3E3] overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, l.score))}%`, backgroundColor: l.score >= 70 ? "#C2410C" : l.score >= 45 ? "#F97316" : "#9A9A9A" }} />
+                </div>
+                <span className="text-[10px] font-mono text-muted-foreground w-8 text-right">{l.score}</span>
+                <span className="text-[9px] font-semibold text-[#141414] w-14 text-right" title="weight">w {l.weight}</span>
+                {l.computed && <span className="text-[8px] font-bold text-[#9A3412] shrink-0">●</span>}
+              </div>
+            ))}
+            <p className="text-[10px] text-muted-foreground/70 pt-1">{report.weightedWorthiness.note} <span className="text-[#9A3412]">●</span> = computed from live data.</p>
+          </div>
+          {report.appliedCriteria?.valueQuestion && (
+            <div className="px-4 pb-4">
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">Your question</p>
+              <p className="text-[12px] text-[#1A1A2E] leading-relaxed">{report.appliedCriteria.valueQuestion}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Verdict framing — narrow trade vs the client's broad question */}
       {report.opportunityFraming && (
         <div className="rounded-xl border border-border/40 bg-white overflow-hidden">

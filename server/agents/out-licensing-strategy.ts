@@ -23,6 +23,36 @@ import { withGrounding } from "@/server/services/source-reference";
 import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/global-pharma";
 import { extractJSON, cleanError, parseCompounds } from "./utils";
 import { computeEvidenceForAll, type ComputedEvidence } from "@/server/services/levers/computed";
+import { applyLeverWeights } from "@/server/services/ingest/criteria";
+
+/** Render the client's uploaded search criteria as a prompt block the assessment
+ *  must honour — the customisation the user asked for. */
+function renderCriteriaBlock(criteria: HubIntakeForm["criteria"]): string {
+  if (!criteria) return "";
+  const lines: string[] = ["## CLIENT SEARCH CRITERIA (uploaded — tailor the assessment to these)"];
+  if (criteria.valueQuestion) lines.push(`- The specific question to answer (what "value" means here): ${criteria.valueQuestion}`);
+  if (criteria.therapeuticArea) lines.push(`- Therapeutic focus: ${criteria.therapeuticArea}`);
+  if (criteria.geographies?.length) lines.push(`- Priority geographies: ${criteria.geographies.join(", ")}`);
+  if (criteria.timeHorizon) lines.push(`- Time horizon: ${criteria.timeHorizon}`);
+  if (criteria.leverWeights?.length) {
+    lines.push(
+      `- Lever priorities (weight each accordingly — the client cares most about the highest-weighted): ${criteria.leverWeights
+        .slice()
+        .sort((a, b) => b.weight - a.weight)
+        .map(w => `${w.lever} (${w.weight})`)
+        .join(", ")}`,
+    );
+  }
+  if (criteria.constraints?.length) lines.push(`- Hard constraints / must-haves / exclusions: ${criteria.constraints.join("; ")}`);
+  if (criteria.thresholds?.length) {
+    lines.push(`- Go/no-go thresholds: ${criteria.thresholds.map(t => `${t.metric} ${t.operator} ${t.value}`).join("; ")}`);
+  }
+  if (criteria.notes) lines.push(`- Additional notes: ${criteria.notes}`);
+  lines.push(
+    "Lead the executive summary, verdict, recommendations and marketWorthiness with the client's question above; weight the value levers to their stated priorities; and check every constraint and threshold explicitly, flagging any the asset fails.",
+  );
+  return lines.join("\n");
+}
 
 const STRATEGY_PROMPT = `You are a CartaOS commercial pharma veteran assessing how to MAXIMISE THE VALUE OF AN ALREADY-APPROVED, OFF-PATENT MEDICINE — a mature brand or generic the holder already owns. This is NOT a discovery, pipeline or novel-asset assessment: the molecule is approved and on the market, and the question is where residual and incremental value still sits and how to capture it. The output is a finished CartaOS client deliverable, ready to present.
 
@@ -358,6 +388,8 @@ ${intake.context ? "BD context / angle: " + intake.context : ""}`;
     const computedSection = computedBlock
       ? `\n\n## COMPUTED EVIDENCE (deterministic — treat as established fact)\n${computedBlock}`
       : "";
+    const criteriaBlock = renderCriteriaBlock(intake.criteria);
+    const criteriaSection = criteriaBlock ? `\n\n${criteriaBlock}` : "";
 
     // One Opus call per region shard — each returns only its regionalAnalysis
     // entries. Failures degrade to an empty shard rather than killing the run.
@@ -374,7 +406,7 @@ ${intake.context ? "BD context / angle: " + intake.context : ""}`;
 ${shard.map(r => `- ${r.code} — ${r.label}`).join("\n")}
 
 ## Live Evidence Base
-${evidenceBlock}${computedSection}
+${evidenceBlock}${computedSection}${criteriaSection}
 
 ---
 
@@ -405,7 +437,7 @@ Target geographies (full set, assessed individually): ${regionList}
 ${agentContext || "None available."}
 
 ## Live Evidence Base
-${evidenceBlock}${computedSection}
+${evidenceBlock}${computedSection}${criteriaSection}
 
 ---
 
@@ -426,6 +458,15 @@ Produce the SYNTHESIS ONLY (NO regionalAnalysis key): classify the archetype and
     if (!wrapper && regionalAnalysis.length === 0) {
       throw new Error("The opportunity assessment produced no usable content.");
     }
+
+    const mergedLevers = mergeComputedLevers(wrapper?.valueLevers, computed);
+
+    // Recompute a worthiness score under the client's own lever weights (from the
+    // uploaded criteria). Deterministic — the model reads the brief, the maths sets
+    // the number.
+    const weightedWorthiness = intake.criteria
+      ? applyLeverWeights(mergedLevers, intake.criteria.leverWeights)
+      : undefined;
 
     // Merge the parallel pieces into one report; fall back gracefully if the
     // synthesis call failed but regions succeeded.
@@ -455,7 +496,9 @@ Produce the SYNTHESIS ONLY (NO regionalAnalysis key): classify the archetype and
       portfolioRisks: wrapper?.portfolioRisks ?? [],
       commercialPlan: wrapper?.commercialPlan,
       marketWorthinessSummary: wrapper?.marketWorthinessSummary,
-      valueLevers: mergeComputedLevers(wrapper?.valueLevers, computed),
+      valueLevers: mergedLevers,
+      appliedCriteria: intake.criteria,
+      weightedWorthiness,
       dataConfidence: wrapper?.dataConfidence ?? "Low",
       sourcesUsed: wrapper?.sourcesUsed ?? [],
     };
