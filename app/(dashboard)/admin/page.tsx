@@ -87,7 +87,7 @@ export default function AdminPage() {
       {stats && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard label="Users" value={stats.users} icon={<Users className="h-4 w-4" />} color="#F97316" />
-          <StatCard label="Hub Diagnostics" value={stats.hubRequests} icon={<Sparkles className="h-4 w-4" />} color="#0EA5E9" />
+          <StatCard label="Runs" value={stats.runs} icon={<Sparkles className="h-4 w-4" />} color="#0EA5E9" />
           <StatCard label="Deals" value={stats.deals} icon={<FileText className="h-4 w-4" />} color="#10B981" />
           <StatCard label="Negotiations" value={stats.negotiations} icon={<Handshake className="h-4 w-4" />} color="#8B5CF6" />
           <StatCard label="Companies" value={stats.companies} icon={<Building2 className="h-4 w-4" />} color="#3B82F6" />
@@ -149,7 +149,7 @@ export default function AdminPage() {
                     <p className="text-[12px] text-[#475569]">{u.company || "—"}</p>
                     <p className="text-[10px] text-muted-foreground">{u.role || ""}</p>
                   </td>
-                  <td className="px-4 py-3 text-center font-mono text-[12px] text-[#1A1A2E]">{u._count.hubRequests}</td>
+                  <td className="px-4 py-3 text-center font-mono text-[12px] text-[#1A1A2E]">{u._count.runs}</td>
                   <td className="px-4 py-3 text-center font-mono text-[12px] text-[#1A1A2E]">{u._count.deals}</td>
                   <td className="px-4 py-3 text-center font-mono text-[12px] text-[#1A1A2E]">{u._count.negotiations}</td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">{timeAgo(u.lastLoginAt)}</td>

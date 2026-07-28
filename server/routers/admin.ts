@@ -37,7 +37,7 @@ export const adminRouter = router({
           lastLoginAt: true,
           _count: {
             select: {
-              hubRequests: true,
+              runs: true,
               deals: true,
               companies: true,
               negotiations: true,
@@ -69,12 +69,24 @@ export const adminRouter = router({
       });
       if (!user) throw new Error("User not found");
 
-      const [hubRequests, deals, negotiations, companies] = await Promise.all([
-        ctx.db.hubRequest.findMany({
+      const [runs, deals, negotiations, companies] = await Promise.all([
+        // The Run spine replaced HubRequest as the record of a user's activity.
+        // Payloads are large Json blobs and nothing here renders them, so this
+        // selects the summary columns rather than pulling whole reports back.
+        ctx.db.run.findMany({
           where: { userId: input.userId },
           orderBy: { createdAt: "desc" },
           take: 25,
-          include: { results: true },
+          select: {
+            id: true,
+            assetQuery: true,
+            assetType: true,
+            geographies: true,
+            status: true,
+            error: true,
+            createdAt: true,
+            updatedAt: true,
+          },
         }),
         ctx.db.deal.findMany({
           where: { ownerId: input.userId },
@@ -94,18 +106,18 @@ export const adminRouter = router({
         }),
       ]);
 
-      return { user, hubRequests, deals, negotiations, companies };
+      return { user, runs, deals, negotiations, companies };
     }),
 
   /** Overall platform stats. */
   platformStats: adminProcedure.query(async ({ ctx }) => {
-    const [users, hubRequests, deals, negotiations, companies] = await Promise.all([
+    const [users, runs, deals, negotiations, companies] = await Promise.all([
       ctx.db.user.count(),
-      ctx.db.hubRequest.count(),
+      ctx.db.run.count(),
       ctx.db.deal.count(),
       ctx.db.negotiation.count(),
       ctx.db.company.count(),
     ]);
-    return { users, hubRequests, deals, negotiations, companies };
+    return { users, runs, deals, negotiations, companies };
   }),
 });

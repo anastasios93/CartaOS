@@ -140,8 +140,6 @@ model User {
   accounts      Account[]
   sessions      Session[]
   documents     Document[]
-  hubRequests   HubRequest[]
-  evaluations   Evaluation[]
   runs          Run[]
   deals         Deal[]
   companies     Company[]
@@ -520,35 +518,6 @@ model Document {
 
 // ─── Intelligence Hub ───────────────────────────────────────────────────────
 
-model HubRequest {
-  id              String      @id @default(cuid())
-  userId          String
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assetName       String
-  therapeuticArea String
-  stage           String
-  dealDirection   String
-  geographies     String[]
-  context         String?     @db.Text
-  status          String      @default("running")
-  results         HubResult[]
-  createdAt       DateTime    @default(now())
-  completedAt     DateTime?
-}
-
-model HubResult {
-  id         String     @id @default(cuid())
-  requestId  String
-  request    HubRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  agentId    String
-  status     String
-  sources    Json
-  result     Json?
-  error      String?
-  durationMs Int?
-  createdAt  DateTime   @default(now())
-}
-
 model CachedAPIResponse {
   id        String   @id @default(cuid())
   sourceKey String
@@ -562,10 +531,10 @@ model CachedAPIResponse {
 
 // ─── Run spine ────────────────────────────────────────────────────────────────
 // One Run is the spine of the whole app: every pillar (Diagnosis, Strategy,
-// Execution) reads from and writes to the same row. HubRequest/HubResult and
-// Evaluation are legacy stores kept during the refactor transition; their rows
-// are backfilled into Run (scripts/backfill-runs.ts) and the tables are
-// scheduled for removal in the final phase.
+// Execution) reads from and writes to the same row. This is now the only record
+// of a run — the legacy HubRequest/HubResult/Evaluation tables it replaced were
+// backfilled into it and then dropped. `legacySource`/`legacyId` mark the rows
+// that came from that backfill.
 
 model Run {
   id           String   @id @default(cuid())
@@ -595,25 +564,3 @@ model Run {
 
 // ─── Market-Worthiness Engine ─────────────────────────────────────────────────
 
-model Evaluation {
-  id                        String   @id @default(cuid())
-  userId                    String
-  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  asset                     Json     // { name, inn, modality, stage, owner }
-  geography                 String
-  assetValueScore           Int
-  marketAttractivenessScore Int
-  worthinessScore           Int
-  confidence                Float
-  verdict                   String   // GO | CONDITIONAL | NO_GO
-  conditions                Json?
-  bindingConstraint         String?  @db.Text
-  decisiveDrivers           Json?
-  subscores                 Json?
-  rnpv                      Json?
-  provenance                Json?
-  summary                   String?  @db.Text
-  createdAt                 DateTime @default(now())
-
-  @@index([userId, createdAt])
-}

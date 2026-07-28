@@ -24,6 +24,17 @@ function format(date: Date | string | null) {
   return new Date(date).toLocaleString();
 }
 
+const RUN_STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  diagnosis_running: "Diagnosis running",
+  diagnosed: "Diagnosed",
+  strategy_running: "Strategy running",
+  strategized: "Awaiting plan",
+  execution_running: "Planning",
+  complete: "In execution",
+  error: "Error",
+};
+
 export default function AdminUserPage({
   params,
 }: {
@@ -51,7 +62,7 @@ export default function AdminUserPage({
   }
   const data = q.data;
   if (!data) return null;
-  const { user, hubRequests, deals, negotiations, companies } = data;
+  const { user, runs, deals, negotiations, companies } = data;
 
   return (
     <div className="space-y-6">
@@ -89,35 +100,30 @@ export default function AdminUserPage({
         </CardContent>
       </Card>
 
-      {/* Hub Diagnostics */}
-      <Section
-        icon={<Sparkles className="h-4 w-4" />}
-        title={`Portfolio Diagnostics (${hubRequests.length})`}
-        color="#0EA5E9"
-      >
-        {hubRequests.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground italic">No diagnostics yet.</p>
+      {/* Runs — the spine replaced HubRequest as the record of activity */}
+      <Section icon={<Sparkles className="h-4 w-4" />} title={`Runs (${runs.length})`} color="#0EA5E9">
+        {runs.length === 0 ? (
+          <p className="text-[12px] text-muted-foreground italic">No runs yet.</p>
         ) : (
           <div className="space-y-2">
-            {hubRequests.map((r) => (
+            {runs.map((r) => (
               <div key={r.id} className="rounded-lg border border-border/40 bg-white p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-[#1A1A2E]">{r.assetName || "Untitled"}</p>
+                    <p className="text-[13px] font-semibold text-[#1A1A2E]">{r.assetQuery || "Untitled"}</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {r.therapeuticArea || "—"} · {r.stage || "—"} · {(r.geographies || []).join(", ") || "—"}
+                      {r.assetType === "innovative" ? "Innovative" : "Off-patent"} ·{" "}
+                      {(r.geographies || []).join(", ") || "—"}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
                     <Badge variant="outline" className="text-[9px] h-5">
-                      {r.status}
+                      {RUN_STATUS_LABEL[r.status] ?? r.status}
                     </Badge>
                     <p className="text-[10px] text-muted-foreground mt-1">{format(r.createdAt)}</p>
                   </div>
                 </div>
-                {r.results?.length > 0 && (
-                  <p className="text-[10px] text-muted-foreground mt-2">{r.results.length} agent result(s)</p>
-                )}
+                {r.error && <p className="text-[10px] text-red-700 mt-2">{r.error}</p>}
               </div>
             ))}
           </div>
