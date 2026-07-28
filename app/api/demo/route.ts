@@ -17,31 +17,43 @@ export const dynamic = "force-dynamic";
 const DEMO_EMAIL = "demo@cartaos.ai";
 const DEMO_PASSWORD = "ExploreCartaOS2026";
 
+// The endpoint is unauthenticated by design (it powers the one-click demo
+// button on /login), so bound the work it can be made to do: the bcrypt hash
+// is computed once per instance, and the upsert runs at most once per minute
+// per instance — repeat calls just return the (public, shared) credentials.
+let cachedHash: string | null = null;
+let lastUpsertAt = 0;
+const UPSERT_COOLDOWN_MS = 60_000;
+
 export async function POST() {
   try {
-    // Always (re)set the password hash so the returned credentials are
-    // guaranteed to authenticate — even if the demo user was seeded earlier
-    // with a different password. Idempotent upsert.
-    const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+    if (Date.now() - lastUpsertAt > UPSERT_COOLDOWN_MS) {
+      cachedHash ??= await bcrypt.hash(DEMO_PASSWORD, 12);
 
-    await db.user.upsert({
-      where: { email: DEMO_EMAIL },
-      update: {
-        passwordHash,
-        name: "Demo User",
-        company: "CartaOS Demo",
-        role: "Business Development",
-        department: "Corporate Development",
-      },
-      create: {
-        name: "Demo User",
-        email: DEMO_EMAIL,
-        passwordHash,
-        company: "CartaOS Demo",
-        role: "Business Development",
-        department: "Corporate Development",
-      },
-    });
+      await db.user.upsert({
+        where: { email: DEMO_EMAIL },
+        update: {
+          passwordHash: cachedHash,
+          name: "Demo User",
+          company: "CartaOS Demo",
+          role: "Business Development",
+          department: "Corporate Development",
+          // The shared demo account must never carry admin rights, even if
+          // someone flips the flag in the DB — every demo login resets it.
+          isAdmin: false,
+        },
+        create: {
+          name: "Demo User",
+          email: DEMO_EMAIL,
+          passwordHash: cachedHash,
+          company: "CartaOS Demo",
+          role: "Business Development",
+          department: "Corporate Development",
+          isAdmin: false,
+        },
+      });
+      lastUpsertAt = Date.now();
+    }
 
     return NextResponse.json({
       email: DEMO_EMAIL,
