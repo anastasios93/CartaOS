@@ -376,9 +376,73 @@ export function sensitivity(
   return entries.sort((a, b) => b.swing - a.swing);
 }
 
-/** The best computable route by NPV, or null when nothing is computable. */
-export function recommendRoute(results: RouteResult[]): RouteEconomics | null {
+/**
+ * Fit score below which a route is not eligible to be recommended, on the
+ * agent's 0-100 scale.
+ */
+export const MIN_RECOMMENDABLE_FIT = 40;
+
+export interface Recommendation {
+  route: RouteEconomics;
+  /** Higher-NPV routes passed over because the agent scored them unviable. */
+  setAside: { key: string; npv: number; score: number }[];
+  /**
+   * True when no route cleared the fit bar and this is simply the best
+   * economics available. The headline must say so rather than imply the route
+   * is a fit — recommending a structurally impossible route is the false
+   * positive that costs the most credibility.
+   */
+  lowFit: boolean;
+}
+
+/**
+ * The route to recommend: best NPV among routes the agent judged actually
+ * open to this asset.
+ *
+ * NPV alone is not a recommendation. A real run scored every transaction route
+ * for a wholly-owned Phase 3 asset as unavailable, and max-NPV still headlined
+ * a route whose own key dependency read "not the situation here". Fit gates
+ * which routes may win; economics still rank the survivors, so the engine keeps
+ * owning the numbers.
+ *
+ * `fit` maps route key to the agent's 0-100 score; a missing or null score is
+ * treated as unscored and never blocks a route.
+ */
+export function recommend(
+  results: RouteResult[],
+  fit?: Record<string, number | null | undefined>,
+  minFit: number = MIN_RECOMMENDABLE_FIT,
+): Recommendation | null {
   const computable = results.filter((r): r is RouteEconomics => r.computable);
   if (!computable.length) return null;
-  return computable.reduce((best, r) => (r.npv > best.npv ? r : best));
+
+  const bestOf = (rs: RouteEconomics[]) => rs.reduce((best, r) => (r.npv > best.npv ? r : best));
+  const scoreOf = (key: string) => {
+    const s = fit?.[key];
+    return typeof s === "number" && Number.isFinite(s) ? s : null;
+  };
+
+  const eligible = computable.filter((r) => {
+    const s = scoreOf(r.key);
+    return s == null || s >= minFit;
+  });
+
+  if (!eligible.length) return { route: bestOf(computable), setAside: [], lowFit: true };
+
+  const route = bestOf(eligible);
+  const setAside = computable
+    .filter((r) => r.npv > route.npv)
+    .map((r) => ({ key: r.key, npv: r.npv, score: scoreOf(r.key) as number }))
+    .sort((a, b) => b.npv - a.npv);
+
+  return { route, setAside, lowFit: false };
+}
+
+/** The recommended route itself, or null when nothing is computable. */
+export function recommendRoute(
+  results: RouteResult[],
+  fit?: Record<string, number | null | undefined>,
+  minFit: number = MIN_RECOMMENDABLE_FIT,
+): RouteEconomics | null {
+  return recommend(results, fit, minFit)?.route ?? null;
 }
