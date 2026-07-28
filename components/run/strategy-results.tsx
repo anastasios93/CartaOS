@@ -349,7 +349,7 @@ function Tornado({ entries, base, delta }: { entries: SensitivityEntry[]; base: 
               </div>
             </div>
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground whitespace-nowrap">
-              ±{usd(e.swing / 2)}
+              {usd(e.swing)} swing
             </span>
           </li>
         );
