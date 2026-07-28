@@ -58,7 +58,15 @@
       "Bash(python -c \"import json;d=json.load\\(open\\('package.json'\\)\\);print\\('valid JSON'\\);print\\([k for k in d['dependencies'] if 'azure' in k or 'microsoft' in k] or 'no azure/ms deps'\\)\")",
       "Bash(./node_modules/.bin/eslint \"app/\\(dashboard\\)/deals/page.tsx\" \"app/\\(dashboard\\)/settings/page.tsx\" \"app/\\(dashboard\\)/companies/page.tsx\" server/routers/ server/services/claude.ts)",
       "Bash(grep -oE \"[a-z@/-]+$\")",
-      "Bash(./node_modules/.bin/eslint \"app/\\(dashboard\\)/page.tsx\" \"app/\\(dashboard\\)/layout.tsx\" components/app-sidebar.tsx)"
+      "Bash(./node_modules/.bin/eslint \"app/\\(dashboard\\)/page.tsx\" \"app/\\(dashboard\\)/layout.tsx\" components/app-sidebar.tsx)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/11/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(node __TRACKED_VAR__/verify-legacy.mjs __TRACKED_VAR__/legacy-tables-backup.json)",
+      "Bash(cp __TRACKED_VAR__/verify-legacy.mjs ./verify-legacy.mjs)",
+      "Bash(node ./verify-legacy.mjs __TRACKED_VAR__/legacy-tables-backup.json)",
+      "Bash(node --env-file=.env ./verify-legacy.mjs __TRACKED_VAR__/legacy-tables-backup.json)",
+      "Bash(cp C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/legacy-tables-backup.json C:/Users/anast/cartaos-legacy-tables-backup-2026-07-28.json)",
+      "Read(//c/Users/anast/**)",
+      "Bash(./node_modules/.bin/eslint server/routers/admin.ts)"
     ]
   }
 }

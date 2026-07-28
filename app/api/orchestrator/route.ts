@@ -104,27 +104,9 @@ export async function POST(req: Request) {
     writer.write(encoder.encode(data)).catch(() => {});
   };
 
-  // Persist the request immediately so it shows up in the user's history even
-  // while it's still running. DB failures must never break the live stream.
-  const hubRequestPromise = db.hubRequest
-    .create({
-      data: {
-        userId,
-        assetName: intake.assetName,
-        therapeuticArea: intake.therapeuticArea,
-        stage: intake.developmentStage,
-        dealDirection: intake.dealDirection,
-        geographies: intake.geographies,
-        context: intake.context || null,
-        status: "running",
-      },
-      select: { id: true },
-    })
-    .then(r => r.id)
-    .catch(() => null);
-
-  // The Run spine (transitional double-write next to HubRequest — the legacy
-  // table goes away in the final phase once nothing reads it).
+  // The Run spine. It used to be double-written alongside HubRequest/HubResult
+  // while the legacy tables still had readers; they have none now, so the Run
+  // row is the only record of a diagnosis.
   const runLog: { at: string; kind: string; message: string; source?: string; phase?: string }[] = [];
   const logEvent = (event: SSEEvent | { type: "done" }) => {
     if (!("agent" in event)) return;
@@ -240,34 +222,6 @@ export async function POST(req: Request) {
       // Persist BEFORE closing the writer. Closing it ends the response body,
       // and the platform is free to tear the function down the moment the
       // response completes — anything awaited after that never lands.
-
-      // Persist captured results so the run is reopenable from history.
-      try {
-        const requestId = await hubRequestPromise;
-        if (requestId) {
-          const entries = Object.entries(captured);
-          const anyResult = entries.some(([, v]) => v.result != null);
-          await db.hubResult.createMany({
-            data: entries.map(([agentId, v]) => ({
-              requestId,
-              agentId,
-              status: v.error ? "error" : v.result != null ? "complete" : (v.status ?? "idle"),
-              sources: (v.sources ?? []) as Prisma.InputJsonValue,
-              result: v.result == null ? Prisma.JsonNull : (v.result as Prisma.InputJsonValue),
-              error: v.error ?? null,
-            })),
-          });
-          await db.hubRequest.update({
-            where: { id: requestId },
-            data: {
-              status: anyResult ? "complete" : "error",
-              completedAt: new Date(),
-            },
-          });
-        }
-      } catch {
-        // Persistence is best-effort — never surface to the user.
-      }
 
       // Persist the Run spine row: the assessment maps into the Diagnosis
       // envelope; the execution-plan output rides along for the later pillar.
