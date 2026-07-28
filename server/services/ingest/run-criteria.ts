@@ -17,7 +17,7 @@ import type { Criterion, CriterionCategory } from "@/types/run";
 import { CriterionCategorySchema } from "@/types/run";
 import type { SearchCriteria } from "@/types/hub";
 import { extractJSON } from "@/server/agents/utils";
-import { normalizeLegacyGeography } from "@/config/geographies";
+
 
 const EXTRACT_SYSTEM = `You extract structured search criteria from client documents for CartaOS, a pharma portfolio-intelligence platform. The documents may name compounds, targets, indications, molecule classes, dosage forms, development stages, geographies, competitors, hard constraints, and priority weightings.
 
@@ -104,40 +104,7 @@ export function searchCriteriaToCriteria(sc: SearchCriteria, fileName?: string):
   ];
 }
 
-/** The orchestrator's Zod schema accepts exactly these lever names — anything else is dropped, not guessed. */
-const VALID_LEVERS = new Set<string>([
-  "Geographic expansion",
-  "Indication expansion / repurposing",
-  "Distribution channels",
-  "Formulary positioning",
-  "Administration / formulation",
-  "Reimbursement / pricing",
-  "Sales-force effectiveness",
-  "Lifecycle / IP defense",
-  "Supply / COGS arbitrage",
-  "Portfolio synergy",
-]);
-
-/** Bridge Criterion[] → legacy SearchCriteria so the current agents consume it unchanged. */
-export function criteriaToSearchCriteria(criteria: Criterion[]): SearchCriteria {
-  const byCat = (c: CriterionCategory) => criteria.filter((x) => x.category === c);
-  const leverWeights = byCat("lever_weight")
-    .map((c) => {
-      const m = c.value.match(/^(.*?):\s*(\d{1,3})$/);
-      return m ? { lever: m[1].trim(), weight: Math.min(100, Number(m[2])) } : { lever: c.value.trim(), weight: c.weight };
-    })
-    .filter((w) => VALID_LEVERS.has(w.lever));
-  return {
-    assets: byCat("compound").map((c) => c.value),
-    geographies: [
-      ...new Set(byCat("geography").flatMap((c) => (normalizeLegacyGeography(c.value).length ? normalizeLegacyGeography(c.value) : [c.value]))),
-    ],
-    therapeuticArea: byCat("indication")[0]?.value,
-    leverWeights: leverWeights as SearchCriteria["leverWeights"],
-    constraints: byCat("constraint").map((c) => c.value),
-    thresholds: [],
-  };
-}
+export { criteriaToSearchCriteria } from "@/lib/criteria-bridge";
 
 export async function extractRunCriteria(docs: ExtractedDoc[]): Promise<RunCriteriaResult> {
   if (!docs.length) return { criteria: [], method: "heuristic" };

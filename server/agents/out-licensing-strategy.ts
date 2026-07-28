@@ -24,6 +24,7 @@ import { aggregateGlobalData, summarizeGlobalData } from "@/server/services/glob
 import { extractJSON, cleanError, parseCompounds } from "./utils";
 import { computeEvidenceForAll, type ComputedEvidence } from "@/server/services/levers/computed";
 import { applyLeverWeights } from "@/server/services/ingest/criteria";
+import { countryByCode } from "@/config/geographies";
 
 /** Render the client's uploaded search criteria as a prompt block the assessment
  *  must honour — the customisation the user asked for. */
@@ -230,18 +231,28 @@ const REGION_EXPANSION: Record<string, { code: string; label: string }[]> = {
   ROW: [{ code: "ROW", label: "Rest of World" }],
 };
 
-function expandRegions(geos: string[]): { code: string; label: string }[] {
+/** Region shards are one Opus call per group of 4 — bound the fan-out. */
+export const MAX_MARKETS = 12;
+
+export function expandRegions(geos: string[], exact = false): { code: string; label: string }[] {
   const out: { code: string; label: string }[] = [];
   const seen = new Set<string>();
+  const push = (r: { code: string; label: string }) => {
+    if (!seen.has(r.code)) { seen.add(r.code); out.push(r); }
+  };
   for (const g of geos) {
-    for (const r of REGION_EXPANSION[g] ?? []) {
-      if (!seen.has(r.code)) { seen.add(r.code); out.push(r); }
-    }
+    const legacy = REGION_EXPANSION[g];
+    const iso = countryByCode(g);
+    // "US"/"JP"/"CN" are both legacy keys and ISO codes — identical expansion.
+    if (legacy) legacy.forEach(push);
+    else if (iso) push({ code: iso.code, label: iso.name });
+    // Unknown tokens are skipped, never guessed.
   }
-  // India is the in-license / origination corridor for the off-patent thesis.
-  if (!seen.has("IN")) out.push({ code: "IN", label: "India" });
-  if (out.length === 0) out.push({ code: "US", label: "United States" });
-  return out;
+  // India corridor was a thesis-driven injection for the legacy region form; an
+  // exact ISO selection from the geography selector is respected verbatim (§3.1).
+  if (!exact && !seen.has("IN")) push({ code: "IN", label: "India" });
+  if (out.length === 0) push({ code: "US", label: "United States" });
+  return out.slice(0, MAX_MARKETS);
 }
 
 /**
@@ -372,7 +383,7 @@ export async function runOutLicensingStrategyAgent(
 
     // Deterministic market set, sharded so the heavy per-region generation runs
     // in parallel instead of one long serial completion.
-    const regions = expandRegions(intake.geographies);
+    const regions = expandRegions(intake.geographies, intake.exactGeographies === true);
     const regionList = regions.map(r => `${r.code} (${r.label})`).join(", ");
     const shards = shardRegions(regions, 4);
 

@@ -8,6 +8,7 @@ import { documentRouter } from "./document";
 import { userRouter } from "./user";
 import { adminRouter } from "./admin";
 import { hubRouter } from "./hub";
+import { runRouter } from "./run";
 
 export const appRouter = router({
   deal: dealRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   user: userRouter,
   admin: adminRouter,
   hub: hubRouter,
+  run: runRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -10,7 +10,13 @@ export interface HubIntakeForm {
   therapeuticArea: string;
   developmentStage: string;
   dealDirection: "Out-licensing" | "In-licensing" | "Co-development" | "Option Agreement" | "M&A / Acquisition";
-  geographies: Geography[];
+  /** ISO-3166 alpha-2 codes, or the legacy region keys (Geography) from the old form. */
+  geographies: string[];
+  /** True when geographies is an exact ISO selection to respect verbatim —
+   *  suppresses the legacy India-corridor injection in region expansion. */
+  exactGeographies?: boolean;
+  /** Chosen once at run start and propagated (§2). Defaults to off_patent. */
+  assetType?: "off_patent" | "innovative";
   context: string;
   /** Optional customisation extracted from an uploaded brief / parameters document.
    *  Drives which assets and markets are assessed, how the value levers are
@@ -260,9 +266,9 @@ export interface AssetProfile {
 }
 
 export interface RegionalAnalysis {
-  // EU is assessed as four national markets (DE/FR/IT/ES); India (IN) appears for the
-  // in-license/origination corridor; "EU" kept for legacy reports.
-  region: "US" | "DE" | "FR" | "IT" | "ES" | "EU" | "JP" | "CN" | "ROW" | "IN";
+  // Any ISO-3166 alpha-2 code (the run's geography selection drives the shard
+  // list); "EU" and "ROW" appear in legacy reports only.
+  region: string;
   regionLabel: string;
   attractiveness: "Very High" | "High" | "Medium" | "Low";
   attractivenessScore: number;
