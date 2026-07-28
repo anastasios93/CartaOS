@@ -27,7 +27,23 @@
       "Bash(./node_modules/.bin/next lint *)",
       "Bash(./node_modules/.bin/eslint components/run/diagnosis-shell.tsx components/run/strategy-shell.tsx hooks/use-run-log.ts)",
       "Bash(sed -n '/^model Run /,/^}/p' prisma/schema.prisma)",
-      "Bash(sed -n '/^model Negotiation /,/^}/p' prisma/schema.prisma)"
+      "Bash(sed -n '/^model Negotiation /,/^}/p' prisma/schema.prisma)",
+      "Bash(./node_modules/.bin/eslint components/run/execution-results.tsx components/run/execution-shell.tsx)",
+      "Bash(./node_modules/.bin/eslint components/run/strategy-results.tsx components/run/strategy-shell.tsx)",
+      "Bash(./node_modules/.bin/eslint components/run/ hooks/)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(./node_modules/.bin/prisma generate *)",
+      "Bash(./node_modules/.bin/eslint \"app/\\(dashboard\\)/workspace/page.tsx\" \"app/\\(dashboard\\)/workspace/[id]/page.tsx\" \"app/\\(dashboard\\)/negotiations/page.tsx\" \"app/\\(dashboard\\)/negotiations/[id]/page.tsx\")",
+      "Bash(echo \"clean=$?\")",
+      "Bash(./node_modules/.bin/eslint app *)",
+      "Bash(node -e ' *)",
+      "Bash(cp \"C:/Users/anast/cartaos/.claude/worktrees/competent-gauss-b9c64b/prisma/schema.prisma\" prisma/schema.prisma)",
+      "Bash(./node_modules/.bin/prisma migrate *)",
+      "Bash(./node_modules/.bin/prisma db *)",
+      "Bash(cd \"C:/Users/anast/cartaos/.claude/worktrees/competent-gauss-b9c64b\" && grep -n \"^\\\\.env\" .gitignore | head -3 && cp \"C:/Users/anast/cartaos/.env\" .env && echo \"copied\" && git status --short | grep -i env || echo \"\\(.env not tracked - good\\)\")",
+      "Bash(grep -o \"hidden[^,;]\\\\{0,80\\\\}\" node_modules/@base-ui/react/tabs/panel/TabsPanel.js)",
+      "Bash(grep -o \"keepMounted[^,;]\\\\{0,90\\\\}\" node_modules/@base-ui/react/tabs/panel/TabsPanel.js)",
+      "Bash(grep -o \"const mounted[^;]\\\\{0,160\\\\}\\\\|let mounted[^;]\\\\{0,160\\\\}\\\\|selectedValue[^,;\\)]\\\\{0,80\\\\}\" node_modules/@base-ui/react/tabs/panel/TabsPanel.js)"
     ]
   }
 }

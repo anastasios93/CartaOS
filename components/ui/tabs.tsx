@@ -13,7 +13,7 @@ function Tabs({
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
-      data-orientation={orientation}
+      orientation={orientation}
       className={cn(
         "group/tabs flex gap-2 data-horizontal:flex-col",
         className
@@ -73,7 +73,10 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"
-      className={cn("flex-1 text-sm outline-none", className)}
+      // A deactivated panel gets `inert` but stays mounted: its exit transition
+      // never settles, so Base UI keeps `mounted` true and the panel stays
+      // visible. Without this every tab the user visits stacks up on the page.
+      className={cn("flex-1 text-sm outline-none [&[inert]]:hidden", className)}
       {...props}
     />
   )

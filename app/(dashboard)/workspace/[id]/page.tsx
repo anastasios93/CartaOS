@@ -1,233 +1,192 @@
 "use client";
 
-import { use, useState } from "react";
+/**
+ * Deal Workspace — one Run, opened.
+ *
+ * `[id]` is a Run id, not a Negotiation id: the Run is the spine, and the three
+ * pillars hang off it. This page shows the two pillars that have already been
+ * run against it (Strategy, read-only; Execution, the live milestone tracker)
+ * plus the Deal tab — the counterparty negotiation, which attaches to a Run
+ * optionally via `Negotiation.runId`.
+ *
+ * Nothing here is mocked. Where a payload is absent the page says so and points
+ * at the pillar that would produce it.
+ */
+
+import { use, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { NEGOTIATION_STATUS_LABELS } from "@/lib/constants";
-import { useNegotiations } from "@/hooks/use-data";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  ArrowLeft,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ExecutionResults, type ExecutionBranch } from "@/components/run/execution-results";
+import { countryByCode } from "@/config/geographies";
+import { NEGOTIATION_STATUS_LABELS } from "@/lib/constants";
+import type { Execution, StrategyRoute } from "@/types/run";
+import {
   AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Mail,
-  FileText,
-  FileSpreadsheet,
-  FileImage,
-  File,
-  Download,
-  Send,
-  ArrowRightLeft,
+  ArrowLeft,
+  ArrowRight,
   Calendar,
-  DollarSign,
-  Globe,
-  Shield,
-  ChevronRight,
+  CheckCircle2,
+  GitBranch,
+  Handshake,
+  ListChecks,
+  Mail,
+  MessageSquare,
+  Send,
+  Target,
+  Zap,
 } from "lucide-react";
 
-/* ---------- helpers ---------- */
+const TINY = "text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70";
 
-function formatCurrency(value: number | null | undefined) {
-  if (value == null) return "\u2014";
+const ASSET_TYPE_LABEL: Record<string, string> = {
+  off_patent: "Off-patent",
+  innovative: "Innovative",
+};
+
+const RUN_STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  diagnosis_running: "Diagnosis running",
+  diagnosed: "Diagnosed",
+  strategy_running: "Strategy running",
+  strategized: "Awaiting plan",
+  execution_running: "Planning",
+  complete: "In execution",
+  error: "Error",
+};
+
+const NEGOTIATION_STATUSES = [
+  "INITIATED",
+  "TERM_SHEET_DRAFTING",
+  "TERM_SHEET_EXCHANGED",
+  "DUE_DILIGENCE",
+  "DEFINITIVE_AGREEMENT",
+  "CLOSED",
+  "DEAD",
+] as const;
+type NegotiationStatus = (typeof NEGOTIATION_STATUSES)[number];
+
+function isNegotiationStatus(value: unknown): value is NegotiationStatus {
+  return typeof value === "string" && (NEGOTIATION_STATUSES as readonly string[]).includes(value);
+}
+
+const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
+  EMAIL: <Mail className="h-4 w-4" />,
+  MEETING: <Calendar className="h-4 w-4" />,
+  NOTE: <MessageSquare className="h-4 w-4" />,
+  OFFER: <Send className="h-4 w-4" />,
+  COUNTEROFFER: <Send className="h-4 w-4" />,
+};
+
+// ── Defensive readers (Run payloads are Json; agents may add extra keys) ──────
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function num(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function records(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.flatMap((v) => {
+        const r = asRecord(v);
+        return r ? [r] : [];
+      })
+    : [];
+}
+
+// ── Formatting ───────────────────────────────────────────────────────────────
+
+/** Compact USD — the stored economics are plain numbers. */
+function usd(n: number | null): string {
+  if (n == null) return "—";
+  const sign = n < 0 ? "−" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(abs >= 1e10 ? 0 : 1)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+}
+
+function pct(n: number | null): string {
+  return n == null ? "—" : `${n.toFixed(1)}%`;
+}
+
+/** Negotiation key terms are stored in millions of USD. */
+function terms(value: number | null | undefined): string {
+  if (value == null) return "—";
   if (value >= 1000) return `$${(value / 1000).toFixed(1)}B`;
   return `$${value.toFixed(0)}M`;
 }
 
-function formatDate(date: string | null | undefined) {
-  if (!date) return "\u2014";
-  return new Date(date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function geoLine(codes: string[]): string {
+  const shown = codes.slice(0, 6).map((c) => countryByCode(c)?.flag ?? c);
+  return `${shown.join(" ")}${codes.length > 6 ? ` +${codes.length - 6}` : ""}`;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  INITIATED: "bg-gray-500/15 text-gray-400 border-gray-500/30",
-  TERM_SHEET_DRAFTING: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  TERM_SHEET_EXCHANGED: "bg-teal-500/15 text-teal-400 border-teal-500/30",
-  DUE_DILIGENCE: "bg-purple-500/15 text-purple-400 border-purple-500/30",
-  DEFINITIVE_AGREEMENT: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  CLOSED: "bg-green-500/15 text-green-400 border-green-500/30",
-  DEAD: "bg-red-500/15 text-red-400 border-red-500/30",
-};
-
-function healthColor(score: number) {
-  if (score > 70) return "text-green-400";
-  if (score >= 40) return "text-yellow-400";
-  return "text-red-400";
+/** The economics the strategy stored on the route, when it stored any. */
+function storedEconomics(route: StrategyRoute): Record<string, unknown> | null {
+  const econ = asRecord(asRecord(route.model)?.economics);
+  return econ && econ.computable === true ? econ : null;
 }
 
-function healthBg(score: number) {
-  if (score > 70) return "bg-green-500/20";
-  if (score >= 40) return "bg-yellow-500/20";
-  return "bg-red-500/20";
+// ── Shared bits ──────────────────────────────────────────────────────────────
+
+function EmptyPanel({
+  icon: Icon,
+  title,
+  body,
+  action,
+}: {
+  icon: typeof Target;
+  title: string;
+  body: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border-2 border-dashed border-border/60 bg-[#FAFAFA] px-5 py-6">
+      <p className={`${TINY} flex items-center gap-1.5 mb-2`}>
+        <Icon className="h-3.5 w-3.5" aria-hidden="true" /> {title}
+      </p>
+      <div className="text-[14px] text-[#1A1A2E] leading-relaxed max-w-2xl">{body}</div>
+      {action && <div className="mt-4 flex flex-wrap items-center gap-3">{action}</div>}
+    </div>
+  );
 }
 
-/* ---------- mock emails ---------- */
+function TermField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className={TINY}>{label}</p>
+      <p className="text-sm font-medium text-[#1A1A2E] mt-0.5">{value}</p>
+    </div>
+  );
+}
 
-const MOCK_EMAILS = [
-  {
-    id: "email-1",
-    from: "Sarah Chen <s.chen@pfizer.com>",
-    subject: "Re: CRX-100 Term Sheet \u2014 Sublicensing Clause Feedback",
-    date: "2024-03-10",
-    preview:
-      "Thanks for sending the revised term sheet. We have reviewed the sublicensing provisions and have a few comments...",
-    read: true,
-  },
-  {
-    id: "email-2",
-    from: "IP Counsel <ip.counsel@internal.com>",
-    subject: "Legal review update on sublicensing clause",
-    date: "2024-03-08",
-    preview:
-      "I completed the initial review of the sublicensing clause. There are two areas that need further clarification before...",
-    read: true,
-  },
-  {
-    id: "email-3",
-    from: "Sarah Chen <s.chen@pfizer.com>",
-    subject: "CMC Data Package \u2014 Timeline Update",
-    date: "2024-03-06",
-    preview:
-      "Following up on our call yesterday. Our CMC team needs the complete stability data by end of March to stay on...",
-    read: false,
-  },
-  {
-    id: "email-4",
-    from: "BD Lead <bd.lead@internal.com>",
-    subject: "Benchmarking analysis for royalty counter-proposal",
-    date: "2024-03-04",
-    preview:
-      "I have completed the benchmarking analysis for comparable Phase 2 oncology out-licenses. The median upfront is...",
-    read: true,
-  },
-  {
-    id: "email-5",
-    from: "CMC Lead <cmc.lead@internal.com>",
-    subject: "CMC Data Package Status",
-    date: "2024-03-02",
-    preview:
-      "Current status of CMC deliverables: Stability data (60% complete), Process validation (80% complete), Analytical...",
-    read: true,
-  },
-];
-
-/* ---------- mock documents ---------- */
-
-const MOCK_DOCUMENTS = [
-  {
-    id: "doc-1",
-    name: "CRX-100_TermSheet_v3_DRAFT.docx",
-    type: "DOCX",
-    date: "2024-03-09",
-    size: "245 KB",
-  },
-  {
-    id: "doc-2",
-    name: "Pfizer_CDA_Executed.pdf",
-    type: "PDF",
-    date: "2024-02-15",
-    size: "1.2 MB",
-  },
-  {
-    id: "doc-3",
-    name: "CRX-100_CMC_DataPackage.xlsx",
-    type: "XLSX",
-    date: "2024-03-06",
-    size: "3.8 MB",
-  },
-  {
-    id: "doc-4",
-    name: "Deal_Benchmarking_Analysis.pptx",
-    type: "PPTX",
-    date: "2024-03-04",
-    size: "5.1 MB",
-  },
-  {
-    id: "doc-5",
-    name: "IP_Landscape_Assessment.pdf",
-    type: "PDF",
-    date: "2024-02-20",
-    size: "890 KB",
-  },
-  {
-    id: "doc-6",
-    name: "Meeting_Notes_2024-03-01.docx",
-    type: "DOCX",
-    date: "2024-03-01",
-    size: "78 KB",
-  },
-];
-
-const DOC_ICONS: Record<string, React.ReactNode> = {
-  PDF: <FileText className="h-5 w-5 text-red-400" />,
-  DOCX: <FileText className="h-5 w-5 text-blue-400" />,
-  XLSX: <FileSpreadsheet className="h-5 w-5 text-green-400" />,
-  PPTX: <FileImage className="h-5 w-5 text-amber-400" />,
-  CSV: <FileSpreadsheet className="h-5 w-5 text-teal-400" />,
-};
-
-/* ---------- mock negotiation log ---------- */
-
-const MOCK_NEG_LOG = [
-  {
-    id: "log-1",
-    date: "2024-03-08",
-    type: "COUNTEROFFER",
-    party: "Pfizer",
-    summary: "Counter-proposed upfront of $200M (down from $250M initial ask)",
-    terms: {
-      upfront: "$200M",
-      milestones: "$1,600M",
-      royalties: "8\u201314%",
-      territory: "Worldwide",
-    },
-  },
-  {
-    id: "log-2",
-    date: "2024-02-28",
-    type: "OFFER",
-    party: "CartaOS (Us)",
-    summary: "Initial term sheet sent with proposed deal structure",
-    terms: {
-      upfront: "$250M",
-      milestones: "$1,800M",
-      royalties: "10\u201316%",
-      territory: "Worldwide",
-    },
-  },
-  {
-    id: "log-3",
-    date: "2024-02-20",
-    type: "MEETING",
-    party: "Both",
-    summary:
-      "Introductory scientific presentation and high-level deal discussion",
-    terms: null,
-  },
-  {
-    id: "log-4",
-    date: "2024-01-15",
-    type: "INITIATED",
-    party: "CartaOS (Us)",
-    summary: "Workspace created. NDA executed with Pfizer BD team.",
-    terms: null,
-  },
-];
-
-/* ---------- component ---------- */
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkspaceDetailPage({
   params,
@@ -235,436 +194,751 @@ export default function WorkspaceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { negotiations } = useNegotiations();
-  const [activeTab, setActiveTab] = useState("overview");
+  const utils = trpc.useUtils();
 
-  const negotiation = negotiations.find((n) => n.id === id);
+  const runQuery = trpc.run.getById.useQuery(id);
 
-  if (!negotiation) {
+  /**
+   * There is no by-runId lookup on the negotiation router yet, so the link is
+   * resolved client-side from the owner-scoped list. Nothing else reads a
+   * negotiation the current user cannot already see.
+   */
+  const negotiationsQuery = trpc.negotiation.list.useQuery({ limit: 50 });
+  const linkedId =
+    (negotiationsQuery.data?.items ?? []).find((n) => n.runId === id)?.id ?? null;
+
+  const dealQuery = trpc.negotiation.getById.useQuery(linkedId ?? "", {
+    enabled: !!linkedId,
+  });
+
+  const [newActivity, setNewActivity] = useState({
+    type: "NOTE",
+    title: "",
+    description: "",
+  });
+
+  const runConductor = trpc.negotiation.runConductor.useMutation({
+    onSuccess: () => {
+      toast.success("Deal Conductor analysis complete");
+      if (linkedId) void utils.negotiation.getById.invalidate(linkedId);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateStatus = trpc.negotiation.updateStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Status updated");
+      if (linkedId) void utils.negotiation.getById.invalidate(linkedId);
+      void utils.negotiation.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const addActivity = trpc.negotiation.addActivity.useMutation({
+    onSuccess: () => {
+      toast.success("Activity added");
+      if (linkedId) void utils.negotiation.getById.invalidate(linkedId);
+      setNewActivity({ type: "NOTE", title: "", description: "" });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const run = runQuery.data;
+
+  const execution = useMemo(
+    () => (run ? asRecord(run.execution) : null),
+    [run],
+  );
+  const strategy = useMemo(() => (run ? asRecord(run.strategy) : null), [run]);
+
+  if (runQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6">
+        <Skeleton className="h-9 w-72" />
+        <Skeleton className="h-8 w-96" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  if (runQuery.error || !run) {
     return (
       <div className="flex flex-col items-center py-16">
         <p className="text-sm text-muted-foreground">Workspace not found</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {runQuery.error?.message ?? "This run does not exist, or is not yours."}
+        </p>
         <Button size="sm" className="mt-3" asChild>
-          <Link href="/workspace">Back to Workspaces</Link>
+          <Link href="/workspace">Back to workspaces</Link>
         </Button>
       </div>
     );
   }
 
-  const n = negotiation;
+  const branch: ExecutionBranch = run.assetType === "innovative" ? "innovative" : "off_patent";
+  const executionHref = branch === "innovative" ? "/execution/innovative" : "/execution";
+  const strategyHref = branch === "innovative" ? "/strategy/innovative" : "/strategy";
+
+  /**
+   * A milestone array is the only shape this workspace can track. The old
+   * orchestrator wrote `{ legacy: { agent: "executionPlan", result: … } }` onto
+   * the same column — that is a real payload, just not a trackable plan, so it
+   * is named rather than treated as an empty slot.
+   */
+  const hasPlan = Array.isArray(execution?.milestones);
+  const isLegacyPlan = !hasPlan && !!execution && "legacy" in execution;
+
+  const routes: StrategyRoute[] = Array.isArray(strategy?.routes)
+    ? (strategy.routes as StrategyRoute[])
+    : [];
+  const recommendedKey = text(strategy?.recommendedRoute);
+  const recommendedRoute = routes.find((r) => r.key === recommendedKey);
+
+  const deal = dealQuery.data;
+  const blockers = deal ? records(deal.currentBlockers) : [];
+  const nextSteps = deal ? records(deal.nextSteps) : [];
+  const riskFlags = deal ? records(deal.riskFlags) : [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Header */}
       <div className="flex items-start gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/workspace">
+          <Link href="/workspace" aria-label="Back to workspaces">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{n.title}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {n.companyName}
+          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E] truncate">
+            {run.assetQuery}
+          </h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className="rounded-md border border-border/60 bg-[#FAFAFA] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#1A1A2E]">
+              {ASSET_TYPE_LABEL[run.assetType] ?? run.assetType}
             </span>
-            <Badge
-              className={`text-xs border ${STATUS_COLORS[n.status] ?? "bg-gray-500/15 text-gray-400 border-gray-500/30"}`}
+            <span
+              className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                run.status === "complete"
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                  : run.status === "error"
+                    ? "border-red-300 bg-red-50 text-red-700"
+                    : "border-[#F97316]/50 bg-[#FFF7ED] text-[#C2410C]"
+              }`}
             >
-              {NEGOTIATION_STATUS_LABELS[n.status] ?? n.status}
-            </Badge>
-            <div
-              className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${healthBg(n.healthScore)} ${healthColor(n.healthScore)}`}
-            >
-              <span>Health: {n.healthScore}</span>
-            </div>
+              {RUN_STATUS_LABEL[run.status] ?? run.status}
+            </span>
+            <span className="text-[13px] text-[#1A1A2E]">{geoLine(run.geographies)}</span>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {run.error && (
+        <p className="text-[13px] font-medium text-red-700">{run.error}</p>
+      )}
+
+      <Tabs defaultValue="execution">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="emails">
-            Emails ({MOCK_EMAILS.length})
-          </TabsTrigger>
-          <TabsTrigger value="documents">
-            Documents ({MOCK_DOCUMENTS.length})
-          </TabsTrigger>
-          <TabsTrigger value="log">Negotiation Log</TabsTrigger>
+          <TabsTrigger value="execution">Execution</TabsTrigger>
+          <TabsTrigger value="strategy">Strategy</TabsTrigger>
+          <TabsTrigger value="deal">Deal</TabsTrigger>
         </TabsList>
 
-        {/* ===== OVERVIEW TAB ===== */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Left column: Key Terms + Blockers + Risk */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Key Terms */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-[#F97316]" />
-                    Key Terms
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <TermField
-                      label="Proposed Upfront"
-                      value={formatCurrency(n.proposedUpfront)}
-                    />
-                    <TermField
-                      label="Milestones"
-                      value={formatCurrency(n.proposedMilestones)}
-                    />
+        {/* ===== EXECUTION ===== */}
+        <TabsContent value="execution" className="space-y-4 pt-4">
+          {hasPlan ? (
+            <ExecutionResults
+              /* Keyed by run so the optimistic status layer never leaks across plans. */
+              key={run.id}
+              execution={execution as unknown as Execution}
+              branch={branch}
+              assetName={run.assetQuery}
+              runId={run.id}
+              onMilestoneChange={() => void utils.run.getById.invalidate(id)}
+            />
+          ) : (
+            <EmptyPanel
+              icon={ListChecks}
+              title="No trackable plan on this run"
+              body={
+                isLegacyPlan ? (
+                  <>
+                    An older-format plan is stored for this run — it predates the milestone tracker,
+                    so there are no milestones, owners or computed dates to follow. Rebuild the plan
+                    to track it here.
+                  </>
+                ) : (
+                  <>
+                    No execution plan has been built for this run yet. Execution schedules one chosen
+                    route from the strategy — pick the route, set a start date, and every milestone
+                    date is computed from there.
+                  </>
+                )
+              }
+              action={
+                <Link
+                  href={executionHref}
+                  className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white text-[14px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
+                >
+                  {isLegacyPlan ? "Rebuild the plan" : "Build a plan"}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              }
+            />
+          )}
+        </TabsContent>
+
+        {/* ===== STRATEGY (read-only) ===== */}
+        <TabsContent value="strategy" className="space-y-4 pt-4">
+          {routes.length > 0 ? (
+            <>
+              <section className="rounded-2xl border-2 border-[#F97316]/40 bg-gradient-to-br from-[#FFF7ED] to-white p-6">
+                <p className={`${TINY} mb-2 flex items-center gap-1.5 text-[#C2410C]`}>
+                  <Target className="h-3.5 w-3.5" aria-hidden="true" /> Recommended route
+                </p>
+                <p className="text-[18px] font-semibold text-[#1A1A2E] leading-snug">
+                  {recommendedRoute?.label ?? recommendedKey ?? "No route was recommended"}
+                </p>
+                {recommendedRoute?.keyDependency && (
+                  <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed max-w-3xl">
+                    <span className={TINY}>Key dependency</span> {recommendedRoute.keyDependency}
+                  </p>
+                )}
+                <div className="mt-5 pt-4 border-t border-[#F97316]/20">
+                  <Link
+                    href={strategyHref}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A2E] transition hover:border-[#F97316] hover:text-[#C2410C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
+                  >
+                    <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
+                    Revisit the strategy
+                  </Link>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-border/40 bg-white p-5">
+                <p className={`${TINY} flex items-center gap-1.5 mb-3`}>
+                  <GitBranch className="h-3.5 w-3.5" aria-hidden="true" /> Route comparison
+                </p>
+                <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed max-w-3xl">
+                  The figures as they were modelled and stored on this run. To change an assumption
+                  and see the whole model re-derive, open Strategy — this view does not recompute.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[46rem]">
+                    <caption className="sr-only">
+                      Stored economics for each route considered in this run&apos;s strategy
+                    </caption>
+                    <thead>
+                      <tr className="border-b border-border/40">
+                        <th scope="col" className={`${TINY} py-1.5 pr-3`}>
+                          Route
+                        </th>
+                        <th scope="col" className={`${TINY} py-1.5 pr-3`}>
+                          Score
+                        </th>
+                        <th scope="col" className={`${TINY} py-1.5 pr-3`}>
+                          NPV
+                        </th>
+                        <th scope="col" className={`${TINY} py-1.5 pr-3`}>
+                          IRR
+                        </th>
+                        <th scope="col" className={`${TINY} py-1.5 pr-3`}>
+                          Break-even
+                        </th>
+                        <th scope="col" className={`${TINY} py-1.5 pr-3`}>
+                          Peak revenue
+                        </th>
+                        <th scope="col" className={`${TINY} py-1.5`}>
+                          Key dependency
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {routes.map((route) => {
+                        const econ = storedEconomics(route);
+                        const breakEven = econ ? num(econ.breakEvenYear) : null;
+                        return (
+                          <tr
+                            key={route.key}
+                            className={`border-b border-border/20 align-top ${
+                              route.key === recommendedKey ? "bg-[#FFF7ED]" : ""
+                            }`}
+                          >
+                            <th
+                              scope="row"
+                              className="py-2.5 pr-3 text-left text-[13px] font-medium text-[#1A1A2E]"
+                            >
+                              {route.label}
+                              {route.key === recommendedKey && (
+                                <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-widest text-[#C2410C]">
+                                  recommended
+                                </span>
+                              )}
+                            </th>
+                            <td className="py-2.5 pr-3 font-mono text-[12px] tabular-nums text-[#1A1A2E]">
+                              {route.score ?? "—"}
+                            </td>
+                            <td className="py-2.5 pr-3 font-mono text-[13px] font-bold tabular-nums text-[#1A1A2E] whitespace-nowrap">
+                              {usd(econ ? num(econ.npv) : null)}
+                            </td>
+                            <td className="py-2.5 pr-3 font-mono text-[12px] tabular-nums text-[#1A1A2E] whitespace-nowrap">
+                              {pct(econ ? num(econ.irr) : null)}
+                            </td>
+                            <td className="py-2.5 pr-3 text-[12px] text-[#1A1A2E] whitespace-nowrap">
+                              {econ == null ? "—" : breakEven == null ? "never" : `year ${breakEven}`}
+                            </td>
+                            <td className="py-2.5 pr-3 font-mono text-[12px] tabular-nums text-[#1A1A2E] whitespace-nowrap">
+                              {usd(econ ? num(econ.peakRevenue) : null)}
+                            </td>
+                            <td className="py-2.5 text-[12px] text-muted-foreground leading-relaxed min-w-[12rem]">
+                              {route.keyDependency ?? "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-3">
+                  A dash means the run stored no modelled economics for that route.
+                </p>
+              </section>
+            </>
+          ) : (
+            <EmptyPanel
+              icon={GitBranch}
+              title="No strategy on this run"
+              body={
+                <>
+                  This run carries no modelled routes, so there is nothing to summarise here.
+                  Strategy compares the routes open to the asset and recommends one — execution
+                  plans whichever route you commit to.
+                </>
+              }
+              action={
+                <Link
+                  href={strategyHref}
+                  className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white text-[14px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
+                >
+                  Model a strategy
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              }
+            />
+          )}
+        </TabsContent>
+
+        {/* ===== DEAL (the linked counterparty negotiation) ===== */}
+        <TabsContent value="deal" className="space-y-4 pt-4">
+          {negotiationsQuery.isLoading || (linkedId && dealQuery.isLoading) ? (
+            <div className="space-y-4">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-64 w-full" />
+            </div>
+          ) : !linkedId ? (
+            <EmptyPanel
+              icon={Handshake}
+              title="No negotiation attached"
+              body={
+                <>
+                  No counterparty negotiation is attached to this run yet. A negotiation links to a
+                  run one-to-one, and none of yours points at this one — so there are no terms,
+                  activity or Deal Conductor output to show.
+                </>
+              }
+            />
+          ) : dealQuery.error || !deal ? (
+            <EmptyPanel
+              icon={AlertTriangle}
+              title="Could not load the negotiation"
+              body={<>{dealQuery.error?.message ?? "The linked negotiation could not be read."}</>}
+            />
+          ) : (
+            <>
+              {/* Negotiation header: identity, status, conductor */}
+              <Card className="border-border/40 shadow-sm">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <p className={TINY}>Counterparty negotiation</p>
+                      <p className="text-[16px] font-semibold text-[#1A1A2E] mt-0.5">{deal.title}</p>
+                      <Link
+                        href={`/companies/${deal.company.id}`}
+                        className="text-[13px] text-[#C2410C] hover:underline"
+                      >
+                        {deal.company.name}
+                      </Link>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Select
+                        value={deal.status}
+                        onValueChange={(v) => {
+                          if (isNegotiationStatus(v)) {
+                            updateStatus.mutate({ id: deal.id, status: v });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-[200px] h-9 border-border/40 bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {NEGOTIATION_STATUSES.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {NEGOTIATION_STATUS_LABELS[s] ?? s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={() => runConductor.mutate(deal.id)}
+                        disabled={runConductor.isPending}
+                        className="h-9 bg-[#F97316] hover:bg-[#EA580C] text-white gap-2"
+                      >
+                        <Zap className="h-4 w-4" aria-hidden="true" />
+                        {runConductor.isPending ? "Analyzing…" : "Run Deal Conductor"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Key terms */}
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 pt-4 border-t border-border/30">
+                    <TermField label="Upfront" value={terms(deal.proposedUpfront)} />
+                    <TermField label="Milestones" value={terms(deal.proposedMilestones)} />
                     <TermField
                       label="Royalties"
                       value={
-                        n.proposedRoyaltyLow != null
-                          ? `${n.proposedRoyaltyLow}% \u2013 ${n.proposedRoyaltyHigh ?? "?"}%`
-                          : "\u2014"
+                        deal.proposedRoyaltyLow != null
+                          ? `${deal.proposedRoyaltyLow}% – ${deal.proposedRoyaltyHigh ?? "?"}%`
+                          : "—"
                       }
                     />
+                    <TermField label="Territory" value={deal.proposedTerritory ?? "—"} />
                     <TermField
-                      label="Territory"
-                      value={n.proposedTerritory || "\u2014"}
-                      icon={<Globe className="h-3.5 w-3.5 text-muted-foreground" />}
+                      label="Target close"
+                      value={
+                        deal.targetCloseDate
+                          ? new Date(deal.targetCloseDate).toLocaleDateString()
+                          : "—"
+                      }
                     />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Blockers */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-red-500" />
-                    Blockers ({n.blockers.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {n.blockers.length > 0 ? (
-                    <div className="space-y-2">
-                      {n.blockers.map((b, i) => (
-                        <div
-                          key={i}
-                          className="flex items-start gap-3 rounded-lg border p-3"
-                        >
-                          <Badge
-                            variant={
-                              b.severity === "HIGH"
-                                ? "destructive"
-                                : b.severity === "MEDIUM"
-                                  ? "default"
-                                  : "secondary"
-                            }
-                            className="text-xs shrink-0"
-                          >
-                            {b.severity}
-                          </Badge>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm">{b.item}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Owner: {b.owner}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No active blockers
+              {/* Deal Conductor output */}
+              {blockers.length === 0 && nextSteps.length === 0 && riskFlags.length === 0 ? (
+                <Card className="border-border/40 shadow-sm">
+                  <CardContent className="flex flex-col items-center py-10 text-center">
+                    <Zap className="h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      The Deal Conductor has not been run against this negotiation yet.
                     </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Risk Flags */}
-              {n.riskFlags.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-yellow-500" />
-                      Risk Flags
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {n.riskFlags.map((flag, i) => (
-                        <div
-                          key={i}
-                          className="flex items-start gap-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3"
-                        >
-                          <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0 mt-0.5" />
-                          <p className="text-sm">{flag}</p>
-                        </div>
-                      ))}
-                    </div>
+                    <Button
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => runConductor.mutate(deal.id)}
+                      disabled={runConductor.isPending}
+                    >
+                      {runConductor.isPending ? "Analyzing…" : "Analyze now"}
+                    </Button>
                   </CardContent>
                 </Card>
-              )}
-            </div>
-
-            {/* Right column: Next Steps + Action Items */}
-            <div className="space-y-6">
-              {/* Next Steps Timeline */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    Next Steps
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {n.nextSteps.length > 0 ? (
-                    <div className="relative space-y-4">
-                      {/* Timeline line */}
-                      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
-                      {n.nextSteps.map((step, i) => (
-                        <div key={i} className="relative flex gap-3 pl-6">
-                          <div className="absolute left-0 top-1.5 h-3.5 w-3.5 rounded-full border-2 border-[#F97316] bg-background" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">{step.action}</p>
-                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                              <span>{step.owner}</span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {formatDate(step.due)}
-                              </span>
+              ) : (
+                <div className="space-y-4">
+                  {blockers.length > 0 && (
+                    <Card className="border-border/40 shadow-sm">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <AlertTriangle className="h-4 w-4 text-red-500" aria-hidden="true" />
+                          Blockers
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {blockers.map((b, i) => {
+                          const severity = text(b.severity);
+                          return (
+                            <div
+                              key={i}
+                              className="flex items-start gap-3 rounded-lg border border-border/40 p-3"
+                            >
+                              {severity && (
+                                <Badge
+                                  variant={
+                                    severity === "HIGH"
+                                      ? "destructive"
+                                      : severity === "MEDIUM"
+                                        ? "default"
+                                        : "secondary"
+                                  }
+                                  className="text-xs shrink-0"
+                                >
+                                  {severity}
+                                </Badge>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-sm text-[#1A1A2E]">{text(b.item) ?? "—"}</p>
+                                {text(b.owner) && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Owner: {text(b.owner)}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No next steps defined
-                    </p>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
 
-              {/* Quick Info */}
-              <Card>
+                  {nextSteps.length > 0 && (
+                    <Card className="border-border/40 shadow-sm">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden="true" />
+                          Next steps
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {nextSteps.map((s, i) => (
+                          <div key={i} className="rounded-lg border border-border/40 p-3">
+                            <p className="text-sm font-medium text-[#1A1A2E]">
+                              {text(s.action) ?? "—"}
+                            </p>
+                            <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+                              {text(s.who) && <span>Who: {text(s.who)}</span>}
+                              {text(s.by) && <span>By: {text(s.by)}</span>}
+                            </div>
+                            {text(s.rationale) && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {text(s.rationale)}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {riskFlags.length > 0 && (
+                    <Card className="border-border/40 shadow-sm">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <AlertTriangle className="h-4 w-4 text-yellow-500" aria-hidden="true" />
+                          Risk flags
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {riskFlags.map((r, i) => (
+                          <div key={i} className="rounded-lg border border-border/40 p-3">
+                            <p className="text-sm font-medium text-[#1A1A2E]">
+                              {text(r.term) ?? "—"}
+                            </p>
+                            {text(r.issue) && (
+                              <p className="mt-1 text-xs text-muted-foreground">{text(r.issue)}</p>
+                            )}
+                            {text(r.benchmark) && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Benchmark: {text(r.benchmark)}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {/* Log activity */}
+              <Card className="border-border/40 shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    Timeline
-                  </CardTitle>
+                  <CardTitle className="text-base">Log activity</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Start Date</span>
-                    <span className="font-medium">{formatDate(n.startDate)}</span>
+                  <div className="flex gap-3">
+                    <Select
+                      value={newActivity.type}
+                      onValueChange={(v) => {
+                        if (typeof v === "string") {
+                          setNewActivity((a) => ({ ...a, type: v }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-[150px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NOTE">Note</SelectItem>
+                        <SelectItem value="EMAIL">Email</SelectItem>
+                        <SelectItem value="MEETING">Meeting</SelectItem>
+                        <SelectItem value="OFFER">Offer</SelectItem>
+                        <SelectItem value="COUNTEROFFER">Counter-offer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Activity title..."
+                      value={newActivity.title}
+                      onChange={(e) =>
+                        setNewActivity((a) => ({ ...a, title: e.target.value }))
+                      }
+                      className="flex-1"
+                      aria-label="Activity title"
+                    />
                   </div>
-                  <Separator />
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Target Close</span>
-                    <span className="font-medium">
-                      {formatDate(n.targetCloseDate)}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Health Score</span>
-                    <span className={`font-bold ${healthColor(n.healthScore)}`}>
-                      {n.healthScore}/100
-                    </span>
-                  </div>
+                  <Textarea
+                    placeholder="Description (optional)..."
+                    value={newActivity.description}
+                    onChange={(e) =>
+                      setNewActivity((a) => ({ ...a, description: e.target.value }))
+                    }
+                    rows={2}
+                    aria-label="Activity description"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!newActivity.title || addActivity.isPending}
+                    onClick={() =>
+                      addActivity.mutate({
+                        negotiationId: deal.id,
+                        type: newActivity.type,
+                        title: newActivity.title,
+                        description: newActivity.description || undefined,
+                      })
+                    }
+                  >
+                    {addActivity.isPending ? "Adding…" : "Add activity"}
+                  </Button>
                 </CardContent>
               </Card>
-            </div>
-          </div>
-        </TabsContent>
 
-        {/* ===== EMAILS TAB ===== */}
-        <TabsContent value="emails" className="space-y-3">
-          {MOCK_EMAILS.map((email) => (
-            <Card
-              key={email.id}
-              className={`transition-colors hover:bg-muted/50 cursor-pointer ${!email.read ? "border-[#F97316]/40" : ""}`}
-            >
-              <CardContent className="flex items-start gap-4 py-4">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p
-                      className={`text-sm truncate ${!email.read ? "font-semibold" : "font-medium"}`}
-                    >
-                      {email.from}
-                    </p>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDate(email.date)}
-                    </span>
+              {/* Activity timeline */}
+              <section className="space-y-2">
+                <p className={`${TINY} flex items-center gap-1.5`}>
+                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Activity (
+                  {deal.activities.length})
+                </p>
+                {deal.activities.length > 0 ? (
+                  <div className="space-y-2">
+                    {deal.activities.map((activity) => (
+                      <Card key={activity.id} className="border-border/40 shadow-sm">
+                        <CardContent className="flex items-start gap-3 p-4">
+                          <div className="mt-0.5 text-muted-foreground">
+                            {ACTIVITY_ICONS[activity.type] ?? <MessageSquare className="h-4 w-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-medium text-[#1A1A2E]">{activity.title}</p>
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                {activity.type}
+                              </Badge>
+                            </div>
+                            {activity.description && (
+                              <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+                                {activity.description}
+                              </p>
+                            )}
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {new Date(activity.occurredAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                  <p
-                    className={`text-sm mt-0.5 truncate ${!email.read ? "font-medium" : ""}`}
-                  >
-                    {email.subject}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                    {email.preview}
-                  </p>
-                </div>
-                {!email.read && (
-                  <div className="h-2 w-2 rounded-full bg-[#F97316] shrink-0 mt-2" />
+                ) : (
+                  <Card className="border-border/40 shadow-sm">
+                    <CardContent className="py-8 text-center">
+                      <p className="text-sm text-muted-foreground">No activity logged yet</p>
+                    </CardContent>
+                  </Card>
                 )}
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
+              </section>
 
-        {/* ===== DOCUMENTS TAB ===== */}
-        <TabsContent value="documents" className="space-y-3">
-          {MOCK_DOCUMENTS.map((doc) => (
-            <Card
-              key={doc.id}
-              className="transition-colors hover:bg-muted/50 cursor-pointer"
-            >
-              <CardContent className="flex items-center gap-4 py-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                  {DOC_ICONS[doc.type] ?? (
-                    <File className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{doc.name}</p>
-                  <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="text-[10px] px-1.5">
-                      {doc.type}
-                    </Badge>
-                    <span>{formatDate(doc.date)}</span>
-                    <span>{doc.size}</span>
+              {/* Action items */}
+              <section className="space-y-2">
+                <p className={`${TINY} flex items-center gap-1.5`}>
+                  <ListChecks className="h-3.5 w-3.5" aria-hidden="true" /> Action items (
+                  {deal.actionItems.length})
+                </p>
+                {deal.actionItems.length > 0 ? (
+                  <div className="space-y-2">
+                    {deal.actionItems.map((item) => (
+                      <Card key={item.id} className="border-border/40 shadow-sm">
+                        <CardContent className="flex items-center gap-3 p-3">
+                          <div
+                            className={`h-2 w-2 shrink-0 rounded-full ${
+                              item.status === "COMPLETED"
+                                ? "bg-green-500"
+                                : item.status === "OVERDUE"
+                                  ? "bg-red-500"
+                                  : item.status === "IN_PROGRESS"
+                                    ? "bg-yellow-500"
+                                    : "bg-blue-500"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[#1A1A2E]">{item.title}</p>
+                            {item.description && (
+                              <p className="text-xs text-muted-foreground">{item.description}</p>
+                            )}
+                          </div>
+                          <div className="text-right text-xs text-muted-foreground shrink-0">
+                            {item.assignedTo && <p>{item.assignedTo}</p>}
+                            {item.dueDate && <p>{new Date(item.dueDate).toLocaleDateString()}</p>}
+                          </div>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {item.status}
+                          </Badge>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                </div>
-                <Button variant="ghost" size="icon" className="shrink-0">
-                  <Download className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
+                ) : (
+                  <Card className="border-border/40 shadow-sm">
+                    <CardContent className="py-8 text-center">
+                      <p className="text-sm text-muted-foreground">No action items</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </section>
 
-        {/* ===== NEGOTIATION LOG TAB ===== */}
-        <TabsContent value="log" className="space-y-4">
-          <div className="relative">
-            {/* Timeline line */}
-            <div className="absolute left-[19px] top-0 bottom-0 w-px bg-border" />
-
-            {MOCK_NEG_LOG.map((entry, i) => (
-              <div key={entry.id} className="relative flex gap-4 pb-6">
-                {/* Timeline dot */}
-                <div
-                  className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 bg-background ${
-                    entry.type === "COUNTEROFFER"
-                      ? "border-amber-500"
-                      : entry.type === "OFFER"
-                        ? "border-[#F97316]"
-                        : entry.type === "MEETING"
-                          ? "border-purple-500"
-                          : "border-gray-500"
-                  }`}
-                >
-                  {entry.type === "COUNTEROFFER" ? (
-                    <ArrowRightLeft className="h-4 w-4 text-amber-500" />
-                  ) : entry.type === "OFFER" ? (
-                    <Send className="h-4 w-4 text-[#F97316]" />
-                  ) : entry.type === "MEETING" ? (
-                    <Calendar className="h-4 w-4 text-purple-500" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 text-gray-500" />
-                  )}
-                </div>
-
-                {/* Content */}
-                <Card className="flex-1">
-                  <CardContent className="py-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className="text-xs"
-                        >
-                          {entry.type.replace("_", " ")}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {entry.party}
-                        </span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDate(entry.date)}
-                      </span>
-                    </div>
-                    <p className="text-sm mt-2">{entry.summary}</p>
-
-                    {entry.terms && (
-                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg bg-muted/50 p-3">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Upfront
-                          </p>
-                          <p className="text-sm font-medium">
-                            {entry.terms.upfront}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Milestones
-                          </p>
-                          <p className="text-sm font-medium">
-                            {entry.terms.milestones}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Royalties
-                          </p>
-                          <p className="text-sm font-medium">
-                            {entry.terms.royalties}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Territory
-                          </p>
-                          <p className="text-sm font-medium">
-                            {entry.terms.territory}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            ))}
-          </div>
+              {/* Benchmark deals */}
+              {deal.benchmarkDeals.length > 0 && (
+                <section className="space-y-2">
+                  <p className={`${TINY} flex items-center gap-1.5`}>
+                    <Target className="h-3.5 w-3.5" aria-hidden="true" /> Benchmark deals (
+                    {deal.benchmarkDeals.length})
+                  </p>
+                  <div className="space-y-2">
+                    {deal.benchmarkDeals.map((comp) => (
+                      <Card key={comp.id} className="border-border/40 shadow-sm">
+                        <CardContent className="flex items-center justify-between gap-3 p-3">
+                          <div className="min-w-0">
+                            <Link
+                              href={`/deals/${comp.deal.id}`}
+                              className="text-sm font-medium text-[#1A1A2E] hover:underline"
+                            >
+                              {comp.deal.title}
+                            </Link>
+                            {comp.notes && (
+                              <p className="text-xs text-muted-foreground">{comp.notes}</p>
+                            )}
+                          </div>
+                          {comp.relevanceScore != null && (
+                            <Badge variant="secondary" className="text-xs shrink-0">
+                              {(comp.relevanceScore * 100).toFixed(0)}% relevant
+                            </Badge>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-/* ---------- sub-components ---------- */
-
-function TermField({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground flex items-center gap-1">
-        {icon}
-        {label}
-      </p>
-      <p className="text-sm font-medium mt-0.5">{value}</p>
     </div>
   );
 }
