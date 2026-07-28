@@ -75,19 +75,20 @@ describe("source registry", () => {
   });
 
   it("geography scoping filters country-bound sources but keeps global ones", () => {
-    const ids = ["nadac", "nice_uk", "who_gho"];
+    const ids = ["nadac", "nhs_openprescribing", "who_gho"];
     const forUS = sourcesForGeographies(ids, ["US"]).map((s) => s.id);
     expect(forUS).toContain("nadac");
     expect(forUS).toContain("who_gho");
-    expect(forUS).not.toContain("nice_uk");
+    expect(forUS).not.toContain("nhs_openprescribing");
   });
 
-  it("env-gated sources report unavailable without their key", () => {
-    const lens = sourceById("the_lens")!;
-    expect(sourceAvailable(lens, {})).toBe(false);
-    expect(sourceAvailable(lens, { LENS_API_TOKEN: "x" })).toBe(true);
-    const openSource = sourceById("who_gho")!;
-    expect(sourceAvailable(openSource, {})).toBe(true);
+  it("the roster is keyless by design — no env-gated sources remain", () => {
+    expect(SOURCES.filter((s) => s.envKey)).toEqual([]);
+    // sourceAvailable still honours gates should one ever return:
+    const gated = { id: "x", label: "x", module: "x", coverage: "global" as const, tier: 1 as const, envKey: "X_KEY" };
+    expect(sourceAvailable(gated, {})).toBe(false);
+    expect(sourceAvailable(gated, { X_KEY: "k" })).toBe(true);
+    expect(sourceAvailable(sourceById("who_gho")!, {})).toBe(true);
   });
 });
 

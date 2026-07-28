@@ -8,13 +8,18 @@
  * established fact with provenance, and anything that cannot be computed is
  * returned as an explicit data gap rather than guessed.
  *
- * Currently computed:
- *   - Reimbursement / pricing  (CMS NADAC series + backtested erosion forecast)
- *   - Geographic expansion     (WHO national EML footprint + US retail presence)
- *   - Formulary positioning    (CMS Medicare Part D spend, utilisation, competition)
+ * Currently computed (8 of 10):
+ *   - Reimbursement / pricing    (CMS NADAC + backtested erosion; NHS OpenPrescribing UK evidence)
+ *   - Geographic expansion       (WHO national EML footprint + US retail presence)
+ *   - Formulary positioning      (CMS Medicare Part D spend, utilisation, competition)
+ *   - Administration/formulation (Drugs@FDA dosage forms + DailyMed labels)
+ *   - Lifecycle / IP defense     (Drugs@FDA ANDA depth + Orange Book patent/exclusivity runway)
+ *   - Distribution channels      (CMS Part D by geography)
+ *   - Sales-force effectiveness  (CMS Part D by geography)
+ *   - Supply / COGS arbitrage    (openFDA drug shortages; COGS half stays uncomputed and says so)
  *
- * The remaining seven levers stay LLM-reasoned until their adapters land; they
- * are reported as such so the two are never confused.
+ * Indication expansion and Portfolio synergy stay LLM-reasoned; they are
+ * reported as such so the two are never confused.
  */
 
 import { resolveMolecule, type MoleculeIdentity } from "@/server/services/adapters/rxnorm";
@@ -25,6 +30,12 @@ import { getPartDProfile, type PartDProfile } from "@/server/services/adapters/p
 import { getDrugsFdaProfile, type DrugsFdaProfile } from "@/server/services/adapters/drugsfda";
 import { getDailyMedProfile, type DailyMedProfile } from "@/server/services/adapters/dailymed";
 import { getPartDGeoProfile, type PartDGeoProfile } from "@/server/services/adapters/part-d-geo";
+import { getExclusivityRunway } from "@/server/services/orange-book";
+import { searchDrugShortages, type ShortageSummary } from "@/server/services/fda-shortages";
+import { getUkPrescribingSummary } from "@/server/services/nhs-openprescribing";
+
+type ExclusivityRunway = Awaited<ReturnType<typeof getExclusivityRunway>>;
+type UkPrescribing = Awaited<ReturnType<typeof getUkPrescribingSummary>>;
 
 export interface ComputedLever {
   lever:
@@ -34,7 +45,8 @@ export interface ComputedLever {
     | "Administration / formulation"
     | "Lifecycle / IP defense"
     | "Distribution channels"
-    | "Sales-force effectiveness";
+    | "Sales-force effectiveness"
+    | "Supply / COGS arbitrage";
   computed: true;
   score: number;
   confidence: "High" | "Medium" | "Low";
@@ -497,7 +509,7 @@ function formulationLever(fda: DrugsFdaProfile | null, dm: DailyMedProfile | nul
 
 // ─── Lifecycle / IP defence ─────────────────────────────────────────────────
 
-function lifecycleLever(fda: DrugsFdaProfile | null): ComputedLever {
+function lifecycleLever(fda: DrugsFdaProfile | null, runway: ExclusivityRunway = null): ComputedLever {
   if (!fda) {
     return {
       lever: "Lifecycle / IP defense",
@@ -565,6 +577,24 @@ function lifecycleLever(fda: DrugsFdaProfile | null): ComputedLever {
     score = clamp(score + 10);
   }
 
+  // Orange Book patent + exclusivity dates — the runway itself, not a proxy.
+  const fmtDate = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  if (runway) {
+    if (runway.latestPatentExpiry) {
+      const expired = runway.latestPatentExpiry < new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      evidence.push({
+        finding: `${runway.patentCount} Orange Book patent listing(s); latest expiry ${fmtDate(runway.latestPatentExpiry)}${runway.latestExclusivityExpiry ? `; latest regulatory exclusivity ${fmtDate(runway.latestExclusivityExpiry)}` : ""}. ${expired ? "The runway has ended — protection is historical." : "Listed protection is still running."}`,
+        source: "FDA Orange Book (openFDA)",
+      });
+      if (!expired) score = clamp(score + 12);
+    } else {
+      evidence.push({
+        finding: `No patents or regulatory exclusivity listed in the Orange Book across ${runway.recordCount} records — the molecule is fully off-runway in the US.`,
+        source: "FDA Orange Book (openFDA)",
+      });
+    }
+  }
+
   return {
     lever: "Lifecycle / IP defense",
     computed: true,
@@ -576,8 +606,61 @@ function lifecycleLever(fda: DrugsFdaProfile | null): ComputedLever {
       fda.andaCount >= 20
         ? "No defensible exclusivity remains; value is in cost and supply, not IP"
         : "Exclusivity position may still be defensible — confirm against patent and exclusivity filings",
-    dataGap:
-      "Application counts and equivalence codes are established fact, but PATENT and EXCLUSIVITY expiry dates are not: the Orange Book patent/exclusivity tables are published as downloadable files with no public API and are not wired. Confirm remaining exclusivity against the Orange Book before relying on this lever.",
+    dataGap: runway
+      ? "US Orange Book only — ex-US patent/SPC runways are not computed. Use-code scope (method-of-use vs composition) is not parsed from the listings."
+      : "Orange Book patent/exclusivity lookup returned nothing for this molecule — confirm US runway manually before relying on this lever.",
+  };
+}
+
+// ─── Supply / COGS arbitrage ────────────────────────────────────────────────
+
+function supplyLever(shortage: ShortageSummary | null): ComputedLever {
+  if (!shortage) {
+    return {
+      lever: "Supply / COGS arbitrage",
+      computed: true,
+      score: 0,
+      confidence: "Low",
+      notComputable: true,
+      evidence: [],
+      recommendedActions: [],
+      estValueRange: "Not computable — shortage feed unreachable",
+      dataGap: "The openFDA drug-shortages feed could not be reached, and COGS/API sourcing data has no open source. Do not assert a supply position.",
+    };
+  }
+
+  const evidence: { finding: string; source: string }[] = [];
+  const actions: string[] = [];
+  let score: number;
+
+  if (shortage.current > 0) {
+    const categories = [...new Set(shortage.entries.filter(e => e.status === "Current").map(e => e.dosageForm).filter(Boolean))];
+    evidence.push({
+      finding: `${shortage.current} CURRENT US shortage listing(s)${categories.length ? ` (${categories.slice(0, 4).join(", ")})` : ""}${shortage.resolved ? `, plus ${shortage.resolved} resolved` : ""}. An active shortage is a live entry window for a reliable supplier.`,
+      source: "openFDA Drug Shortages",
+    });
+    score = clamp(55 + Math.min(30, shortage.current * 2));
+    actions.push(
+      "Quantify fill capacity against the shorted presentations and approach purchasers while the gap is open — shortage windows close when quota or capacity normalises.",
+    );
+  } else {
+    evidence.push({
+      finding: `No current US shortage listings (${shortage.resolved} resolved historical listing(s)) — no open supply-gap entry window on this signal.`,
+      source: "openFDA Drug Shortages",
+    });
+    score = 25;
+    actions.push("No shortage window is open — supply value, if any, sits in COGS position, which this layer cannot compute.");
+  }
+
+  return {
+    lever: "Supply / COGS arbitrage",
+    computed: true,
+    score,
+    confidence: shortage.current > 0 ? "High" : "Medium",
+    evidence,
+    recommendedActions: actions,
+    estValueRange: shortage.current > 0 ? "Depends on fill capacity against the shorted presentations" : "No shortage-driven value on current data",
+    dataGap: "Shortage listings are established fact; API/KSM sourcing and COGS position have no open data source and are NOT computed — reason about them separately and say so.",
   };
 }
 
@@ -820,6 +903,16 @@ function renderPromptBlock(e: Omit<ComputedEvidence, "promptBlock">): string {
   return lines.join("\n");
 }
 
+function appendUkEvidence(levers: ComputedLever[], uk: UkPrescribing): void {
+  if (!uk) return;
+  const pricing = levers.find(l => l.lever === "Reimbursement / pricing");
+  if (!pricing || pricing.notComputable) return;
+  pricing.evidence.push({
+    finding: `England (NHS primary care, BNF ${uk.bnfCode} "${uk.bnfName}"): £${uk.totalSpendGbp.toLocaleString("en-GB")} spend across ${uk.totalItems.toLocaleString("en-GB")} prescriptions over ${uk.months} months${uk.costPerItemLatest != null ? `; latest cost/item £${uk.costPerItemLatest.toFixed(2)}` : ""}${uk.costPerItemTrendPct != null ? ` (${uk.costPerItemTrendPct > 0 ? "+" : ""}${uk.costPerItemTrendPct}% over the window)` : ""}.`,
+    source: "NHS OpenPrescribing",
+  });
+}
+
 /** Resolve a molecule and compute every lever that has a wired adapter. */
 export async function computeEvidence(molecule: string): Promise<ComputedEvidence> {
   const identity = await resolveMolecule(molecule, 12);
@@ -829,13 +922,16 @@ export async function computeEvidence(molecule: string): Promise<ComputedEvidenc
   const joinName = identity.ingredientName ?? molecule;
 
   const resolved = !!identity.ingredientRxcui;
-  const [series, eml, partD, fda, dailyMed, geo] = await Promise.all([
+  const [series, eml, partD, fda, dailyMed, geo, runway, shortage, uk] = await Promise.all([
     identity.allNdcs.length ? getNadacSeriesBatch(identity.allNdcs, 14) : Promise.resolve([]),
     resolved ? getEmlFootprint(joinName).catch(() => null) : Promise.resolve(null),
     resolved ? getPartDProfile(joinName).catch(() => null) : Promise.resolve(null),
     resolved ? getDrugsFdaProfile(joinName).catch(() => null) : Promise.resolve(null),
     resolved ? getDailyMedProfile(joinName).catch(() => null) : Promise.resolve(null),
     resolved ? getPartDGeoProfile(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? getExclusivityRunway(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? searchDrugShortages(joinName).catch(() => null) : Promise.resolve(null),
+    resolved ? getUkPrescribingSummary(joinName).catch(() => null) : Promise.resolve(null),
   ]);
 
   // Forecast the richest series — the most observations gives the most reliable
@@ -848,10 +944,15 @@ export async function computeEvidence(molecule: string): Promise<ComputedEvidenc
     geographicLever(identity, series, eml),
     formularyLever(partD),
     formulationLever(fda, dailyMed),
-    lifecycleLever(fda),
+    lifecycleLever(fda, runway),
     distributionLever(geo),
     salesForceLever(geo),
+    supplyLever(shortage),
   ];
+
+  // UK prescribing spend/volume is pricing-dimension evidence; it informs the
+  // narrative without altering the US-backtested erosion score.
+  appendUkEvidence(levers, uk);
 
   const base: Omit<ComputedEvidence, "promptBlock"> = {
     molecule,

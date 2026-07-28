@@ -29,7 +29,7 @@ export const OFF_PATENT_DIMENSIONS: DimensionDef[] = [
     question:
       "Patent + SPC expiry, data/market exclusivity, paediatric extension, orphan status — established per selected country, not globally.",
     weight: 10,
-    sources: ["orange_book", "uspto_patentsview", "epo_ops", "the_lens", "drugsfda", "ema"],
+    sources: ["orange_book", "drugsfda", "ema"],
   },
   {
     key: "competitive_intensity",
@@ -46,7 +46,7 @@ export const OFF_PATENT_DIMENSIONS: DimensionDef[] = [
     question:
       "Historical erosion curve for the molecule (and its class) in each market; entrants vs price index; current price regime (eroding / floored / rising).",
     weight: 12,
-    sources: ["nadac", "cms_pricing", "part_d_spending"],
+    sources: ["nadac", "cms_pricing", "part_d_spending", "nhs_openprescribing"],
     computed: true,
   },
   {
@@ -55,7 +55,7 @@ export const OFF_PATENT_DIMENSIONS: DimensionDef[] = [
     question:
       "Tender vs retail vs hospital channel per market; national procurement mechanics; local-presence and pricing-filing requirements.",
     weight: 10,
-    sources: ["nice_uk", "pbs_australia", "part_d_geography", "who_eml"],
+    sources: ["nhs_openprescribing", "part_d_geography", "who_eml"],
   },
   {
     key: "manufacturing_options",
@@ -71,7 +71,7 @@ export const OFF_PATENT_DIMENSIONS: DimensionDef[] = [
     question:
       "Availability of an existing dossier to in-license; MA transfer burden; regulatory pathway per market (generic / hybrid / biosimilar / 505(b)(2)); reliance and mutual-recognition routes; site GMP standing.",
     weight: 10,
-    sources: ["ema", "drugsfda", "health_canada", "cima_spain", "ema_spor"],
+    sources: ["ema", "drugsfda", "health_canada", "cima_spain"],
   },
   {
     key: "distribution_channels",
@@ -88,7 +88,7 @@ export const OFF_PATENT_DIMENSIONS: DimensionDef[] = [
     question:
       "Reformulation, fixed-dose combination, device combination, new route of administration, supply-shortage arbitrage.",
     weight: 10,
-    sources: ["dailymed", "drugsfda", "clinical_trials", "pubmed"],
+    sources: ["dailymed", "drugsfda", "openfda_shortages", "clinical_trials", "pubmed"],
     computed: true,
   },
   {
@@ -110,7 +110,7 @@ export const INNOVATIVE_DIMENSIONS: DimensionDef[] = [
     question:
       "Epidemiology, standard-of-care failure rates, guideline gaps, patient-reported burden in the selected geographies.",
     weight: 10,
-    sources: ["who_gho", "ihme_gbd", "pubmed", "europe_pmc", "clinical_trials"],
+    sources: ["who_gho", "pubmed", "europe_pmc", "clinical_trials"],
   },
   {
     key: "mechanistic_differentiation",
@@ -126,7 +126,7 @@ export const INNOVATIVE_DIMENSIONS: DimensionDef[] = [
     question:
       "Genetic and translational evidence, human proof of concept, biomarker strategy.",
     weight: 10,
-    sources: ["open_targets", "pubmed", "europe_pmc", "nih_reporter", "semantic_scholar"],
+    sources: ["open_targets", "pubmed", "europe_pmc", "nih_reporter", "openalex"],
   },
   {
     key: "development_risk",
@@ -142,7 +142,7 @@ export const INNOVATIVE_DIMENSIONS: DimensionDef[] = [
     question:
       "Composition-of-matter vs formulation vs method-of-use claims, filing family and jurisdictions, runway post-launch, term-extension eligibility.",
     weight: 12,
-    sources: ["uspto_patentsview", "epo_ops", "the_lens", "patents_generic"],
+    sources: ["patents_generic", "orange_book", "drugsfda"],
   },
   {
     key: "fto",
@@ -150,7 +150,7 @@ export const INNOVATIVE_DIMENSIONS: DimensionDef[] = [
     question:
       "Third-party blocking claims, dominant patents, licence-in requirements — surfaced as flags with citations, framed explicitly as a screen, not a legal opinion.",
     weight: 8,
-    sources: ["uspto_patentsview", "epo_ops", "the_lens"],
+    sources: ["patents_generic", "orange_book"],
   },
   {
     key: "regulatory_strategy",
@@ -158,7 +158,7 @@ export const INNOVATIVE_DIMENSIONS: DimensionDef[] = [
     question:
       "Designation eligibility (orphan, accelerated/expedited pathways, paediatric), likely approval route per selected geography.",
     weight: 8,
-    sources: ["drugsfda", "ema", "ema_spor", "health_canada"],
+    sources: ["drugsfda", "ema", "health_canada"],
   },
   {
     key: "cmc_scaleup",
@@ -174,7 +174,7 @@ export const INNOVATIVE_DIMENSIONS: DimensionDef[] = [
     question:
       "Payer archetype and HTA regimes per selected geography, pricing precedents for the class, EU joint clinical assessment implications.",
     weight: 10,
-    sources: ["nice_uk", "pbs_australia", "cms_pricing", "part_d_spending", "who_gho"],
+    sources: ["nhs_openprescribing", "cms_pricing", "part_d_spending", "who_gho"],
   },
   {
     key: "partnerability",
