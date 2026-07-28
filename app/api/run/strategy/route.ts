@@ -104,7 +104,9 @@ export async function POST(req: Request) {
       sendEvent({ agent: "strategy", type: "error", error: msg });
       sendEvent({ type: "done" });
     } finally {
-      writer.close().catch(() => {});
+      // Persist BEFORE closing the writer. Closing it ends the response body,
+      // and the platform is free to tear the function down the moment the
+      // response completes — anything awaited after that never lands.
       // Persistence is best-effort and must never break the stream.
       try {
         const existingLog = Array.isArray(run.log) ? (run.log as unknown[]) : [];
@@ -120,6 +122,7 @@ export async function POST(req: Request) {
       } catch {
         /* ignore */
       }
+      writer.close().catch(() => {});
     }
   })();
 

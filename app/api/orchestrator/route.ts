@@ -237,7 +237,9 @@ export async function POST(req: Request) {
       sendEvent({ agent: "benchmarking", type: "error", error: msg });
       sendEvent({ type: "done" });
     } finally {
-      writer.close().catch(() => {});
+      // Persist BEFORE closing the writer. Closing it ends the response body,
+      // and the platform is free to tear the function down the moment the
+      // response completes — anything awaited after that never lands.
 
       // Persist captured results so the run is reopenable from history.
       try {
@@ -300,6 +302,8 @@ export async function POST(req: Request) {
       } catch {
         // Best-effort, same as above.
       }
+
+      writer.close().catch(() => {});
     }
   })();
 
