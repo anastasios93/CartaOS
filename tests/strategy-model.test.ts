@@ -11,6 +11,8 @@ import {
   runScenarios,
   sensitivity,
   recommendRoute,
+  recommend,
+  MIN_RECOMMENDABLE_FIT,
   OFF_PATENT_REQUIRED,
   type RouteEconomics,
 } from "../server/services/strategy/model";
@@ -236,5 +238,55 @@ describe("recommendRoute", () => {
 
   it("returns null rather than a guess when nothing is computable", () => {
     expect(recommendRoute(modelAllRoutes("off_patent", {}))).toBeNull();
+  });
+
+  it("leaves unscored routes eligible", () => {
+    const rs = modelAllRoutes("off_patent", offPatent);
+    expect(recommendRoute(rs, {})!.npv).toBe(recommendRoute(rs)!.npv);
+  });
+});
+
+describe("recommend — fit gates which route may win", () => {
+  const rs = () => modelAllRoutes("off_patent", offPatent);
+  const computable = () => rs().filter((r): r is RouteEconomics => r.computable);
+  const byNpv = () => [...computable()].sort((a, b) => b.npv - a.npv);
+
+  it("skips the top-NPV route when the agent scored it unviable", () => {
+    const [top, second] = byNpv();
+    const rec = recommend(rs(), { [top.key]: 5 })!;
+
+    expect(rec.route.key).not.toBe(top.key);
+    expect(rec.route.key).toBe(second.key);
+    expect(rec.lowFit).toBe(false);
+    expect(rec.setAside).toEqual([{ key: top.key, npv: top.npv, score: 5 }]);
+  });
+
+  it("recommends on economics among the routes that clear the bar", () => {
+    const [top, second] = byNpv();
+    // Both viable — the higher NPV should still win.
+    const rec = recommend(rs(), { [top.key]: 85, [second.key]: 90 })!;
+    expect(rec.route.key).toBe(top.key);
+    expect(rec.setAside).toEqual([]);
+  });
+
+  it("falls back to best economics and flags it when no route is a fit", () => {
+    // The real olpasiran run: every transaction route scored as unavailable
+    // because the asset is wholly owned and not for sale.
+    const fit = Object.fromEntries(computable().map((r) => [r.key, 5]));
+    const rec = recommend(rs(), fit)!;
+
+    expect(rec.route.npv).toBe(byNpv()[0].npv);
+    expect(rec.lowFit).toBe(true);
+    expect(rec.setAside).toEqual([]);
+  });
+
+  it("treats a score exactly at the threshold as viable", () => {
+    const [top] = byNpv();
+    expect(recommend(rs(), { [top.key]: MIN_RECOMMENDABLE_FIT })!.route.key).toBe(top.key);
+    expect(recommend(rs(), { [top.key]: MIN_RECOMMENDABLE_FIT - 1 })!.route.key).not.toBe(top.key);
+  });
+
+  it("is null when nothing is computable, whatever the scores", () => {
+    expect(recommend(modelAllRoutes("off_patent", {}), { anything: 99 })).toBeNull();
   });
 });

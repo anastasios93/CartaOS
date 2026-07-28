@@ -38,7 +38,7 @@ const SHARED_OUTPUT = `Return ONLY valid JSON:
     { "key": "the exact assumption key requested", "label": "human label", "value": <number>, "unit": "USD | % | months | years", "basis": "sourced | assumed", "source": "the named source, when basis is sourced" }
   ],
   "routes": [
-    { "key": "the exact route key", "score": 0-100, "rationale": "two sentences on why this route fits or does not, for THIS asset in THESE markets", "keyDependency": "the single thing that would break this plan", "evidence": [ { "claim": "...", "kind": "evidence | estimate", "source": "..." } ] }
+    { "key": "the exact route key", "score": <integer 0-100>, "rationale": "two sentences on why this route fits or does not, for THIS asset in THESE markets", "keyDependency": "the single thing that would break this plan", "evidence": [ { "claim": "...", "kind": "evidence | estimate", "source": "..." } ] }
   ],
   "partnerShortlist": [
     { "name": "company", "kind": "licensee | distributor | tender agent | CDMO | acquirer | co-development partner", "geographies": ["ISO codes"], "score": 0-100, "rationale": "why THIS partner for THIS asset — the specific fit", "evidence": [ { "claim": "...", "kind": "evidence | estimate", "source": "..." } ] }
@@ -49,6 +49,7 @@ const SHARED_OUTPUT = `Return ONLY valid JSON:
 
 RULES THAT MATTER MOST
 - You supply ASSUMPTIONS ONLY. Do NOT compute or state an NPV, break-even, IRR or any derived financial figure — those are calculated deterministically from your assumptions and any number you invent will be overwritten and will contradict the report.
+- Route and partner scores are on a 0-100 scale, NOT 0-10. Anchor them: 0-20 structurally impossible for this asset (the counterparty is not selling, the rights are not available, the model does not apply), 21-40 open in principle but badly mismatched, 41-60 workable with real friction, 61-80 a good fit, 81-100 the obvious route. A route scoring 40 or below is excluded from being recommended however good its economics look, so score availability honestly — that gate is the difference between a plan and a fantasy.
 - Every assumption needs an HONEST basis. "sourced" requires a real named source for THIS asset or a close comparator; everything else is "assumed". Do not label a prior as sourced.
 - Supply EVERY assumption key requested, in the units stated. A missing key makes routes non-computable and the user sees a gap instead of a plan.
 - Partner names must be real companies you can justify from the evidence, with the reason they fit. An invented shortlist is worse than a short one.
@@ -254,7 +255,8 @@ export async function runStrategyAgent(
     const { list: assumptions, values } = normaliseAssumptions(parsed?.assumptions, required);
     const economics = modelAllRoutes(branch, values);
     const routes = mergeRoutes(defs, economics, parsed?.routes);
-    const best = recommendRoute(economics);
+    const fit = Object.fromEntries(routes.map((r) => [r.key, r.score]));
+    const best = recommendRoute(economics, fit);
     const scenarios = runScenarios(branch, values, 20);
     const sens = best ? sensitivity(branch, values, best.key, 20) : [];
 

@@ -15,6 +15,7 @@ import {
   Gauge,
   Microscope,
   GitBranch,
+  ListChecks,
 } from "lucide-react";
 import {
   Sidebar,
@@ -65,9 +66,14 @@ const strategy = [
 
 const execution = [
   {
-    title: "Simulated Plan",
-    href: "/simulated-plan",
+    title: "Off-patent",
+    href: "/execution",
     icon: Rocket,
+  },
+  {
+    title: "Innovative",
+    href: "/execution/innovative",
+    icon: ListChecks,
   },
   {
     title: "Deal Workspace",

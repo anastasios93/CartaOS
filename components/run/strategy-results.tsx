@@ -20,7 +20,7 @@ import {
   modelAllRoutes,
   runScenarios,
   sensitivity as computeSensitivity,
-  recommendRoute,
+  recommend,
   OFF_PATENT_REQUIRED,
   INNOVATIVE_REQUIRED,
   type AssumptionValues,
@@ -503,7 +503,13 @@ export function StrategyResults({
 
   const results = useMemo(() => modelAllRoutes(branch, values), [branch, values]);
   const resultsByKey = useMemo(() => new Map(results.map((r) => [r.key, r])), [results]);
-  const best = useMemo(() => recommendRoute(results), [results]);
+  /** Fit gates which route may be recommended; economics rank the survivors. */
+  const fit = useMemo(
+    () => Object.fromEntries(routes.map((r) => [r.key, r.score])),
+    [routes],
+  );
+  const recommendation = useMemo(() => recommend(results, fit), [results, fit]);
+  const best = recommendation?.route ?? null;
   const scenarios = useMemo(() => runScenarios(branch, values, delta), [branch, values, delta]);
   const sens = useMemo(
     () => (best ? computeSensitivity(branch, values, best.key, delta).slice(0, 6) : []),
@@ -623,6 +629,24 @@ export function StrategyResults({
                     {routes.find((r) => r.key === modelledKey)?.label ?? modelledKey}.
                   </p>
                 )}
+                {recommendation?.lowFit && (
+                  <p className="text-[12px] font-medium text-[#C2410C] mt-2 max-w-3xl leading-relaxed">
+                    No route scored as genuinely open to this asset. This is the best economics available, not a route
+                    the evidence says you can actually take — read it alongside the key dependency above.
+                  </p>
+                )}
+                {recommendation?.setAside.length ? (
+                  <p className="text-[12px] text-muted-foreground mt-2 max-w-3xl leading-relaxed">
+                    Higher NPV elsewhere was passed over on fit:{" "}
+                    {recommendation.setAside
+                      .map(
+                        (s) =>
+                          `${routes.find((r) => r.key === s.key)?.label ?? s.key} (${usd(s.npv)}, scored ${s.score}/100)`,
+                      )
+                      .join("; ")}
+                    .
+                  </p>
+                ) : null}
               </>
             ) : (
               <p className="text-[14px] text-[#1A1A2E] leading-relaxed max-w-2xl">

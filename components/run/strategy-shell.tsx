@@ -16,17 +16,18 @@
  * secondary — it produces economics, not evidence.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RunConsole } from "@/components/run/run-console";
 import { StrategyResults, buildBlankStrategy, type StrategyBranch } from "@/components/run/strategy-results";
 import { useAgentStream } from "@/hooks/use-agent-stream";
+import { useRunLog } from "@/hooks/use-run-log";
 import { trpc } from "@/lib/trpc";
 import { countryByCode } from "@/config/geographies";
-import type { RunLogEvent, Strategy } from "@/types/run";
-import type { AgentsMap, HubIntakeForm } from "@/types/hub";
+import type { Strategy } from "@/types/run";
+import type { HubIntakeForm } from "@/types/hub";
 import {
   ArrowRight,
   GitBranch,
@@ -54,44 +55,6 @@ export interface StrategyShellProps {
   branch: StrategyBranch;
   title: string;
   subtitle: string;
-}
-
-/** Accumulates agent-stream state changes into run-console events (§3.4). */
-function useRunLog(agents: AgentsMap): { events: RunLogEvent[]; reset: () => void } {
-  const [events, setEvents] = useState<RunLogEvent[]>([]);
-  const prevRef = useRef<Record<string, { msg?: string; sources?: number; done?: boolean; error?: string }>>({});
-
-  useEffect(() => {
-    const next: RunLogEvent[] = [];
-    const at = new Date().toISOString();
-    for (const [id, state] of Object.entries(agents)) {
-      const prev = (prevRef.current[id] ??= {});
-      if (state.statusMessage && state.statusMessage !== prev.msg) {
-        prev.msg = state.statusMessage;
-        next.push({ at, kind: "status", message: state.statusMessage, source: id, phase: id });
-      }
-      if (state.sources.length && state.sources.length !== prev.sources) {
-        prev.sources = state.sources.length;
-        next.push({ at, kind: "source_hit", message: `${state.sources.length} sources consulted`, source: id, phase: id });
-      }
-      if (state.result && !prev.done) {
-        prev.done = true;
-        next.push({ at, kind: "result", message: "completed", source: id, phase: id });
-      }
-      if (state.error && state.error !== prev.error) {
-        prev.error = state.error;
-        next.push({ at, kind: "error", message: state.error, source: id, phase: id });
-      }
-    }
-    if (next.length) setEvents((e) => [...e, ...next]);
-  }, [agents]);
-
-  const reset = useCallback(() => {
-    prevRef.current = {};
-    setEvents([]);
-  }, []);
-
-  return { events, reset };
 }
 
 function geoLine(codes: string[]): string {
