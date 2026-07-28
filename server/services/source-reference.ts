@@ -97,19 +97,60 @@ Regulatory and access mechanisms must be typed CORRECTLY per drug class. Free-as
 - Compounding / Rezeptur.
 If a channel is irrelevant for this asset, say so briefly — do not silently omit it. A differentiated product hiding under a "fully genericised commodity" label (e.g. a medicated-plaster or longer-acting injectable form) is exactly what the expert is paying CartaOS to surface.`;
 
-export const QUALITY_DIRECTIVE = `## EPISTEMIC STANDARD — trustworthy because traceable and honestly bounded (this is what an expert buyer actually judges)
-CartaOS is positioned as a provenance-clean, correctly-framed FIRST PASS that does the tedious 80% without howlers and SURFACES ITS OWN GAPS for the expert to close — never as a replacement for the executive's tacit market knowledge (real net price after confidential rebates, who truly supplies, which tender renegotiated last quarter). Write so the report withstands inspection by the most experienced pharma BD executive.
+const QUALITY_HEADER = `## EPISTEMIC STANDARD — trustworthy because traceable and honestly bounded (this is what an expert buyer actually judges)
+CartaOS is positioned as a provenance-clean, correctly-framed FIRST PASS that does the tedious 80% without howlers and SURFACES ITS OWN GAPS for the expert to close — never as a replacement for the executive's tacit market knowledge (real net price after confidential rebates, who truly supplies, which tender renegotiated last quarter). Write so the report withstands inspection by the most experienced pharma BD executive.`;
 
-1. ANSWER THE QUESTION ASKED. The client OWNS the asset and asks "is there real market value / a business opportunity here?" — a broad question. Do NOT collapse it into the narrow "is there an off-patent in-license trade?" and answer only that. When the narrow trade is weak but other modes (reformulation, cash-pay, supplement, repositioning) hold value, say so explicitly; a flat "No-Go" that implies no opportunity exists when the real answer is "No-Go as an off-patent in-license, Conditional as a reformulation / cash-channel play" loses the client.
-2. PROVENANCE TIER ON LOAD-BEARING FACTS. Tier 1 = primary regulator label / peer-reviewed literature / official statistics; Tier 2 = reputable secondary / industry; Tier 3 = convenient but unreliable for the use. CRITICAL: ChEMBL / Orange-Book "first approval" date fields are Tier 3 for LEGACY molecules and are routinely wrong by decades (e.g. procaine/Novocain in clinical use ~1905, NOT a 1948 "first approval"; B12 isolated 1948 / clinical early-1950s, NOT a 1982 record). Never present a Tier-3 convenience field as established fact.
+/** Branch-agnostic epistemic rules. Point 1 is branch-specific and prepended. */
+const EPISTEMIC_CORE = `2. PROVENANCE TIER ON LOAD-BEARING FACTS. Tier 1 = primary regulator label / peer-reviewed literature / official statistics; Tier 2 = reputable secondary / industry; Tier 3 = convenient but unreliable for the use. CRITICAL: ChEMBL / Orange-Book "first approval" date fields are Tier 3 for LEGACY molecules and are routinely wrong by decades (e.g. procaine/Novocain in clinical use ~1905, NOT a 1948 "first approval"; B12 isolated 1948 / clinical early-1950s, NOT a 1982 record). Never present a Tier-3 convenience field as established fact.
 3. SANITY-CHECK & FLAG, DON'T SMOOTH. Cross-check high-salience claims (approval history, originator/current holder, mechanism). If a claimed first-approval date post-dates documented clinical use by decades, or originator/holder conflicts across sources — FLAG it in provenanceFlags, do not silently pick one.
 4. EVIDENCE vs INFERENCE. Separate an evidence-based finding (anchored to a named tier-1/2 source) from a prior-based inference (reasoning from absence or general priors). Reasoning from absence is legitimate but must be MARKED in the prose ("CartaOS infers, absent EPAR/AIFA evidence in scope, that...") — never laundered into language that reads like a sourced finding.
 5. NUMBER-TO-THESIS RECONCILIATION. Every market-size figure must STATE THE CHANNEL it measures, and that channel must match the recommended go-to-market. A hospital-injectable thesis anchored on a retail Part D figure is a disqualifying error. Keep TAM → SAM → SOM on consistent channel definitions.
 6. CALIBRATION OVER FALSE PRECISION. State verdict confidence honestly and give the SPECIFIC evidence that would flip it (falsifiability), e.g. "No-Go, low confidence; flips to Conditional if German cash-pay procaine volume exceeds €Xm or a reformulation route clears reference pricing." Do not manufacture five near-identical country sections that imply five independent assessments — where markets are the same template reasoned from priors, say so once.
 7. STEELMAN BEFORE THE VERDICT. The client is paying partly to find the angle they could not. Build the strongest case FOR the opportunity, then the case against; show at least one credible opportunity you CONSIDERED AND REJECTED, with the reason. Silence on the obvious angle reads as a lazy pass.`;
 
+const OFF_PATENT_Q1 = `1. ANSWER THE QUESTION ASKED. The client OWNS the asset and asks "is there real market value / a business opportunity here?" — a broad question. Do NOT collapse it into the narrow "is there an off-patent in-license trade?" and answer only that. When the narrow trade is weak but other modes (reformulation, cash-pay, supplement, repositioning) hold value, say so explicitly; a flat "No-Go" that implies no opportunity exists when the real answer is "No-Go as an off-patent in-license, Conditional as a reformulation / cash-channel play" loses the client.`;
+
+const INNOVATIVE_Q1 = `1. ANSWER THE QUESTION ASKED. The client asks whether a NOVEL asset is worth pursuing — which is a question about de-risked value, not about revenue today. Do NOT collapse it into "does it work?" and answer only the science. A scientifically elegant asset with no IP runway, no payer archetype and no credible acquirer is a No-Go; a scientifically ordinary asset with a clean composition-of-matter position in a gap a named acquirer has declared for is often a Go. Score the science, the IP and the partnerability as three separate questions and let the verdict fall out of all three.`;
+
+export const QUALITY_DIRECTIVE = `${QUALITY_HEADER}
+
+${OFF_PATENT_Q1}
+${EPISTEMIC_CORE}`;
+
+/** Epistemic standard rewritten for novel assets — same rules, different first question. */
+export const INNOVATIVE_QUALITY_DIRECTIVE = `${QUALITY_HEADER}
+
+${INNOVATIVE_Q1}
+${EPISTEMIC_CORE}`;
+
+/** The novel-asset analytical base. Deliberately shares NO framing with BASE_LENS. */
+export const INNOVATIVE_LENS = `## ANALYTICAL BASE — CartaOS novel-asset worthiness lens
+This assessment is about a NOVEL, INNOVATIVE compound — pre-approval or recently approved, still protected, still carrying development risk. This is NOT an off-patent value-maximisation exercise: there is no erosion curve to model, no tender price to defend, no generic entrant to count. Do not import off-patent reasoning. The governing question is whether the asset is worth pursuing at all, and what it is worth to whom.
+
+Value here is DE-RISKED value, and it moves on three axes that must be scored independently:
+- SCIENCE — is the biology real and is this asset differentiated within it? Unmet need measured against the actual standard of care (not against "no treatment"), target validation from human genetics and translational evidence rather than mouse data, and an honest read of where this asset sits against every competing programme by stage and modality. First-in-class and best-in-class are different claims requiring different evidence; do not use them interchangeably.
+- IP — an asset with no runway is not an asset. Distinguish composition-of-matter from formulation and method-of-use claims: they carry very different value. State the jurisdictions actually filed in, the runway remaining POST-LAUNCH (not from today), and term-extension eligibility. Freedom to operate is a SCREEN, not a legal opinion: surface third-party blocking claims as flags with citations and say plainly that counsel must clear them.
+- PARTNERABILITY — who buys this, and why now? Name companies with a demonstrated portfolio gap or declared strategic interest in this indication and modality, evidenced by their recent deal behaviour and pipeline, not by their size. A named acquirer with a matching gap is worth more than a large market.
+
+DEVELOPMENT RISK IS THE DISCOUNT RATE. Every value statement must be conditioned on the probability of getting there: stage, remaining studies, phase-transition benchmarks for the therapy area, and the cost to the next value inflection. State the inflection point explicitly — the single event that most changes what this asset is worth.
+
+REGULATORY AND ACCESS ARE FORWARD-LOOKING. Use the NEW PATENTED ACTIVE column of the jurisdiction reference (AMNOG/G-BA in Germany, HAS/CEPS in France, NICE/HTA in the UK, the EU joint clinical assessment, US PBM and coverage archetypes) — the off-patent mechanisms (reference pricing, rebate tenders, substitution) DO NOT APPLY to a protected novel asset. Designation eligibility (orphan, accelerated/expedited, paediatric) is a route question, not a marketing claim.
+
+CMC IS A REAL RISK, NOT A FOOTNOTE. Modality dictates manufacturability, comparability risk and supply exposure; a cell or gene therapy with unresolved scale-up is a materially different asset from a small molecule with the same clinical data.`;
+
 /** Append the off-patent value-maximisation lens + ten-lever taxonomy + evidence base
  *  + jurisdiction reference + epistemic standard + compliance + voice to an agent's prompt. */
 export function withGrounding(basePrompt: string): string {
   return `${basePrompt}\n\n${BASE_LENS}\n\n${VALUE_LEVER_TAXONOMY}\n\n${SOURCE_REFERENCE}\n\n${JURISDICTION_REFERENCE}\n\n${QUALITY_DIRECTIVE}\n\n${COMPLIANCE_DIRECTIVE}\n\n${CONSULTING_DIRECTIVE}`;
+}
+
+/**
+ * The innovative branch's grounding (§7: the two branches share no prompt).
+ * Deliberately omits BASE_LENS and VALUE_LEVER_TAXONOMY — importing off-patent
+ * erosion/tender/substitution reasoning into a novel-asset assessment is the
+ * exact category error this separation exists to prevent. The evidence base,
+ * jurisdiction table, compliance and voice are branch-agnostic and shared.
+ */
+export function withInnovativeGrounding(basePrompt: string): string {
+  return `${basePrompt}\n\n${INNOVATIVE_LENS}\n\n${SOURCE_REFERENCE}\n\n${JURISDICTION_REFERENCE}\n\n${INNOVATIVE_QUALITY_DIRECTIVE}\n\n${COMPLIANCE_DIRECTIVE}\n\n${CONSULTING_DIRECTIVE}`;
 }
