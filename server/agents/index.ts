@@ -18,3 +18,4 @@ export { runSynthesisAgent } from "./synthesis";
 export { runExecutionPlanAgent } from "./execution-plan";
 export { runOutLicensingStrategyAgent } from "./out-licensing-strategy";
 export { runInnovativeDiagnosisAgent } from "./innovative-diagnosis";
+export { runStrategyAgent } from "./strategy";

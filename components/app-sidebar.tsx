@@ -6,16 +6,15 @@ import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Users,
-  MessageSquare,
   FolderKanban,
   Search,
-  Lightbulb,
   Settings,
   LogOut,
   Rocket,
   Shield,
   Gauge,
   Microscope,
+  GitBranch,
 } from "lucide-react";
 import {
   Sidebar,
@@ -53,19 +52,14 @@ const diagnosis = [
 
 const strategy = [
   {
-    title: "Partners & Synergies",
-    href: "/partners",
+    title: "Off-patent",
+    href: "/strategy",
+    icon: GitBranch,
+  },
+  {
+    title: "Innovative",
+    href: "/strategy/innovative",
     icon: Users,
-  },
-  {
-    title: "Commercial Maximization",
-    href: "/insights",
-    icon: Lightbulb,
-  },
-  {
-    title: "AI Advisor",
-    href: "/conductor",
-    icon: MessageSquare,
   },
 ];
 

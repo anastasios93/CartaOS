@@ -15,6 +15,7 @@ import type {
   OutLicensingReport,
   ExecutionPlanOutput,
 } from "@/types/hub";
+import type { Strategy } from "@/types/run";
 
 // ─── Brand & design tokens ───────────────────────────────────────────────────
 
@@ -964,6 +965,287 @@ export async function exportExecutionPlanPDF(
   }
 
   state.doc.save(`${safeFilename(assetName)}_Execution_Plan.pdf`);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PILLAR 2 — STRATEGY SUMMARY PDF (§5)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Compact USD for tables — the engine returns plain numbers. */
+const compactUsd = (n: number | null | undefined): string => {
+  if (n == null || !Number.isFinite(n)) return "n/a";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(abs >= 1e10 ? 0 : 1)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+};
+
+const sText = (v: unknown): string => (typeof v === "string" && v.trim() ? v.trim() : "");
+
+/** The slice of autoTable's didParseCell hook this module actually reads. */
+interface ParsedCell {
+  section: string;
+  column: { index: number };
+  row: { index: number };
+  cell: { raw: unknown; styles: { textColor?: string; fontStyle?: string } };
+}
+
+/**
+ * A clean 2–3 page consulting summary of a Strategy: the recommended route, the
+ * route comparison, the assumptions behind every figure (with their basis), the
+ * variables that dominate the outcome, and the partner shortlist.
+ *
+ * Every number here is recomputed from `strategy.assumptions` by the same pure
+ * deterministic engine the screen uses — so a PDF taken after the user has
+ * edited assumptions reflects exactly what they were looking at.
+ */
+export async function exportStrategyPDF(
+  strategy: Strategy,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+) {
+  const [{ jsPDF, autoTable }, engine] = await Promise.all([
+    loadPdfDeps(),
+    import("@/server/services/strategy/model"),
+  ]);
+
+  const branchLabel = branch === "off_patent" ? "Off-Patent" : "Innovative";
+  const state = newPdf(jsPDF, `${branchLabel} Route Strategy`, assetName, STRATEGY_COLOR);
+
+  // ── Recompute from the assumptions as they stand ──────────────────────────
+  const assumptions = Array.isArray(strategy.assumptions) ? strategy.assumptions : [];
+  const values: Record<string, number> = {};
+  for (const a of assumptions) {
+    if (String(a.value).trim() === "") continue;
+    const n = Number(a.value);
+    if (Number.isFinite(n)) values[a.key] = n;
+  }
+  const required = branch === "off_patent" ? engine.OFF_PATENT_REQUIRED : engine.INNOVATIVE_REQUIRED;
+  const results = engine.modelAllRoutes(branch, values);
+  const byKey = new Map(results.map((r) => [r.key, r]));
+  const best = engine.recommendRoute(results);
+  const scen = engine.runScenarios(branch, values, 20);
+  const scenNpv = (set: typeof scen.base, key: string) => {
+    const r = set.find((x) => x.key === key);
+    return r && r.computable ? compactUsd(r.npv) : "n/a";
+  };
+  const sens = best ? engine.sensitivity(branch, values, best.key, 20).slice(0, 6) : [];
+  const routes = Array.isArray(strategy.routes) ? strategy.routes : [];
+  const recommendedKey = best?.key ?? sText(strategy.recommendedRoute);
+  const recommended = routes.find((r) => r.key === recommendedKey);
+  const missing = required.filter((k) => !Number.isFinite(values[k]));
+  const labelOf = (key: string) => sText(assumptions.find((a) => a.key === key)?.label) || key;
+
+  const computable = routes.filter((r) => byKey.get(r.key)?.computable);
+  const uncomputable = routes.filter((r) => byKey.get(r.key)?.computable === false);
+
+  coverPage(
+    state,
+    `${branchLabel} Route Strategy`,
+    recommended
+      ? `${recommended.label} is the route that realises the most value`
+      : "Route comparison and modelled economics",
+    "Every commercialisation and partnering route modelled from one assumption set — NPV, IRR, break-even and the dependency that would break the plan",
+    assetName,
+    [
+      { label: "Recommended route", value: recommended?.label ?? "Not computable" },
+      { label: "Modelled NPV", value: best ? compactUsd(best.npv) : "n/a" },
+      { label: "Break-even", value: best?.breakEvenYear != null ? `Year ${best.breakEvenYear}` : "n/a" },
+      { label: "Routes modelled", value: `${computable.length} of ${routes.length}` },
+    ],
+  );
+
+  paragraph(
+    state,
+    "Internal strategic decision support only. The assumptions below are the model's inputs; every financial figure is computed deterministically from them and moves when they move. Figures marked as assumed are not sourced — verify them before transacting.",
+    8.5,
+    MUTED,
+  );
+
+  // ── Recommendation ────────────────────────────────────────────────────────
+  sectionTitle(
+    state,
+    "Recommendation",
+    recommended?.label ?? "No route is computable on the current assumptions",
+    best
+      ? `NPV ${compactUsd(best.npv)} · IRR ${best.irr != null ? `${best.irr.toFixed(1)}%` : "n/a"} · break-even ${best.breakEvenYear != null ? `year ${best.breakEvenYear}` : "never within the horizon"} · peak revenue ${compactUsd(best.peakRevenue)}`
+      : `Missing inputs: ${missing.map(labelOf).join(", ") || "none recorded"}`,
+  );
+  if (recommended) {
+    const rationale = sText((recommended as Record<string, unknown>).rationale);
+    if (rationale) lead(state, rationale);
+    const dependency = sText(recommended.keyDependency) || sText(byKey.get(recommended.key)?.keyDependency);
+    if (dependency) {
+      tinyLabel(state, "Key dependency — what would break this plan");
+      paragraph(state, dependency);
+    }
+    if (best) {
+      tinyLabel(state, "Scenario range (every driver moved together by ±20%)");
+      paragraph(
+        state,
+        `Downside ${scenNpv(scen.downside, best.key)}   ·   Base ${compactUsd(best.npv)}   ·   Upside ${scenNpv(scen.upside, best.key)}`,
+      );
+    }
+  }
+
+  // ── Route comparison ──────────────────────────────────────────────────────
+  sectionTitle(
+    state,
+    "Route Comparison",
+    "Every route, one assumption set",
+    "Score is the fit read for this asset at this stage; all financial figures are model output.",
+  );
+  if (computable.length) {
+    table(state, {
+      head: [["Route", "Score", "NPV", "IRR", "Break-even", "Peak revenue", "Downside / Upside"]],
+      body: computable.map((r) => {
+        const e = byKey.get(r.key)!;
+        const econ = e.computable ? e : null;
+        return [
+          r.label,
+          r.score != null ? String(r.score) : "n/a",
+          compactUsd(econ?.npv),
+          econ?.irr != null ? `${econ.irr.toFixed(1)}%` : "n/a",
+          econ?.breakEvenYear != null ? `Y${econ.breakEvenYear}` : "never",
+          compactUsd(econ?.peakRevenue),
+          `${scenNpv(scen.downside, r.key)} / ${scenNpv(scen.upside, r.key)}`,
+        ];
+      }),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 130 },
+        1: { halign: "right" },
+        2: { halign: "right", fontStyle: "bold", textColor: POS },
+        3: { halign: "right" },
+        4: { halign: "center" },
+        5: { halign: "right" },
+        6: { halign: "right", textColor: MUTED, fontSize: 8 },
+      },
+      didParseCell: (data: ParsedCell) => {
+        if (data.section === "body" && data.row.index != null) {
+          const route = computable[data.row.index];
+          if (route && route.key === recommendedKey) data.cell.styles.fontStyle = "bold";
+        }
+      },
+    }, autoTable);
+  }
+  // A route missing a required input is never shown as a zero or a dash.
+  if (uncomputable.length) {
+    subHeader(state, "Routes that cannot be modelled yet", INK);
+    table(state, {
+      head: [["Route", "Missing inputs", "Key dependency"]],
+      body: uncomputable.map((r) => {
+        const e = byKey.get(r.key);
+        const miss = e && !e.computable ? e.missing : required;
+        return [r.label, miss.map(labelOf).join(", "), sText(r.keyDependency)];
+      }),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 130 },
+        1: { textColor: NEG, cellWidth: 160 },
+        2: { textColor: MUTED, fontSize: 8 },
+      },
+    }, autoTable);
+  }
+
+  // ── Assumptions ───────────────────────────────────────────────────────────
+  newPage(state);
+  sectionTitle(
+    state,
+    "Assumptions",
+    "What every figure above rests on",
+    "Sourced assumptions carry a citation; assumed ones are the model's own estimate and are the first thing to challenge.",
+  );
+  table(state, {
+    head: [["Assumption", "Value", "Unit", "Basis", "Source"]],
+    body: assumptions.map((a) => [
+      sText(a.label) || a.key,
+      String(a.value ?? "").trim() === "" ? "not supplied" : String(a.value),
+      sText(a.unit) || "—",
+      a.basis === "sourced" ? "Sourced" : "Assumed",
+      sText(a.source) || "—",
+    ]),
+    columnStyles: {
+      0: { fontStyle: "bold", textColor: INK, cellWidth: 150 },
+      1: { halign: "right", cellWidth: 80 },
+      2: { cellWidth: 46, textColor: MUTED },
+      3: { cellWidth: 54 },
+      4: { textColor: MUTED, fontSize: 8 },
+    },
+    didParseCell: (data: ParsedCell) => {
+      if (data.section === "body" && data.column.index === 3 && String(data.cell.raw) === "Assumed") {
+        data.cell.styles.textColor = NEG;
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  }, autoTable);
+  if (missing.length) {
+    tinyLabel(state, "Still missing");
+    paragraph(state, missing.map(labelOf).join("   ·   "), 9.5, NEG);
+  }
+
+  // ── Sensitivity ───────────────────────────────────────────────────────────
+  if (sens.length && best) {
+    sectionTitle(
+      state,
+      "Sensitivity",
+      sens[0] ? `${labelOf(sens[0].key)} dominates the outcome` : "Which variables dominate the outcome",
+      `Each driver moved ±20% on its own, everything else held, against ${best.label}.`,
+    );
+    table(state, {
+      head: [["Rank", "Variable", "NPV at -20%", "NPV at +20%", "Swing"]],
+      body: sens.map((s, i) => [
+        String(i + 1),
+        labelOf(s.key),
+        compactUsd(s.low),
+        compactUsd(s.high),
+        compactUsd(s.swing),
+      ]),
+      columnStyles: {
+        0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 34 },
+        1: { fontStyle: "bold", textColor: INK },
+        2: { halign: "right" },
+        3: { halign: "right" },
+        4: { halign: "right", fontStyle: "bold", textColor: POS },
+      },
+    }, autoTable);
+  }
+
+  // ── Partner shortlist ─────────────────────────────────────────────────────
+  const partners = Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [];
+  if (partners.length) {
+    sectionTitle(state, "Counterparties", "Partner shortlist");
+    table(state, {
+      head: [["#", "Partner", "Type", "Score", "Geographies", "Why them"]],
+      body: partners.map((p, i) => [
+        String(i + 1),
+        p.name,
+        sText(p.kind) || "—",
+        p.score != null ? String(p.score) : "n/a",
+        (p.geographies ?? []).join(", ") || "—",
+        sText(p.rationale) || "—",
+      ]),
+      columnStyles: {
+        0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 24 },
+        1: { fontStyle: "bold", textColor: INK, cellWidth: 110 },
+        2: { cellWidth: 64, textColor: MUTED },
+        3: { halign: "right", cellWidth: 36 },
+        4: { cellWidth: 74, textColor: MUTED, fontSize: 8 },
+        5: { textColor: BODY },
+      },
+    }, autoTable);
+  }
+
+  const sequence = Array.isArray((strategy as Record<string, unknown>).approachSequence)
+    ? ((strategy as Record<string, unknown>).approachSequence as unknown[]).map(sText).filter(Boolean)
+    : [];
+  if (sequence.length) {
+    subHeader(state, "Recommended sequence of approach", STRATEGY_COLOR);
+    bullets(state, sequence.map((s, i) => `${i + 1}. ${s}`), STRATEGY_COLOR);
+  }
+
+  state.doc.save(`${safeFilename(assetName)}_Strategy_Summary.pdf`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
