@@ -52,7 +52,12 @@ const IntakeSchema = z.object({
   therapeuticArea: z.string().default(""),
   developmentStage: z.string().default(""),
   dealDirection: z.enum(["Out-licensing", "In-licensing", "Co-development", "Option Agreement", "M&A / Acquisition"]).default("Out-licensing"),
-  geographies: z.array(z.enum(["US", "EU", "JP", "CN", "ROW"])).default(["US", "EU", "JP", "CN", "ROW"]),
+  // ISO-3166 alpha-2 codes from the geography selector, or the legacy region
+  // keys (US/EU/JP/CN/ROW) from the old intake form. Unknown tokens are
+  // skipped by region expansion, never guessed.
+  geographies: z.array(z.string().min(2).max(3)).min(1).default(["US", "EU", "JP", "CN", "ROW"]),
+  exactGeographies: z.boolean().default(false),
+  assetType: z.enum(["off_patent", "innovative"]).default("off_patent"),
   context: z.string().default(""),
   criteria: CriteriaSchema,
 });
@@ -94,6 +99,7 @@ export async function POST(req: Request) {
 
   const sendEvent = (event: SSEEvent | { type: "done" }) => {
     record(event);
+    logEvent(event);
     const data = `data: ${JSON.stringify(event)}\n\n`;
     writer.write(encoder.encode(data)).catch(() => {});
   };
@@ -111,6 +117,37 @@ export async function POST(req: Request) {
         geographies: intake.geographies,
         context: intake.context || null,
         status: "running",
+      },
+      select: { id: true },
+    })
+    .then(r => r.id)
+    .catch(() => null);
+
+  // The Run spine (transitional double-write next to HubRequest — the legacy
+  // table goes away in the final phase once nothing reads it).
+  const runLog: { at: string; kind: string; message: string; source?: string; phase?: string }[] = [];
+  const logEvent = (event: SSEEvent | { type: "done" }) => {
+    if (!("agent" in event)) return;
+    const at = new Date().toISOString();
+    if (event.type === "status") {
+      runLog.push({ at, kind: "status", message: event.message, source: event.agent, phase: event.agent });
+    } else if (event.type === "sources" && Array.isArray(event.sources)) {
+      runLog.push({ at, kind: "source_hit", message: `${event.sources.length} sources consulted`, source: event.agent, phase: event.agent });
+    } else if (event.type === "result") {
+      runLog.push({ at, kind: "result", message: "completed", source: event.agent, phase: event.agent });
+    } else if (event.type === "error") {
+      runLog.push({ at, kind: "error", message: event.error, source: event.agent, phase: event.agent });
+    }
+  };
+  const runRowPromise = db.run
+    .create({
+      data: {
+        userId,
+        assetQuery: intake.assetName,
+        assetType: intake.assetType,
+        geographies: intake.geographies,
+        criteria: (intake.criteria ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        status: "diagnosis_running",
       },
       select: { id: true },
     })
@@ -216,6 +253,35 @@ export async function POST(req: Request) {
         }
       } catch {
         // Persistence is best-effort — never surface to the user.
+      }
+
+      // Persist the Run spine row: the assessment maps into the Diagnosis
+      // envelope; the execution-plan output rides along for the later pillar.
+      try {
+        const runId = await runRowPromise;
+        if (runId) {
+          const { mapReportToDiagnosis } = await import("@/server/services/run-mapper");
+          const strategyCapture = captured["outLicensingStrategy"];
+          const executionCapture = captured["executionPlan"];
+          const report = (strategyCapture?.result as { report?: unknown } | undefined)?.report;
+          const diagnosis = report
+            ? mapReportToDiagnosis(report as Parameters<typeof mapReportToDiagnosis>[0])
+            : null;
+          await db.run.update({
+            where: { id: runId },
+            data: {
+              status: diagnosis ? "diagnosed" : "error",
+              diagnosis: (diagnosis ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+              execution: executionCapture?.result
+                ? ({ legacy: { agent: "executionPlan", result: (executionCapture.result as { plan?: unknown }).plan ?? executionCapture.result } } as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
+              log: runLog as Prisma.InputJsonValue,
+              error: diagnosis ? null : (strategyCapture?.error ?? "assessment produced no report"),
+            },
+          });
+        }
+      } catch {
+        // Best-effort, same as above.
       }
     }
   })();

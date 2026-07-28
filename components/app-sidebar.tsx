@@ -5,21 +5,17 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard,
-  BarChart3,
   Users,
   MessageSquare,
   FolderKanban,
   Search,
-  TrendingUp,
   Lightbulb,
   Settings,
   LogOut,
-  Sparkles,
-  Network,
   Rocket,
-  Globe,
   Shield,
   Gauge,
+  Microscope,
 } from "lucide-react";
 import {
   Sidebar,
@@ -44,19 +40,14 @@ const mainNav = [
 
 const diagnosis = [
   {
-    title: "Patent Arbitrage",
-    href: "/arbitrage",
-    icon: Globe,
+    title: "Off-patent",
+    href: "/diagnosis",
+    icon: Gauge,
   },
   {
-    title: "Market Trends",
-    href: "/trends",
-    icon: TrendingUp,
-  },
-  {
-    title: "Comparable Deals",
-    href: "/benchmarks",
-    icon: BarChart3,
+    title: "Innovative",
+    href: "/diagnosis/innovative",
+    icon: Microscope,
   },
 ];
 
@@ -83,11 +74,6 @@ const execution = [
     title: "Simulated Plan",
     href: "/simulated-plan",
     icon: Rocket,
-  },
-  {
-    title: "Market Worthiness",
-    href: "/market-worthiness",
-    icon: Gauge,
   },
   {
     title: "Deal Workspace",
