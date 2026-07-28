@@ -1,13 +1,41 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Bell, Search, Plus, Loader2, Command, X } from "lucide-react";
+import {
+  Bell,
+  Search,
+  Plus,
+  Loader2,
+  Command,
+  X,
+  LayoutDashboard,
+  Stethoscope,
+  FlaskConical,
+  GitBranch,
+  ListChecks,
+  FolderKanban,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+
+/** The palette navigates; every entry here is a route that exists. */
+const DESTINATIONS: { label: string; hint: string; href: string; icon: LucideIcon }[] = [
+  { label: "Portfolio Overview", hint: "Every run and what it is waiting on", href: "/", icon: LayoutDashboard },
+  { label: "Diagnosis — Off-patent", hint: "Is this approved asset worth pursuing?", href: "/diagnosis", icon: Stethoscope },
+  { label: "Diagnosis — Innovative", hint: "Is this novel asset worth pursuing?", href: "/diagnosis/innovative", icon: FlaskConical },
+  { label: "Strategy — Off-patent", hint: "Which commercialisation route realises the value?", href: "/strategy", icon: GitBranch },
+  { label: "Strategy — Innovative", hint: "Which transaction structure captures the most value?", href: "/strategy/innovative", icon: GitBranch },
+  { label: "Execution — Off-patent", hint: "Workstreams, owners and dates", href: "/execution", icon: ListChecks },
+  { label: "Execution — Innovative", hint: "Data room, diligence and negotiation", href: "/execution/innovative", icon: ListChecks },
+  { label: "Deal Workspace", hint: "Track a plan and the negotiation it feeds", href: "/workspace", icon: FolderKanban },
+  { label: "Settings", hint: "Profile and appearance", href: "/settings", icon: Settings },
+];
 
 export default function DashboardLayout({
   children,
@@ -16,8 +44,6 @@ export default function DashboardLayout({
 }) {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const pathname = usePathname();
-  const isHub = false; // Hub now lives at "/" — no longer needs special layout
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -51,13 +77,21 @@ export default function DashboardLayout({
     }
   }, [searchOpen]);
 
+  const destinations = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return DESTINATIONS.filter(
+      (d) => !q || d.label.toLowerCase().includes(q) || d.hint.toLowerCase().includes(q),
+    );
+  }, [searchQuery]);
+
+  /** Enter goes to the first match — the usual palette behaviour. */
   const handleSearchSubmit = useCallback(() => {
-    if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchOpen(false);
-      setSearchQuery("");
-    }
-  }, [searchQuery, router]);
+    const first = destinations[0];
+    if (!first) return;
+    router.push(first.href);
+    setSearchOpen(false);
+    setSearchQuery("");
+  }, [destinations, router]);
 
   if (status === "loading") {
     return (
@@ -88,7 +122,7 @@ export default function DashboardLayout({
               className="flex items-center gap-2 h-9 w-full max-w-md rounded-lg border border-border/60 bg-[#F8F9FA] px-3 text-sm text-muted-foreground hover:border-border hover:bg-[#F3F4F6] transition-all"
             >
               <Search className="h-3.5 w-3.5" />
-              <span className="flex-1 text-left">Search deals, partners, assets...</span>
+              <span className="flex-1 text-left">Jump to…</span>
               <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border/60 bg-white px-1.5 text-[10px] font-medium text-muted-foreground/70">
                 <Command className="h-2.5 w-2.5" />K
               </kbd>
@@ -136,7 +170,7 @@ export default function DashboardLayout({
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Search deals, companies, therapeutic areas, SEC filings..."
+                  placeholder="Jump to a pillar or a workspace…"
                   className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/60"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -157,60 +191,48 @@ export default function DashboardLayout({
                 </kbd>
               </div>
 
-              {/* Quick navigation */}
+              {/* Navigation. The palette moves you around the app — it does not
+                  search content. It used to push to a free-text /search page
+                  that no longer exists, and offering a search box that goes
+                  nowhere is worse than not offering one. */}
               <div className="p-2 max-h-[50vh] overflow-y-auto">
-                {searchQuery.trim() ? (
-                  <button
-                    onClick={handleSearchSubmit}
-                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-[#F97316]/5 text-left transition-colors"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#F97316]/10 text-[#F97316]">
-                      <Search className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">
-                        Search &ldquo;{searchQuery}&rdquo;
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Search across deals, SEC filings, clinical trials, patents, and news
-                      </p>
-                    </div>
-                  </button>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50">
-                      Quick Links
+                <div className="space-y-1">
+                  <p className="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50">
+                    Go to
+                  </p>
+                  {destinations.length === 0 ? (
+                    <p className="px-3 py-3 text-sm text-muted-foreground">
+                      Nothing matches &ldquo;{searchQuery}&rdquo;.
                     </p>
-                    {[
-                      { label: "Comparable Deals & Benchmarks", href: "/benchmarks", icon: "chart" },
-                      { label: "Live Search (SEC, ClinicalTrials, Patents)", href: "/search", icon: "search" },
-                      { label: "AI Companion", href: "/conductor", icon: "ai" },
-                      { label: "Deal Workspace", href: "/workspace", icon: "folder" },
-                      { label: "Market Trends", href: "/trends", icon: "trend" },
-                    ].map((item) => (
+                  ) : (
+                    destinations.map((item) => (
                       <button
                         key={item.href}
                         onClick={() => {
                           router.push(item.href);
                           setSearchOpen(false);
+                          setSearchQuery("");
                         }}
                         className="flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-[#F8F9FA] text-left transition-colors"
                       >
                         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-secondary/50 text-muted-foreground">
-                          <Search className="h-3.5 w-3.5" />
+                          <item.icon className="h-3.5 w-3.5" />
                         </div>
-                        <span className="text-sm">{item.label}</span>
+                        <div className="min-w-0">
+                          <span className="text-sm">{item.label}</span>
+                          <span className="block text-xs text-muted-foreground">{item.hint}</span>
+                        </div>
                       </button>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        <main className={`flex-1 overflow-auto ${isHub ? "" : "bg-[#FAFAFA]"}`}>
-          {isHub ? children : <div className="mx-auto max-w-[1400px] p-6">{children}</div>}
+        <main className="flex-1 overflow-auto bg-[#FAFAFA]">
+          <div className="mx-auto max-w-[1400px] p-6">{children}</div>
         </main>
       </SidebarInset>
     </SidebarProvider>

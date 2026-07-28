@@ -81,24 +81,6 @@ Extract all available fields (use null if not found or redacted):
   "confidenceScore": "0.0-1.0"
 }`;
 
-// ─── Clause Drafting ──────────────────────────────────────────────────────────
-
-export const CLAUSE_DRAFTING_SYSTEM_PROMPT = `You are a biotech licensing clause specialist. Generate draft clauses
-for the requested clause type, given the deal context and comparable examples.
-
-Format your response as JSON with exactly these fields:
-{
-  "primaryClause": "licensor-favorable but commercially reasonable clause text",
-  "alternativeClause": "more balanced version for negotiation flexibility",
-  "explanation": "plain-language explanation of what each clause does",
-  "negotiationPoints": ["points the partner is likely to push back on"],
-  "fallbackPositions": ["fallback positions if the partner objects"],
-  "precedents": ["specific precedent deals where similar language was used"]
-}
-
-IMPORTANT: Always state that this is analytical assistance, not legal advice.
-Recommend review by qualified legal counsel.`;
-
 // ─── Deal Conductor ───────────────────────────────────────────────────────────
 
 export const DEAL_CONDUCTOR_SYSTEM_PROMPT = `You are the CartaOS Deal Conductor. Monitor the state of an active
@@ -117,28 +99,6 @@ Generate a structured status update as JSON:
 
 Prioritize actionability. Every recommendation should specify WHO does WHAT by WHEN.`;
 
-// ─── Partner Fit Scoring ──────────────────────────────────────────────────────
-
-export const PARTNER_SCORING_SYSTEM_PROMPT = `You are a biotech BD strategist. Score the partner fit from 0-100
-based on the asset profile and partner company profile (including deal history).
-
-Consider: therapeutic area alignment, modality expertise, recent deal activity,
-geographic/territory fit, financial capacity, pipeline gaps this asset fills,
-typical deal terms they offer, deal velocity, and competitive conflicts.
-
-Return JSON:
-{
-  "score": 0-100,
-  "rationale": "string",
-  "strengths": ["string"],
-  "risks": ["string"],
-  "expectedTermRanges": {
-    "upfrontMm": {"low": number, "median": number, "high": number},
-    "royaltyPct": {"low": number, "high": number}
-  },
-  "suggestedApproach": "string"
-}`;
-
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 export async function extractDealTerms(documentText: string) {
@@ -147,24 +107,6 @@ export async function extractDealTerms(documentText: string) {
     max_tokens: 4096,
     system: DEAL_EXTRACTION_SYSTEM_PROMPT,
     messages: [{ role: "user", content: documentText }],
-  });
-
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
-  return JSON.parse(text);
-}
-
-export async function draftClause(
-  clauseType: string,
-  dealContext: string,
-  comparableExamples: string[]
-) {
-  const userPrompt = `Clause type: ${clauseType}\n\nDeal context:\n${dealContext}\n\nComparable clause examples:\n${comparableExamples.join("\n\n---\n\n")}`;
-
-  const message = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    system: CLAUSE_DRAFTING_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userPrompt }],
   });
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
@@ -180,23 +122,6 @@ export async function runDealConductor(negotiationState: object) {
       {
         role: "user",
         content: `Current negotiation state:\n${JSON.stringify(negotiationState, null, 2)}`,
-      },
-    ],
-  });
-
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
-  return JSON.parse(text);
-}
-
-export async function scorePartnerFit(assetProfile: object, partnerProfile: object) {
-  const message = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: PARTNER_SCORING_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Asset profile:\n${JSON.stringify(assetProfile, null, 2)}\n\nPartner profile:\n${JSON.stringify(partnerProfile, null, 2)}`,
       },
     ],
   });

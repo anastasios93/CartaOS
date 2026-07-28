@@ -2,15 +2,6 @@ import { z } from "zod/v4";
 import { router, adminProcedure } from "../trpc";
 
 export const adminRouter = router({
-  /** Whether the current session is an admin (used by sidebar gating). */
-  whoami: adminProcedure.query(async ({ ctx }) => {
-    const me = await ctx.db.user.findUnique({
-      where: { id: ctx.session.user.id },
-      select: { id: true, name: true, email: true, isAdmin: true },
-    });
-    return me;
-  }),
-
   /** List every registered user with activity counts. */
   listUsers: adminProcedure
     .input(

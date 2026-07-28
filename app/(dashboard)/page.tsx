@@ -1,531 +1,276 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
-import Link from "next/link";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { useDeals, useCompanies, useNegotiations } from "@/hooks/use-data";
-import {
-  Microscope,
-  Network,
-  Rocket,
-  TrendingUp,
-  BarChart3,
-  Users,
-  Lightbulb,
-  RotateCcw,
-  ArrowRight,
-  DollarSign,
-  Gem,
-  AlertTriangle,
-  Activity,
-  FileSignature,
-  ClipboardCheck,
-  Database,
-  Brain,
-  Globe,
-} from "lucide-react";
-import { CompactIntakeForm } from "@/components/hub/compact-intake-form";
-import { PillarCard } from "@/components/pillar-card";
-import { useAgentStream } from "@/hooks/use-agent-stream";
-import type { HubIntakeForm, AgentResult } from "@/types/hub";
-import { BenchmarkingResults } from "@/components/hub/results/benchmarking-results";
-import { PartnerResults } from "@/components/hub/results/partner-results";
-import { NegotiationResults } from "@/components/hub/results/negotiation-results";
-import { ContractResults } from "@/components/hub/results/contract-results";
-import { DiligenceResults } from "@/components/hub/results/diligence-results";
-import { DataPackageResults } from "@/components/hub/results/datapackage-results";
-import { IntelligenceResults } from "@/components/hub/results/intelligence-results";
-import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-results";
+/**
+ * Portfolio Overview — the run list (§7).
+ *
+ * This page used to host a second, complete copy of the orchestrator UI: its
+ * own intake form, its own agent stream, its own results panel, all parallel to
+ * the pillar pages. Two places to start a run meant two places to keep correct,
+ * and the copy here wrote nothing a pillar page could reopen.
+ *
+ * It is now what the front door should be: every run the user has, what stage
+ * each has reached, and the one link that continues it. The Run is the spine —
+ * this is the list of spines.
+ */
 
-const PILLAR_COLORS = {
-  diagnosis: "#3B82F6",
-  strategy: "#10B981",
-  execution: "#F97316",
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { trpc } from "@/lib/trpc";
+import { countryByCode } from "@/config/geographies";
+import {
+  ArrowRight,
+  FlaskConical,
+  Gauge,
+  GitBranch,
+  ListChecks,
+  Search,
+  Stethoscope,
+} from "lucide-react";
+
+const TINY = "text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70";
+
+/**
+ * Where a run goes next, by status. The label is an instruction, not a noun —
+ * the point of this list is that every row tells you what to do with it.
+ */
+const NEXT_STEP: Record<
+  string,
+  { label: string; stage: string; href: (branch: string, id: string) => string; tone: string }
+> = {
+  draft: {
+    label: "Finish the diagnosis",
+    stage: "Draft",
+    tone: "bg-muted text-muted-foreground",
+    href: (b) => (b === "innovative" ? "/diagnosis/innovative" : "/diagnosis"),
+  },
+  diagnosis_running: {
+    label: "Diagnosis was interrupted — run it again",
+    stage: "Interrupted",
+    tone: "bg-red-500/10 text-red-700",
+    href: (b) => (b === "innovative" ? "/diagnosis/innovative" : "/diagnosis"),
+  },
+  diagnosed: {
+    label: "Model the strategy",
+    stage: "Diagnosed",
+    tone: "bg-[#F97316]/15 text-[#C2410C]",
+    href: (b) => (b === "innovative" ? "/strategy/innovative" : "/strategy"),
+  },
+  strategy_running: {
+    label: "Strategy was interrupted — run it again",
+    stage: "Interrupted",
+    tone: "bg-red-500/10 text-red-700",
+    href: (b) => (b === "innovative" ? "/strategy/innovative" : "/strategy"),
+  },
+  strategized: {
+    label: "Build the execution plan",
+    stage: "Strategised",
+    tone: "bg-[#F97316]/15 text-[#C2410C]",
+    href: (b) => (b === "innovative" ? "/execution/innovative" : "/execution"),
+  },
+  execution_running: {
+    label: "Planning was interrupted — run it again",
+    stage: "Interrupted",
+    tone: "bg-red-500/10 text-red-700",
+    href: (b) => (b === "innovative" ? "/execution/innovative" : "/execution"),
+  },
+  complete: {
+    label: "Open the workspace",
+    stage: "In execution",
+    tone: "bg-[#EA580C]/15 text-[#C2410C]",
+    href: (_b, id) => `/workspace/${id}`,
+  },
+  error: {
+    label: "This run failed — start it again",
+    stage: "Failed",
+    tone: "bg-red-500/10 text-red-700",
+    href: (b) => (b === "innovative" ? "/diagnosis/innovative" : "/diagnosis"),
+  },
 };
 
-function formatCurrency(value: number | null | undefined) {
-  if (value == null) return "—";
-  if (value >= 1000) return `$${(value / 1000).toFixed(1)}B`;
-  return `$${value.toFixed(0)}M`;
+function stepFor(status: string) {
+  return NEXT_STEP[status] ?? NEXT_STEP.draft;
 }
 
-export default function PortfolioOverview() {
-  const { data: session } = useSession();
-  const { deals } = useDeals();
-  const { companies } = useCompanies();
-  const { negotiations } = useNegotiations();
-  const { agents, deploy, reset, isRunning, hasResults } = useAgentStream();
+function geoLine(codes: string[]): string {
+  const shown = codes.slice(0, 6).map((c) => countryByCode(c)?.flag ?? c);
+  return `${shown.join(" ")}${codes.length > 6 ? ` +${codes.length - 6}` : ""}`;
+}
 
-  const [submitted, setSubmitted] = useState(false);
-  const [activeView, setActiveView] = useState<"diagnosis" | "strategy" | "execution">("diagnosis");
+function StatTile({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-white px-4 py-3">
+      <p className="text-2xl font-bold font-mono tabular-nums text-[#1A1A2E]">{value}</p>
+      <p className={TINY}>{label}</p>
+    </div>
+  );
+}
 
-  const totalPortfolioValue = useMemo(() => {
-    const values = deals.filter(d => d.totalDealValue != null).map(d => d.totalDealValue!);
-    return values.length ? values.reduce((a, b) => a + b, 0) : 0;
-  }, [deals]);
+export default function PortfolioOverviewPage() {
+  const runsQuery = trpc.run.list.useQuery({ limit: 50 }, { refetchOnWindowFocus: false });
+  const [query, setQuery] = useState("");
 
-  const activeNegotiations = negotiations.filter(n => n.status !== "CLOSED" && n.status !== "DEAD").length;
+  const runs = useMemo(() => runsQuery.data ?? [], [runsQuery.data]);
 
-  const handleSubmit = (form: HubIntakeForm) => {
-    setSubmitted(true);
-    deploy(form);
-  };
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return runs;
+    return runs.filter((r) => r.assetQuery.toLowerCase().includes(q));
+  }, [runs, query]);
 
-  const handleReset = () => {
-    reset();
-    setSubmitted(false);
-  };
-
-  // Synthesis result for the Execution pillar
-  const synthesisResult = agents.synthesis?.result as Extract<AgentResult, { agentId: "synthesis" }> | null;
-  const synthesisComplete = agents.synthesis?.status === "complete" && synthesisResult;
-
-  const executionPlanResult = agents.executionPlan?.result as Extract<AgentResult, { agentId: "executionPlan" }> | null;
-  const executionPlanComplete = agents.executionPlan?.status === "complete" && executionPlanResult;
-
-  const benchmarkResult = agents.benchmarking?.result as Extract<AgentResult, { agentId: "benchmarking" }> | null;
-  const partnerResult = agents.partner?.result as Extract<AgentResult, { agentId: "partner" }> | null;
-  const negotiationResult = agents.negotiation?.result as Extract<AgentResult, { agentId: "negotiation" }> | null;
+  const counts = useMemo(
+    () => ({
+      total: runs.length,
+      diagnosed: runs.filter((r) => r.status === "diagnosed").length,
+      strategised: runs.filter((r) => r.status === "strategized").length,
+      executing: runs.filter((r) => r.status === "complete").length,
+    }),
+    [runs],
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Greeting */}
-      <div className="flex items-end justify-between">
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E]">
-            Portfolio Overview
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Welcome back, {session?.user?.name?.split(" ")[0] || "there"} — diagnose, strategize and execute deals across your portfolio
+          <h1 className="text-2xl font-semibold tracking-tight text-[#1A1A2E]">Portfolio Overview</h1>
+          <p className="text-[13px] text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+            Every asset you have put through the pillars, and what each one is waiting on. A run carries its
+            diagnosis, its strategy and its plan on one object — open it wherever it stopped.
           </p>
         </div>
-        {submitted && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-            className="h-8 text-xs gap-1.5"
+        <div className="flex gap-2">
+          <Link
+            href="/diagnosis"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#F97316] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#EA580C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            New Diagnostic
-          </Button>
-        )}
+            <Stethoscope className="h-3.5 w-3.5" aria-hidden="true" />
+            Diagnose an off-patent asset
+          </Link>
+          <Link
+            href="/diagnosis/innovative"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3.5 py-2 text-[12px] font-semibold text-[#1A1A2E] transition hover:border-[#F97316] hover:text-[#C2410C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
+          >
+            <FlaskConical className="h-3.5 w-3.5" aria-hidden="true" />
+            Innovative
+          </Link>
+        </div>
       </div>
 
-      {/* Top metrics — reflect only real data the user has loaded */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Active Deals"
-          value={deals.length.toString()}
-          sub={deals.length === 0 ? "No deals yet" : `${deals.length} tracked`}
-          icon={<DollarSign className="h-4 w-4" />}
-          color="#F97316"
-        />
-        <MetricCard
-          label="Portfolio Value"
-          value={totalPortfolioValue > 0 ? formatCurrency(totalPortfolioValue) : "—"}
-          sub={totalPortfolioValue > 0 ? "Sum of total deal values" : "Add deals to compute"}
-          icon={<Gem className="h-4 w-4" />}
-          color="#10B981"
-        />
-        <MetricCard
-          label="Active Negotiations"
-          value={activeNegotiations.toString()}
-          sub={activeNegotiations === 0 ? "None in progress" : "In progress"}
-          icon={<Activity className="h-4 w-4" />}
-          color="#3B82F6"
-        />
-        <MetricCard
-          label="Partners Tracked"
-          value={companies.length.toString()}
-          sub={companies.length === 0 ? "Add partners to track" : "Companies in CRM"}
-          icon={<AlertTriangle className="h-4 w-4" />}
-          color="#8B5CF6"
-        />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile value={counts.total} label="Runs" />
+        <StatTile value={counts.diagnosed} label="Awaiting strategy" />
+        <StatTile value={counts.strategised} label="Awaiting a plan" />
+        <StatTile value={counts.executing} label="In execution" />
       </div>
 
-      {/* Intake form (if not submitted) or status bar */}
-      {!submitted ? (
-        <CompactIntakeForm onSubmit={handleSubmit} isLoading={isRunning} />
-      ) : (
-        <div className="rounded-xl border border-border/40 bg-white px-5 py-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            {isRunning ? (
-              <>
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F97316] opacity-60" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#F97316]" />
-                </span>
-                <p className="text-[13px] font-medium text-[#1A1A2E]">
-                  Agents pulling data from 12+ global pharma databases...
-                </p>
-              </>
-            ) : hasResults ? (
-              <>
-                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                <p className="text-[13px] font-medium text-[#1A1A2E]">
-                  Diagnostic complete. Review results across the three pillars below.
-                </p>
-              </>
-            ) : null}
-          </div>
+      {runs.length > 0 && (
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <label htmlFor="run-search" className="sr-only">
+            Search runs by asset
+          </label>
+          <input
+            id="run-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by asset…"
+            className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-[13px] outline-none transition focus-visible:border-[#F97316] focus-visible:ring-2 focus-visible:ring-[#F97316]/40"
+          />
         </div>
       )}
 
-      {/* THREE PILLARS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* PILLAR 1: DIAGNOSIS */}
-        <PillarCard
-          number={1}
-          title="Diagnosis"
-          subtitle="Market potential & comparable deals"
-          color={PILLAR_COLORS.diagnosis}
-          icon={Microscope}
-          items={[
-            {
-              label: "Patent Arbitrage",
-              description: "Cross-border patent asymmetries scored by AIR",
-            },
-            {
-              label: "Market Trends",
-              description: "Patent cliff, therapeutic area dynamics, FDA/EMA activity",
-            },
-            {
-              label: "Comparable Deals",
-              description: submitted ? "AI-driven benchmarking across SEC EDGAR + global APIs" : "Benchmark against 156+ precedent transactions",
-              agentState: agents.benchmarking,
-            },
-          ]}
-        >
-          <div className="flex gap-2">
-            <Link
-              href="/arbitrage"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#0EA5E9]/8 text-[#0EA5E9] text-[12px] font-semibold hover:bg-[#0EA5E9]/15 transition"
-            >
-              <Globe className="h-3.5 w-3.5" />
-              Arbitrage
-            </Link>
-            <Link
-              href="/trends"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#3B82F6]/8 text-[#3B82F6] text-[12px] font-semibold hover:bg-[#3B82F6]/15 transition"
-            >
-              <TrendingUp className="h-3.5 w-3.5" />
-              Trends
-            </Link>
-            <Link
-              href="/benchmarks"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#3B82F6]/8 text-[#3B82F6] text-[12px] font-semibold hover:bg-[#3B82F6]/15 transition"
-            >
-              <BarChart3 className="h-3.5 w-3.5" />
-              Comps
-            </Link>
-          </div>
-        </PillarCard>
-
-        {/* PILLAR 2: STRATEGY */}
-        <PillarCard
-          number={2}
-          title="Strategy"
-          subtitle="Synergies, partners & commercial maximization"
-          color={PILLAR_COLORS.strategy}
-          icon={Network}
-          items={[
-            {
-              label: "Synergies & Partners",
-              description: submitted ? "AI-scored partner fit from clinical & SEC data" : "Identify ideal licensing & co-development partners",
-              agentState: agents.partner,
-            },
-            {
-              label: "Commercial Maximization",
-              description: submitted ? "Deal term leverage from precedent transactions" : "Optimize positioning & deal structure",
-              agentState: agents.negotiation,
-            },
-          ]}
-        >
-          <div className="flex gap-2">
-            <Link
-              href="/partners"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#10B981]/8 text-[#10B981] text-[12px] font-semibold hover:bg-[#10B981]/15 transition"
-            >
-              <Users className="h-3.5 w-3.5" />
-              Partners
-            </Link>
-            <Link
-              href="/insights"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#10B981]/8 text-[#10B981] text-[12px] font-semibold hover:bg-[#10B981]/15 transition"
-            >
-              <Lightbulb className="h-3.5 w-3.5" />
-              Insights
-            </Link>
-          </div>
-        </PillarCard>
-
-        {/* PILLAR 3: EXECUTION */}
-        <PillarCard
-          number={3}
-          title="Execution"
-          subtitle="Simulated plan, term sheet & contracts"
-          color={PILLAR_COLORS.execution}
-          icon={Rocket}
-          items={[
-            {
-              label: "Simulated Execution Plan",
-              description: submitted ? "Timeline, stakeholders & dependencies from Pillars 1 & 2" : "Outcome roadmap with phases, owners & milestones",
-              agentState: agents.executionPlan,
-            },
-            {
-              label: "Due Diligence & Data Room",
-              description: submitted ? "Synthesized package from all agents" : "Question prep, data package, smart intelligence",
-              agentState: agents.synthesis,
-            },
-          ]}
-        >
-          <div className="flex gap-2">
-            <Link
-              href="/simulated-plan"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#F97316]/8 text-[#F97316] text-[12px] font-semibold hover:bg-[#F97316]/15 transition"
-            >
-              <Rocket className="h-3.5 w-3.5" />
-              Simulated Plan
-            </Link>
-            <Link
-              href="/workspace"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#F97316]/8 text-[#F97316] text-[12px] font-semibold hover:bg-[#F97316]/15 transition"
-            >
-              <FileSignature className="h-3.5 w-3.5" />
-              Workspace
-            </Link>
-          </div>
-        </PillarCard>
-      </div>
-
-      {/* Detailed results — appears when agents complete */}
-      {submitted && hasResults && (
-        <Card className="border-border/40 shadow-sm">
-          <div className="border-b border-border/30 px-6 pt-5">
-            <h3 className="text-base font-bold text-[#1A1A2E]">Detailed Findings</h3>
-            <p className="text-[12px] text-muted-foreground mt-0.5">
-              Drill down by pillar to inspect agent outputs
-            </p>
-            {/* Pillar tabs */}
-            <div className="flex gap-1 mt-4 -mb-px">
-              <PillarTab
-                label="Pillar 1: Diagnosis"
-                active={activeView === "diagnosis"}
-                color={PILLAR_COLORS.diagnosis}
-                onClick={() => setActiveView("diagnosis")}
-              />
-              <PillarTab
-                label="Pillar 2: Strategy"
-                active={activeView === "strategy"}
-                color={PILLAR_COLORS.strategy}
-                onClick={() => setActiveView("strategy")}
-              />
-              <PillarTab
-                label="Pillar 3: Execution"
-                active={activeView === "execution"}
-                color={PILLAR_COLORS.execution}
-                onClick={() => setActiveView("execution")}
-              />
-            </div>
-          </div>
-
-          <CardContent className="p-6">
-            {activeView === "diagnosis" && (
-              <div className="space-y-6">
-                <SectionHeader icon={<BarChart3 className="h-4 w-4" />} title="Comparable Deals" color={PILLAR_COLORS.diagnosis} />
-                {benchmarkResult ? (
-                  <BenchmarkingResults data={benchmarkResult} />
-                ) : agents.benchmarking?.status === "error" ? (
-                  <ErrorBlock message={agents.benchmarking.error} />
-                ) : (
-                  <SkeletonBlock label="Benchmarking agent running..." />
-                )}
-              </div>
-            )}
-
-            {activeView === "strategy" && (
-              <div className="space-y-8">
-                <div>
-                  <SectionHeader icon={<Users className="h-4 w-4" />} title="Synergies & Partners" color={PILLAR_COLORS.strategy} />
-                  {partnerResult ? (
-                    <PartnerResults data={partnerResult} />
-                  ) : agents.partner?.status === "error" ? (
-                    <ErrorBlock message={agents.partner.error} />
-                  ) : (
-                    <SkeletonBlock label="Partner agent running..." />
-                  )}
-                </div>
-                <div>
-                  <SectionHeader icon={<Lightbulb className="h-4 w-4" />} title="Commercial Maximization" color={PILLAR_COLORS.strategy} />
-                  {negotiationResult ? (
-                    <NegotiationResults data={negotiationResult} />
-                  ) : agents.negotiation?.status === "error" ? (
-                    <ErrorBlock message={agents.negotiation.error} />
-                  ) : (
-                    <SkeletonBlock label="Negotiation agent running..." />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeView === "execution" && (
-              <div className="space-y-8">
-                <div>
-                  <SectionHeader icon={<Rocket className="h-4 w-4" />} title="Simulated Execution Plan" color={PILLAR_COLORS.execution} />
-                  {executionPlanComplete && executionPlanResult ? (
-                    <ExecutionPlanResults data={executionPlanResult} />
-                  ) : agents.executionPlan?.status === "error" ? (
-                    <ErrorBlock message={agents.executionPlan.error} />
-                  ) : (
-                    <SkeletonBlock label="Execution plan agent generating timeline & stakeholders..." />
-                  )}
-                </div>
-                {synthesisComplete && (
-                  <>
-                    <div>
-                      <SectionHeader icon={<FileSignature className="h-4 w-4" />} title="Full Contract Draft" color={PILLAR_COLORS.execution} />
-                      <ContractResults data={synthesisResult} />
-                    </div>
-                    <div>
-                      <SectionHeader icon={<ClipboardCheck className="h-4 w-4" />} title="Due Diligence Questions" color={PILLAR_COLORS.execution} />
-                      <DiligenceResults data={synthesisResult} />
-                    </div>
-                    <div>
-                      <SectionHeader icon={<Database className="h-4 w-4" />} title="Data Room Checklist" color={PILLAR_COLORS.execution} />
-                      <DataPackageResults data={synthesisResult} />
-                    </div>
-                    <div>
-                      <SectionHeader icon={<Brain className="h-4 w-4" />} title="Smart Intelligence" color={PILLAR_COLORS.execution} />
-                      <IntelligenceResults data={synthesisResult} />
-                    </div>
-                  </>
-                )}
-                {!synthesisComplete && agents.synthesis?.status === "error" && (
-                  <ErrorBlock message={agents.synthesis.error} />
-                )}
-                {!synthesisComplete && agents.synthesis?.status !== "error" && (
-                  <SkeletonBlock label="Synthesis agent generating contract & data package..." />
-                )}
-              </div>
-            )}
+      {runsQuery.isLoading ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-[76px] animate-pulse rounded-xl border border-border bg-muted/40" />
+          ))}
+        </div>
+      ) : runsQuery.isError ? (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-[13px] text-red-700">Your runs could not be loaded. Reload the page to try again.</p>
           </CardContent>
         </Card>
+      ) : runs.length === 0 ? (
+        <Card>
+          <CardContent className="py-14 text-center">
+            <Gauge className="mx-auto h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+            <p className="mt-3 text-[14px] font-medium text-[#1A1A2E]">No runs yet</p>
+            <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground leading-relaxed">
+              Everything starts with a diagnosis — whether the asset is worth pursuing at all. Strategy and Execution
+              read from it, so they cannot be entered cold.
+            </p>
+            <Link
+              href="/diagnosis"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#F97316] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#EA580C]"
+            >
+              Run your first diagnosis
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </CardContent>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-[13px] text-muted-foreground">No run matches “{query}”.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <ul className="space-y-2">
+          {filtered.map((run) => {
+            const step = stepFor(run.status);
+            const Icon = run.assetType === "innovative" ? FlaskConical : Gauge;
+            return (
+              <li key={run.id}>
+                <Link
+                  href={step.href(run.assetType, run.id)}
+                  className="group flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-white px-4 py-3.5 transition hover:border-[#F97316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-[#C2410C]" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[14px] font-semibold text-[#1A1A2E]">{run.assetQuery}</span>
+                      <span className={TINY}>{run.assetType === "innovative" ? "Innovative" : "Off-patent"}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${step.tone}`}>
+                        {step.stage}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      {geoLine(run.geographies)} · started {new Date(run.createdAt).toLocaleDateString("en-GB")}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#C2410C]">
+                    {step.label}
+                    <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" aria-hidden="true" />
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </div>
-  );
-}
 
-function MetricCard({
-  label,
-  value,
-  sub,
-  icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  icon: React.ReactNode;
-  color: string;
-}) {
-  return (
-    <Card className="relative overflow-hidden border-border/40 shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-              {label}
-            </p>
-            <p className="text-2xl font-bold font-mono tracking-tight mt-2 text-[#1A1A2E]">
-              {value}
-            </p>
-            <p className="text-[11px] mt-1.5 font-medium text-muted-foreground">
-              {sub}
-            </p>
-          </div>
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl"
-            style={{ backgroundColor: `${color}10`, color }}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { href: "/diagnosis", icon: Stethoscope, title: "Diagnosis", body: "Is this asset worth pursuing?" },
+          { href: "/strategy", icon: GitBranch, title: "Strategy", body: "Which route realises the value?" },
+          { href: "/execution", icon: ListChecks, title: "Execution", body: "Who does what, by when?" },
+        ].map((p) => (
+          <Link
+            key={p.href}
+            href={p.href}
+            className="rounded-xl border border-border bg-white p-4 transition hover:border-[#F97316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
           >
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-      <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ backgroundColor: color, opacity: 0.4 }} />
-    </Card>
-  );
-}
-
-function PillarTab({
-  label,
-  active,
-  color,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  color: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-4 py-2.5 text-[12px] font-semibold transition-all relative"
-      style={{
-        color: active ? color : "#94A3B8",
-        borderBottom: active ? `2px solid ${color}` : "2px solid transparent",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function SectionHeader({
-  icon,
-  title,
-  color,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  color: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 mb-4">
-      <div
-        className="flex h-7 w-7 items-center justify-center rounded-lg"
-        style={{ backgroundColor: `${color}15`, color }}
-      >
-        {icon}
+            <p.icon className="h-4 w-4 text-[#C2410C]" aria-hidden="true" />
+            <p className="mt-2 text-[13px] font-semibold text-[#1A1A2E]">{p.title}</p>
+            <p className="text-[12px] text-muted-foreground leading-relaxed">{p.body}</p>
+          </Link>
+        ))}
       </div>
-      <h4 className="text-sm font-bold text-[#1A1A2E]">{title}</h4>
-    </div>
-  );
-}
-
-function SkeletonBlock({ label }: { label: string }) {
-  return (
-    <div className="rounded-lg bg-[#FAFAFA] border border-border/40 p-8 text-center">
-      <div className="inline-flex items-center gap-2.5 text-[13px] text-muted-foreground">
-        <span className="inline-block w-3 h-3 rounded-full border-2 border-muted-foreground/30 border-t-[#F97316] animate-spin" />
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function ErrorBlock({ message }: { message?: string | null }) {
-  return (
-    <div className="rounded-lg bg-red-50 border border-red-200 p-4">
-      <p className="text-[13px] font-semibold text-red-700">Agent error</p>
-      <p className="text-[12px] text-red-600 mt-1 leading-relaxed">{message || "Unknown error"}</p>
     </div>
   );
 }

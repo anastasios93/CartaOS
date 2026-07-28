@@ -561,12 +561,7 @@ export default function WorkspaceDetailPage({
                     <div className="min-w-0">
                       <p className={TINY}>Counterparty negotiation</p>
                       <p className="text-[16px] font-semibold text-[#1A1A2E] mt-0.5">{deal.title}</p>
-                      <Link
-                        href={`/companies/${deal.company.id}`}
-                        className="text-[13px] text-[#C2410C] hover:underline"
-                      >
-                        {deal.company.name}
-                      </Link>
+                      <p className="text-[13px] text-[#C2410C]">{deal.company.name}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Select
