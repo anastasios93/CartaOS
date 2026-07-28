@@ -10,7 +10,24 @@
       "Bash(cd \"C:/Users/anast/cartaos\" && rm prisma/prisma.config.ts && DATABASE_URL=\"postgresql://dummy:dummy@localhost:5432/cartaos\" npx prisma generate 2>&1)",
       "Bash(cd \"C:/Users/anast/cartaos\" && timeout 8 npm run dev 2>&1 || true)",
       "Bash(taskkill //F //PID 61768 2>&1 || true)",
-      "Bash(rm -rf \"C:/Users/anast/cartaos/.next/dev/lock\" 2>/dev/null; cd \"C:/Users/anast/cartaos\" && timeout 10 npm run dev 2>&1 || true)"
+      "Bash(rm -rf \"C:/Users/anast/cartaos/.next/dev/lock\" 2>/dev/null; cd \"C:/Users/anast/cartaos\" && timeout 10 npm run dev 2>&1 || true)",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(cmd //c mklink //J node_modules \"C:\\\\Users\\\\anast\\\\cartaos\\\\node_modules\")",
+      "Bash(./node_modules/.bin/vitest run *)",
+      "Bash(cd \"C:/Users/anast/cartaos/.claude/worktrees/competent-gauss-b9c64b\" && cp app/api/orchestrator/route.ts /tmp/orch.bak && git checkout HEAD -- app/api/orchestrator/route.ts && ./node_modules/.bin/vitest run tests/sse-persistence-order.test.ts 2>&1 | grep -E \"×|✓|Tests \" | head -8; cp /tmp/orch.bak app/api/orchestrator/route.ts && echo \"--- restored ---\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git credential *)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/8/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(python -c ' *)",
+      "Bash(./node_modules/.bin/next lint *)",
+      "Bash(./node_modules/.bin/eslint components/run/diagnosis-shell.tsx components/run/strategy-shell.tsx hooks/use-run-log.ts)",
+      "Bash(sed -n '/^model Run /,/^}/p' prisma/schema.prisma)",
+      "Bash(sed -n '/^model Negotiation /,/^}/p' prisma/schema.prisma)"
     ]
   }
 }

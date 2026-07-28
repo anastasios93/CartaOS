@@ -67,7 +67,7 @@ export const GEOGRAPHY_COLORS: Record<Geography, string> = {
 
 // ─── Agent IDs & Status ─────────────────────────────────────────────────────
 
-export type AgentId = "benchmarking" | "partner" | "negotiation" | "synthesis" | "executionPlan" | "outLicensingStrategy" | "innovativeDiagnosis" | "strategy";
+export type AgentId = "benchmarking" | "partner" | "negotiation" | "synthesis" | "executionPlan" | "outLicensingStrategy" | "innovativeDiagnosis" | "strategy" | "execution";
 
 export type AgentStatus = "idle" | "scraping" | "analyzing" | "complete" | "error";
 
@@ -80,6 +80,7 @@ export const AGENT_META: Record<AgentId, { label: string; description: string; c
   outLicensingStrategy: { label: "Out-Licensing Strategy", description: "Per-region market, legal, commercial & IP assessment", color: "#0EA5E9", icon: "Globe" },
   innovativeDiagnosis: { label: "Innovative Diagnosis", description: "Science, IP and partnerability worthiness for a novel asset", color: "#8B5CF6", icon: "Microscope" },
   strategy: { label: "Strategy", description: "Route comparison, modelled economics and partner shortlist", color: "#C2410C", icon: "GitBranch" },
+  execution: { label: "Execution", description: "Workstreams, milestones and owners for the chosen route", color: "#EA580C", icon: "ListChecks" },
 };
 
 // ─── SSE Events ─────────────────────────────────────────────────────────────
@@ -107,7 +108,8 @@ export type AgentResult =
   | { agentId: "executionPlan"; plan: ExecutionPlanOutput }
   | { agentId: "outLicensingStrategy"; report: OutLicensingReport }
   | { agentId: "innovativeDiagnosis"; diagnosis: import("./run").Diagnosis }
-  | { agentId: "strategy"; strategy: import("./run").Strategy };
+  | { agentId: "strategy"; strategy: import("./run").Strategy }
+  | { agentId: "execution"; execution: import("./run").Execution };
 
 // ─── Out-Licensing Strategy Report Types ────────────────────────────────────
 

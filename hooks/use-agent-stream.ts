@@ -3,7 +3,7 @@
 import { useReducer, useCallback, useRef } from "react";
 import type { HubIntakeForm, AgentId, AgentState, AgentsMap, SSEEvent } from "@/types/hub";
 
-const AGENT_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "synthesis", "executionPlan", "outLicensingStrategy", "innovativeDiagnosis", "strategy"];
+const AGENT_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "synthesis", "executionPlan", "outLicensingStrategy", "innovativeDiagnosis", "strategy", "execution"];
 
 const initialAgentState: AgentState = {
   status: "idle",

@@ -245,6 +245,19 @@ export const ExecutionSchema = z.looseObject({
   sourceRoute: z.string().optional(),
   workstreams: z.array(z.string()).default([]),
   milestones: z.array(MilestoneSchema).default([]),
+  /** Plan start (YYYY-MM-DD). Every milestone date is derived from it. */
+  startDate: z.string().optional(),
+  /** Longest dependency chain in days — the plan's real length. */
+  totalDays: z.number().optional(),
+  /** Milestone ids on the critical path, in order. */
+  criticalPath: z.array(z.string()).default([]),
+  /** Dependencies the agent named that could not be honoured — shown, not hidden. */
+  droppedDependencies: z
+    .array(z.object({ milestone: z.string(), dependsOn: z.string(), reason: z.enum(["unknown", "cycle"]) }))
+    .default([]),
+  firstMove: z.string().optional(),
+  killCriteria: z.array(z.string()).default([]),
+  note: z.string().optional(),
   completedAt: z.string().optional(),
 });
 export type Execution = z.infer<typeof ExecutionSchema>;

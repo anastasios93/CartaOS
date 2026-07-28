@@ -394,6 +394,12 @@ model Negotiation {
   ownerId   String?
   owner     User?   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
+  // The Run this negotiation executes against. Optional: a workspace is opened
+  // from a strategised Run, and a counterparty negotiation is attached to it
+  // only once there is a counterparty.
+  runId     String? @unique
+  run       Run?    @relation(fields: [runId], references: [id], onDelete: SetNull)
+
   // Key Terms
   proposedUpfront      Float?
   proposedMilestones   Float?
@@ -581,6 +587,8 @@ model Run {
   legacyId     String?  @unique // source row id — makes the backfill idempotent
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt @default(now())
+
+  negotiation  Negotiation?
 
   @@index([userId, createdAt])
 }
