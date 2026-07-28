@@ -142,6 +142,7 @@ model User {
   documents     Document[]
   hubRequests   HubRequest[]
   evaluations   Evaluation[]
+  runs          Run[]
   deals         Deal[]
   companies     Company[]
   negotiations  Negotiation[]
@@ -551,6 +552,37 @@ model CachedAPIResponse {
   createdAt DateTime @default(now())
 
   @@index([sourceKey, expiresAt])
+}
+
+// ─── Run spine ────────────────────────────────────────────────────────────────
+// One Run is the spine of the whole app: every pillar (Diagnosis, Strategy,
+// Execution) reads from and writes to the same row. HubRequest/HubResult and
+// Evaluation are legacy stores kept during the refactor transition; their rows
+// are backfilled into Run (scripts/backfill-runs.ts) and the tables are
+// scheduled for removal in the final phase.
+
+model Run {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetQuery   String
+  assetType    String   @default("off_patent") // off_patent | innovative
+  asset        Json?    // ResolvedAsset (types/run.ts) once entity resolution has run
+  geographies  String[] // ISO-3166 alpha-2 codes
+  criteria     Json?    // Criterion[]
+  files        Json?    // RunFile[]
+  status       String   @default("draft")
+  diagnosis    Json?
+  strategy     Json?
+  execution    Json?
+  log          Json?    // RunLogEvent[] — the run console
+  error        String?  @db.Text
+  legacySource String?  // "hub_request" | "evaluation" for backfilled rows
+  legacyId     String?  @unique // source row id — makes the backfill idempotent
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt @default(now())
+
+  @@index([userId, createdAt])
 }
 
 // ─── Market-Worthiness Engine ─────────────────────────────────────────────────
