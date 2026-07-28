@@ -1,6 +1,8 @@
 import { z } from "zod/v4";
 import { router, protectedProcedure, getOwnerScope } from "../trpc";
 import { runDealConductor } from "../services/claude";
+// All by-id mutations verify ownership via getOwnerScope before touching rows —
+// a raw `where: { id }` would let any signed-in user mutate another tenant's data.
 
 export const negotiationRouter = router({
   list: protectedProcedure
@@ -109,6 +111,12 @@ export const negotiationRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const ownerScope = await getOwnerScope(ctx);
+      const existing = await ctx.db.negotiation.findFirst({
+        where: { id: input.id, ...ownerScope },
+        select: { id: true },
+      });
+      if (!existing) throw new Error("Not found");
       return ctx.db.negotiation.update({
         where: { id: input.id },
         data: { status: input.status },
@@ -126,12 +134,19 @@ export const negotiationRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const ownerScope = await getOwnerScope(ctx);
+      const parent = await ctx.db.negotiation.findFirst({
+        where: { id: input.negotiationId, ...ownerScope },
+        select: { id: true },
+      });
+      if (!parent) throw new Error("Not found");
       return ctx.db.negotiationActivity.create({ data: input });
     }),
 
   runConductor: protectedProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
-    const negotiation = await ctx.db.negotiation.findUniqueOrThrow({
-      where: { id: input },
+    const ownerScope = await getOwnerScope(ctx);
+    const negotiation = await ctx.db.negotiation.findFirst({
+      where: { id: input, ...ownerScope },
       include: {
         company: true,
         activities: { orderBy: { occurredAt: "desc" }, take: 20 },
@@ -139,6 +154,7 @@ export const negotiationRouter = router({
         benchmarkDeals: { include: { deal: true } },
       },
     });
+    if (!negotiation) throw new Error("Not found");
 
     const conductorResult = await runDealConductor(negotiation);
 

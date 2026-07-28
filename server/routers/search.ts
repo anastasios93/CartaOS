@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { router, publicProcedure } from "../trpc";
+import { router, protectedProcedure } from "../trpc";
 import { searchEdgarForDeals } from "../services/sec-edgar";
 import { searchClinicalTrials } from "../services/clinical-trials";
 import { searchPatents } from "../services/patents";
@@ -21,7 +21,7 @@ export const searchRouter = router({
    * Runs selected sources in parallel; individual failures are isolated
    * so one source going down doesn't break the others.
    */
-  unified: publicProcedure
+  unified: protectedProcedure
     .input(
       z.object({
         query: z.string().min(1),
@@ -127,7 +127,7 @@ export const searchRouter = router({
   /**
    * Load more results for a specific source using its pagination token.
    */
-  loadMore: publicProcedure
+  loadMore: protectedProcedure
     .input(
       z.object({
         source: sourceEnum,
@@ -179,7 +179,7 @@ export const searchRouter = router({
    * Search for comparable deals using filter criteria.
    * Used by the benchmarks page to find external comparable data.
    */
-  comparables: publicProcedure
+  comparables: protectedProcedure
     .input(
       z.object({
         therapeuticArea: z.string().optional(),
