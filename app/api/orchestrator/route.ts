@@ -10,10 +10,10 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import type { SSEEvent, AgentId, AgentResult } from "@/types/hub";
 
-// The off-patent pipeline is three core agents, a ~20-source evidence pull and
-// a sharded per-market assessment. At 300s it was killed mid-assessment on
-// every real run, so nothing ever persisted. Fluid compute allows 800.
-export const maxDuration = 800;
+// 300 is the ceiling on this account's plan, not a choice. The off-patent
+// pipeline does not reliably fit inside it — see the note in the run console
+// and PR #15. Raising this requires a plan that allows a longer function.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const CriteriaSchema = z
