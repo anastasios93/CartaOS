@@ -17,6 +17,12 @@
 
 import { useMemo, useState } from "react";
 import { progressOf, type ScheduledMilestone } from "@/server/services/execution/schedule";
+import {
+  buildDataRoom,
+  dataRoomMarkdown,
+  readinessLabel,
+  type ItemReadiness,
+} from "@/server/services/execution/data-room";
 import { routesFor } from "@/config/routes";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -26,6 +32,7 @@ import {
   CalendarDays,
   Download,
   Flag,
+  FolderOpen,
   Link2Off,
   ListChecks,
   Rocket,
@@ -40,6 +47,26 @@ const TINY = "text-[10px] font-semibold uppercase tracking-widest text-muted-for
 
 /** The workstream bucket for anything the agent left unfiled — named, never hidden. */
 const UNASSIGNED = "Unassigned";
+
+/**
+ * Untracked reads grey rather than red: it is an absence of information, not a
+ * failure, and colouring it as a problem would overstate what is known.
+ */
+const READINESS_DOT: Record<ItemReadiness, string> = {
+  ready: "bg-[#EA580C]",
+  in_progress: "bg-[#F97316]/50",
+  blocked: "bg-red-600",
+  outstanding: "bg-muted-foreground/30",
+  untracked: "bg-muted-foreground/20",
+};
+
+const READINESS_TEXT: Record<ItemReadiness, string> = {
+  ready: "text-[#C2410C]",
+  in_progress: "text-[#EA580C]",
+  blocked: "text-red-700",
+  outstanding: "text-muted-foreground",
+  untracked: "text-muted-foreground/70",
+};
 
 type MilestoneStatus = Milestone["status"];
 
@@ -227,6 +254,15 @@ export function ExecutionResults({
   }, [execution.sourceRoute, branch]);
 
   /**
+   * The data room is derived, never stored: it reads the live milestone
+   * statuses, so ticking a milestone updates the index in the same render.
+   */
+  const dataRoom = useMemo(
+    () => buildDataRoom(branch, view, execution.sourceRoute),
+    [branch, view, execution.sourceRoute],
+  );
+
+  /**
    * The declared workstream order, then a trailing bucket for anything filed
    * under nothing — or under a workstream the plan never declared. A milestone
    * with no home is shown in one, not quietly dropped from the board.
@@ -335,6 +371,14 @@ export function ExecutionResults({
       lines.push(csvRows(killCriteria.map((k) => [k])));
     }
     downloadBlob(lines.join("\n"), `${safeName(assetName)}_execution_plan.csv`, "text/csv;charset=utf-8;");
+  };
+
+  const downloadDataRoom = () => {
+    downloadBlob(
+      dataRoomMarkdown(dataRoom, assetName, routeLabel ?? undefined),
+      `${safeName(assetName)}_data_room_index.md`,
+      "text/markdown;charset=utf-8;",
+    );
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -560,6 +604,83 @@ export function ExecutionResults({
           </ul>
         </section>
       )}
+
+      {/* Data room — the counterparty's request list, scored off this plan */}
+      <SectionCard
+        icon={FolderOpen}
+        title="Data room index"
+        note="What a counterparty will ask for on this route. Readiness is read off the milestones above — nothing here is asserted independently, so ticking a milestone moves the index."
+      >
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="flex-1 min-w-[200px]">
+            <div className="flex items-baseline justify-between mb-1">
+              <span className={TINY}>Documents ready</span>
+              <span className="font-mono text-[12px] font-semibold text-[#1A1A2E] tabular-nums">
+                {dataRoom.ready}/{dataRoom.total}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[#F97316] transition-all"
+                style={{ width: `${dataRoom.percentReady}%` }}
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={downloadDataRoom}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A2E] transition hover:border-[#F97316] hover:text-[#C2410C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            Download index (Markdown)
+          </button>
+        </div>
+
+        {dataRoom.uncoveredWorkstreams.length > 0 && (
+          <p className="text-[12px] text-[#C2410C] leading-relaxed max-w-3xl mb-4 font-medium">
+            No workstream in this plan covers {dataRoom.uncoveredWorkstreams.join(", ")}. The documents under those
+            headings are marked not tracked — their status is unknown, not complete.
+          </p>
+        )}
+
+        <div className="space-y-5">
+          {dataRoom.sections
+            .filter((s) => s.items.length > 0)
+            .map((section) => (
+              <div key={section.key}>
+                <p className="text-[13px] font-semibold text-[#1A1A2E]">{section.label}</p>
+                <p className="text-[12px] text-muted-foreground leading-relaxed mb-2">{section.description}</p>
+                <ul className="space-y-1.5">
+                  {section.items.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start gap-2.5 rounded-lg border border-border/70 bg-white px-3 py-2"
+                    >
+                      <span
+                        className={`mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full ${READINESS_DOT[item.readiness]}`}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                          <span className="text-[13px] font-medium text-[#1A1A2E]">{item.title}</span>
+                          <span className={`text-[11px] font-semibold ${READINESS_TEXT[item.readiness]}`}>
+                            {readinessLabel(item.readiness)}
+                          </span>
+                        </div>
+                        <p className="text-[12px] text-muted-foreground leading-relaxed">{item.purpose}</p>
+                        {item.evidence.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground/80 leading-relaxed mt-0.5">
+                            Tracked by: {item.evidence.join("; ")}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+        </div>
+      </SectionCard>
 
       {/* Kill criteria */}
       {killCriteria.length > 0 && (
