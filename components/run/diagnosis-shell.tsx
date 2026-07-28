@@ -23,10 +23,13 @@ import { RunFileUpload } from "@/components/run/file-upload";
 import { RunConsole } from "@/components/run/run-console";
 import { useAgentStream } from "@/hooks/use-agent-stream";
 import { useRunLog } from "@/hooks/use-run-log";
+import { ExportMenu, type ExportFormat } from "@/components/run/export-menu";
+import { exportDiagnosisPDF, exportDiagnosisPPTX, type ExportOptions } from "@/lib/exports";
+import { mapReportToDiagnosis } from "@/server/services/run-mapper";
 import { trpc } from "@/lib/trpc";
 import { DEFAULT_GEOGRAPHIES } from "@/config/geographies";
 import { criteriaToSearchCriteria } from "@/lib/criteria-bridge";
-import type { AssetType, Criterion, RunFile } from "@/types/run";
+import type { AssetType, Criterion, Diagnosis, RunFile } from "@/types/run";
 import type { AgentsMap } from "@/types/hub";
 import { ArrowRight, History, FlaskConical, Stethoscope, type LucideIcon } from "lucide-react";
 
@@ -82,6 +85,29 @@ export interface DiagnosisShellProps {
   icon?: LucideIcon;
 }
 
+/**
+ * The exportable Diagnosis, whatever the source.
+ *
+ * The innovative agent emits the envelope directly. The off-patent agent emits
+ * its own richer report, which the server maps on persist — that mapper is pure,
+ * so the same mapping runs here and a live off-patent run is exportable without
+ * waiting for a round-trip. A reopened run already carries the stored envelope.
+ */
+function toDiagnosis(value: unknown): Diagnosis | null {
+  if (!value || typeof value !== "object") return null;
+  const rec = value as Record<string, unknown>;
+  if (rec.diagnosis && typeof rec.diagnosis === "object") return rec.diagnosis as Diagnosis;
+  if (rec.verdict && Array.isArray(rec.dimensions)) return rec as unknown as Diagnosis;
+  if (rec.report && typeof rec.report === "object") {
+    try {
+      return mapReportToDiagnosis(rec.report as Parameters<typeof mapReportToDiagnosis>[0]);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /** The lead clause of a dimension question — enough to orient, never a wall of text. */
 function firstClause(question: string): string {
   const head = question.split("—")[0].split(";")[0].trim();
@@ -117,6 +143,18 @@ export function DiagnosisShell({
 
   const liveResult = agents[agentId].result as unknown;
   const hadRun = isRunning || !!liveResult || Object.values(agents).some((a) => a.error);
+
+  /** Whichever diagnosis is on screen — the reopened one wins while it is open. */
+  const exportable = viewingRunId
+    ? toDiagnosis(viewingRun.data?.diagnosis)
+    : toDiagnosis(liveResult);
+  const exportName = viewingRunId ? (viewingRun.data?.assetQuery ?? "asset") : asset || "asset";
+
+  const runExport = async (format: ExportFormat, options: ExportOptions) => {
+    if (!exportable) throw new Error("This run has no diagnosis to export yet.");
+    if (format === "pptx") await exportDiagnosisPPTX(exportable, branch, exportName, options);
+    else await exportDiagnosisPDF(exportable, branch, exportName, options);
+  };
 
   const missing: string[] = [];
   if (!asset.trim()) missing.push("name the asset");
@@ -194,12 +232,15 @@ export function DiagnosisShell({
   if (viewingRunId && viewingRun.data) {
     return (
       <div className="space-y-6">
-        <button
-          onClick={() => setViewingRunId(null)}
-          className="text-[12px] text-muted-foreground hover:text-[#F97316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50 rounded"
-        >
-          ← Back to Diagnosis
-        </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            onClick={() => setViewingRunId(null)}
+            className="text-[12px] text-muted-foreground hover:text-[#F97316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50 rounded"
+          >
+            ← Back to Diagnosis
+          </button>
+          {exportable && <ExportMenu onExport={runExport} label="Export diagnosis" />}
+        </div>
         {renderRunViewer({
           diagnosis: viewingRun.data.diagnosis as unknown,
           assetQuery: viewingRun.data.assetQuery,
@@ -307,7 +348,16 @@ export function DiagnosisShell({
       {hadRun && <RunConsole events={log.events} running={isRunning} onCancel={reset} title="Diagnosis run" />}
 
       {/* Live results — verdict first, detail on expand (§8 progressive disclosure) */}
-      {!!liveResult && renderResults(liveResult, { agents, assetQuery: asset })}
+      {!!liveResult && (
+        <>
+          {exportable && !isRunning && (
+            <div className="flex justify-end">
+              <ExportMenu onExport={runExport} label="Export diagnosis" />
+            </div>
+          )}
+          {renderResults(liveResult, { agents, assetQuery: asset })}
+        </>
+      )}
 
       {/* Empty state: what this engine evaluates + recent runs (never a blank page) */}
       {!hadRun && !viewingRunId && (

@@ -15,7 +15,15 @@ import type {
   OutLicensingReport,
   ExecutionPlanOutput,
 } from "@/types/hub";
-import type { Strategy } from "@/types/run";
+import type { Strategy, Diagnosis, DimensionScore, MarketScore, EvidenceItem } from "@/types/run";
+import { OFF_PATENT_DIMENSIONS, INNOVATIVE_DIMENSIONS } from "@/config/dimensions";
+import { countryByCode } from "@/config/geographies";
+
+/** What the user chose to include. Both default to true. */
+export interface ExportOptions {
+  includeMarkets?: boolean;
+  includeEvidence?: boolean;
+}
 
 // ─── Brand & design tokens ───────────────────────────────────────────────────
 
@@ -1006,6 +1014,7 @@ export async function exportStrategyPDF(
   strategy: Strategy,
   branch: "off_patent" | "innovative",
   assetName: string,
+  opts?: ExportOptions,
 ) {
   const [{ jsPDF, autoTable }, engine] = await Promise.all([
     loadPdfDeps(),
@@ -1245,7 +1254,437 @@ export async function exportStrategyPDF(
     bullets(state, sequence.map((s, i) => `${i + 1}. ${s}`), STRATEGY_COLOR);
   }
 
+  // Appendix: what the route scores and the shortlist were actually built on.
+  // Dropping it makes a shorter board document; keeping it makes one that
+  // survives a reviewer asking "on what basis?".
+  if (opts?.includeEvidence !== false) {
+    const rows: string[][] = [];
+    for (const r of routes) {
+      for (const e of Array.isArray(r.evidence) ? r.evidence : []) {
+        if (!sText(e?.claim)) continue;
+        rows.push([r.label ?? r.key, sText(e.claim), e.kind === "estimate" ? "Estimate" : "Evidence", sText(e.source) || "—"]);
+      }
+    }
+    for (const p of partners) {
+      for (const e of Array.isArray(p.evidence) ? p.evidence : []) {
+        if (!sText(e?.claim)) continue;
+        rows.push([p.name, sText(e.claim), e.kind === "estimate" ? "Estimate" : "Evidence", sText(e.source) || "—"]);
+      }
+    }
+    if (rows.length) {
+      sectionTitle(state, "Appendix", "Evidence behind the routes", "Every claim, and whether it is sourced or inferred.");
+      table(state, {
+        head: [["Route / partner", "Claim", "Kind", "Source"]],
+        body: rows,
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 104 },
+          1: { textColor: BODY },
+          2: { cellWidth: 52, textColor: MUTED },
+          3: { cellWidth: 96, textColor: MUTED, fontSize: 8 },
+        },
+      }, autoTable);
+    }
+  }
+
   state.doc.save(`${safeFilename(assetName)}_Strategy_Summary.pdf`);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PILLAR 1 — DIAGNOSIS (shared helpers, then PDF)
+// ════════════════════════════════════════════════════════════════════════════
+
+const DIAGNOSIS_REPORT_NAME = (branch: "off_patent" | "innovative") =>
+  branch === "off_patent" ? "Market Worthiness Diagnosis" : "Innovative Asset Diagnosis";
+
+const VERDICT_LABELS: Record<string, string> = {
+  GO: "Go",
+  CONDITIONAL: "Conditional",
+  NO_GO: "No-go",
+};
+
+const verdictLabel = (v: unknown): string => {
+  const raw = sText(v);
+  return VERDICT_LABELS[raw] ?? (raw || "Not stated");
+};
+
+/** Sentence-case a low-cardinality enum ("high" → "High"). */
+const cap = (v: unknown): string => {
+  const t = sText(v);
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
+};
+
+/** Resolve a dimension key to its configured human label; the key is the fallback. */
+function dimensionLabel(branch: "off_patent" | "innovative", key: unknown): string {
+  const k = sText(key);
+  const defs = branch === "off_patent" ? OFF_PATENT_DIMENSIONS : INNOVATIVE_DIMENSIONS;
+  return defs.find((d) => d.key === k)?.label ?? (k || "Unnamed dimension");
+}
+
+/** Country NAME, never the emoji flag — the WinAnsi PDF fonts cannot encode flags. */
+const countryLabel = (code: unknown): string => {
+  const c = sText(code);
+  return countryByCode(c)?.name ?? (c || "Unknown market");
+};
+
+/**
+ * The governing rule in one function: a null score never renders as 0 or as a
+ * blank — it renders the reason it could not be computed.
+ */
+const scoreCell = (score: number | null | undefined, notComputable: unknown): string => {
+  if (score != null && Number.isFinite(score)) return String(Math.round(score));
+  const why = sText(notComputable);
+  return why ? `Not computable — ${why}` : "Not computable — no reason recorded";
+};
+
+/** Score descending, with unscored rows last (they are never sorted as zeros). */
+const byScoreDesc = (a: { score?: number | null }, b: { score?: number | null }): number => {
+  const as = a.score == null ? null : a.score;
+  const bs = b.score == null ? null : b.score;
+  if (as == null && bs == null) return 0;
+  if (as == null) return 1;
+  if (bs == null) return -1;
+  return bs - as;
+};
+
+/** notComputable arrives as `true`, as a reason string, or absent. */
+function readNotComputable(raw: unknown): { flag: boolean; reason: string } {
+  if (raw === true) return { flag: true, reason: "" };
+  const s = sText(raw);
+  return s ? { flag: true, reason: s } : { flag: false, reason: "" };
+}
+
+const DIAGNOSIS_DISCLAIMER =
+  "CartaOS — this diagnosis is internal decision support, not medical, regulatory or legal advice. Every score is generated by CartaOS from the sources listed against it; dimensions and markets that could not be computed are stated as such rather than estimated.";
+
+/**
+ * The defensible version of the diagnosis: the verdict and its thesis, every
+ * dimension score with the basis behind it, the per-market read, the risks, the
+ * branch-specific flags or levers, and — the part that makes the rest
+ * inspectable — the evidence and the source-coverage log.
+ */
+export async function exportDiagnosisPDF(
+  diagnosis: Diagnosis,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+  opts?: ExportOptions,
+) {
+  const { jsPDF, autoTable } = await loadPdfDeps();
+
+  const includeMarkets = opts?.includeMarkets !== false;
+  const includeEvidence = opts?.includeEvidence !== false;
+
+  const reportName = DIAGNOSIS_REPORT_NAME(branch);
+  const state = newPdf(jsPDF, reportName, assetName, STRATEGY_COLOR);
+
+  const dimensions: DimensionScore[] = Array.isArray(diagnosis.dimensions) ? diagnosis.dimensions : [];
+  const perMarket: MarketScore[] = Array.isArray(diagnosis.perMarket) ? diagnosis.perMarket : [];
+  const topRisks = (Array.isArray(diagnosis.topRisks) ? diagnosis.topRisks : []).map(sText).filter(Boolean);
+  const swingFactors = (Array.isArray(diagnosis.swingFactors) ? diagnosis.swingFactors : []).map(sText).filter(Boolean);
+  const ipFlags = Array.isArray(diagnosis.ipFlags) ? diagnosis.ipFlags : [];
+  const valueLevers = Array.isArray(diagnosis.valueLevers) ? diagnosis.valueLevers : [];
+  const rejected = Array.isArray(diagnosis.consideredAndRejected) ? diagnosis.consideredAndRejected : [];
+  const coverage = Array.isArray(diagnosis.coverage) ? diagnosis.coverage : [];
+
+  const scored = dimensions.filter((d) => d.score != null);
+  const notComputable = dimensions.length - scored.length;
+  const topDimension = scored.slice().sort(byScoreDesc)[0];
+
+  // ── Cover ─────────────────────────────────────────────────────────────────
+  coverPage(
+    state,
+    reportName,
+    branch === "off_patent"
+      ? "Is this asset worth taking into these markets?"
+      : "What is this asset worth, and what would change that?",
+    "Every scored dimension with the evidence behind it, the per-market read, and an explicit account of what could not be computed",
+    assetName,
+    [
+      { label: "Verdict", value: verdictLabel(diagnosis.verdict) },
+      {
+        label: "Worthiness score",
+        value: diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "n/a",
+      },
+      { label: "Verdict confidence", value: cap(diagnosis.verdictConfidence) || "n/a" },
+      { label: "Markets assessed", value: String(perMarket.length) },
+    ],
+  );
+
+  paragraph(
+    state,
+    "Internal strategic decision support only. Not medical advice, not promotional material, and not a substitute for regulatory, IP or legal review. Scores are generated from the named sources; anything the evidence base could not support is marked not computable rather than estimated.",
+    8.5,
+    MUTED,
+  );
+
+  // ── Verdict & thesis ──────────────────────────────────────────────────────
+  sectionTitle(
+    state,
+    "Verdict",
+    `${verdictLabel(diagnosis.verdict)} — ${assetName}`,
+    [
+      diagnosis.worthinessScore != null
+        ? `Worthiness ${Math.round(diagnosis.worthinessScore)}/100`
+        : "Worthiness score not computable from the connected evidence",
+      diagnosis.verdictConfidence ? `verdict confidence ${sText(diagnosis.verdictConfidence)}` : "",
+      `${scored.length} of ${dimensions.length} dimensions scored`,
+    ]
+      .filter(Boolean)
+      .join("   ·   "),
+  );
+  if (sText(diagnosis.thesis)) lead(state, sText(diagnosis.thesis));
+  if (branch === "innovative" && sText(diagnosis.inflectionLever)) {
+    tinyLabel(state, "Biggest value-inflection lever");
+    paragraph(state, sText(diagnosis.inflectionLever));
+  }
+
+  // ── Dimension scores ──────────────────────────────────────────────────────
+  if (dimensions.length) {
+    sectionTitle(
+      state,
+      "Dimension Scores",
+      topDimension
+        ? `${dimensionLabel(branch, topDimension.key)} is the strongest dimension`
+        : "No dimension could be scored from the connected evidence",
+      notComputable
+        ? `${notComputable} of ${dimensions.length} dimensions could not be computed; each states why in place of a number.`
+        : "Computed dimensions are owned by the deterministic layer; reasoned dimensions are the model's read of the cited evidence.",
+    );
+    table(state, {
+      head: [["Dimension", "Score", "Confidence", "Basis"]],
+      body: dimensions.map((d) => [
+        dimensionLabel(branch, d.key),
+        scoreCell(d.score, d.notComputable),
+        cap(d.confidence) || "—",
+        d.computed === true ? "Computed" : "Reasoned",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 132 },
+        1: { cellWidth: 170 },
+        2: { cellWidth: 62 },
+        3: { cellWidth: 60, textColor: MUTED, fontSize: 8 },
+      },
+      didParseCell: (data: ParsedCell) => {
+        if (data.section !== "body" || data.column.index !== 1) return;
+        const d = dimensions[data.row.index];
+        if (!d) return;
+        if (d.score == null) {
+          data.cell.styles.textColor = NEG;
+          data.cell.styles.fontStyle = "italic";
+        } else {
+          data.cell.styles.fontStyle = "bold";
+        }
+      },
+    }, autoTable);
+  }
+
+  // ── Per-market ────────────────────────────────────────────────────────────
+  if (includeMarkets && perMarket.length) {
+    const ranked = perMarket.slice().sort(byScoreDesc);
+    const leadMarket = ranked.find((m) => m.score != null);
+    sectionTitle(
+      state,
+      "Markets",
+      leadMarket
+        ? `${countryLabel(leadMarket.country)} leads the market set`
+        : "No market could be scored from the connected evidence",
+      "Ranked by score; markets the evidence could not support are listed last and say why.",
+    );
+    table(state, {
+      head: [["Market", "Score", "Verdict", "Read"]],
+      body: ranked.map((m) => [
+        countryLabel(m.country),
+        scoreCell(m.score, (m as Record<string, unknown>).notComputable),
+        verdictLabel(m.verdict),
+        sText(m.summary) || "Not stated",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 96 },
+        1: { cellWidth: 120 },
+        2: { cellWidth: 66 },
+        3: { textColor: BODY },
+      },
+      didParseCell: (data: ParsedCell) => {
+        if (data.section !== "body" || data.column.index !== 1) return;
+        const m = ranked[data.row.index];
+        if (m && m.score == null) {
+          data.cell.styles.textColor = NEG;
+          data.cell.styles.fontStyle = "italic";
+        }
+      },
+    }, autoTable);
+  }
+
+  // ── Risks and swing factors ───────────────────────────────────────────────
+  if (topRisks.length || swingFactors.length) {
+    sectionTitle(
+      state,
+      "Risk",
+      "What could kill this, and what most moves the score",
+      "Swing factors are the variables to resolve first — they change the answer, not just the confidence.",
+    );
+    if (topRisks.length) {
+      subHeader(state, "Top risks", INK);
+      bullets(state, topRisks, INK);
+    }
+    if (swingFactors.length) {
+      subHeader(state, "Swing factors", STRATEGY_COLOR);
+      bullets(state, swingFactors, STRATEGY_COLOR);
+    }
+  }
+
+  // ── IP / freedom-to-operate flags (innovative) ────────────────────────────
+  if (branch === "innovative" && ipFlags.length) {
+    newPage(state);
+    sectionTitle(
+      state,
+      "IP & Freedom to Operate",
+      "Flags counsel must clear before any commitment",
+      "A screen of public patent and regulatory records, not a legal opinion. Nothing below clears freedom to operate.",
+    );
+    table(state, {
+      head: [["Severity", "Claim / flag", "Why it matters", "Citation"]],
+      body: ipFlags.map((f) => [
+        (sText(f.severity) || "not stated").toUpperCase(),
+        sText(f.flag) || sText(f.claim) || sText(f.label) || "Unnamed flag",
+        sText(f.note) || sText(f.whyItMatters) || sText(f.why) || "Not stated",
+        sText(f.citation) || sText(f.source) || "Not cited",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold", cellWidth: 58, textColor: NEG },
+        1: { fontStyle: "bold", textColor: INK, cellWidth: 150 },
+        2: { textColor: BODY },
+        3: { cellWidth: 96, textColor: MUTED, fontSize: 8 },
+      },
+    }, autoTable);
+  }
+
+  // ── Value levers (off-patent) ─────────────────────────────────────────────
+  if (branch === "off_patent" && valueLevers.length) {
+    newPage(state);
+    sectionTitle(
+      state,
+      "Value Levers",
+      "Where value still sits in an already-approved asset",
+      "Levers the evidence base cannot support are marked, never scored to a plausible-looking number.",
+    );
+    table(state, {
+      head: [["Lever", "Score", "Confidence", "Status"]],
+      body: valueLevers.map((l) => {
+        const nc = readNotComputable(l.notComputable);
+        const raw = Number(l.score);
+        const hasScore = !nc.flag && Number.isFinite(raw);
+        return [
+          sText(l.lever) || sText(l.label) || sText(l.key) || "Unnamed lever",
+          hasScore
+            ? String(Math.round(raw))
+            : `Not computable — ${nc.reason || sText(l.dataGap) || "no reason recorded"}`,
+          cap(l.confidence) || "—",
+          nc.flag ? "Not computable" : l.computed === true ? "Computed" : "Reasoned",
+        ];
+      }),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 132 },
+        1: { cellWidth: 176 },
+        2: { cellWidth: 62 },
+        3: { cellWidth: 66, textColor: MUTED, fontSize: 8 },
+      },
+    }, autoTable);
+  }
+
+  // ── Considered and rejected (steelman) ────────────────────────────────────
+  if (rejected.length) {
+    sectionTitle(
+      state,
+      "Steelman",
+      "Considered and rejected",
+      "The angles that were argued for and then excluded, with the reason each failed.",
+    );
+    table(state, {
+      head: [["Opportunity", "Why it was rejected"]],
+      body: rejected.map((r) => [sText(r.opportunity) || "—", sText(r.reason) || "Not stated"]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 180 },
+        1: { textColor: BODY },
+      },
+    }, autoTable);
+  }
+
+  // ── Evidence & sources ────────────────────────────────────────────────────
+  if (includeEvidence) {
+    const evidenceRows = dimensions.flatMap((d) =>
+      (Array.isArray(d.evidence) ? d.evidence : []).map((e: EvidenceItem) => [
+        dimensionLabel(branch, d.key),
+        sText(e.claim) || "—",
+        e.kind === "estimate" ? "Estimate" : "Evidence",
+        sText(e.source) || "Not stated",
+        e.tier != null ? `Tier ${e.tier}` : "—",
+      ]),
+    );
+    if (evidenceRows.length) {
+      newPage(state);
+      sectionTitle(
+        state,
+        "Evidence",
+        "Every claim, its source and its tier",
+        "Items marked Estimate are CartaOS inferences, not sourced findings; a claim with no named source is shown as such rather than dressed as evidence.",
+      );
+      table(state, {
+        head: [["Dimension", "Claim", "Type", "Source", "Tier"]],
+        body: evidenceRows,
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 96 },
+          1: { textColor: BODY },
+          2: { cellWidth: 54 },
+          3: { cellWidth: 100, textColor: MUTED, fontSize: 8 },
+          4: { cellWidth: 38, textColor: MUTED, fontSize: 8 },
+        },
+        didParseCell: (data: ParsedCell) => {
+          if (data.section === "body" && data.column.index === 2 && String(data.cell.raw) === "Estimate") {
+            data.cell.styles.textColor = NEG;
+            data.cell.styles.fontStyle = "bold";
+          }
+        },
+      }, autoTable);
+    }
+  }
+
+  // ── Source coverage ───────────────────────────────────────────────────────
+  if (coverage.length) {
+    const gaps = coverage.filter((c) => (c.unwired ?? []).length > 0);
+    sectionTitle(
+      state,
+      "Source Coverage",
+      gaps.length
+        ? `${gaps.length} of ${coverage.length} dimensions were scored without every applicable source`
+        : "Every applicable source was connected",
+      "Which registry sources were actually consulted per dimension, and which apply to this asset but have no connected client.",
+    );
+    table(state, {
+      head: [["Dimension", "Sources consulted", "Applicable but not connected"]],
+      body: coverage.map((c) => [
+        sText(c.label) || dimensionLabel(branch, c.key),
+        (c.consulted ?? []).length ? `${(c.consulted ?? []).length} — ${(c.consulted ?? []).join(", ")}` : "None",
+        (c.unwired ?? []).length ? (c.unwired ?? []).join(", ") : "None",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 120 },
+        1: { textColor: BODY },
+        2: { textColor: NEG },
+      },
+    }, autoTable);
+    if (gaps.length) {
+      paragraph(
+        state,
+        "The sources listed above as applicable but not connected do apply to this asset and were not consulted — no client is wired to them. The scores on those dimensions were computed without that evidence, and connecting those sources may move them.",
+        9.5,
+        MUTED,
+      );
+    }
+  }
+
+  sourceNote(state, DIAGNOSIS_DISCLAIMER);
+
+  state.doc.save(`${safeFilename(assetName)}_Diagnosis.pdf`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1882,3 +2321,659 @@ const involvementPpt = (level: string): string =>
 
 const pillarPpt = (pillar: string): string =>
   pillar === "Diagnosis" ? "1A1A1A" : pillar === "Strategy" ? "C2410C" : pillar === "Execution" ? "F97316" : "9A9A9A";
+
+// ════════════════════════════════════════════════════════════════════════════
+//  RUN-ERA DECKS (Diagnosis · Strategy)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A deck with the house master applied — same construction as exportClientDeck. */
+function newDeck(PptxGenJS: any, title: string): any {
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_WIDE"; // 13.333 × 7.5 in
+  pptx.title = title;
+  pptx.company = BRAND;
+  pptx.defineSlideMaster({
+    title: MASTER,
+    background: { color: P.bg },
+    objects: [
+      { rect: { x: MX, y: 6.85, w: MW, h: 0.008, fill: { color: P.line } } },
+    ],
+    slideNumber: {
+      x: SLIDE_W - MX - 0.6, y: FOOTER_Y, w: 0.6, h: 0.3,
+      fontFace: F, fontSize: 8, color: P.faint, align: "right",
+    },
+  });
+  return pptx;
+}
+
+/** The cover: eyebrow, asset, one-line framing and a four-cell KPI band. */
+function titleSlide(
+  pptx: any,
+  eyebrow: string,
+  assetName: string,
+  subtitle: string,
+  kpis: [string, string, boolean][],
+  accent: string,
+) {
+  const slide = pptx.addSlide();
+  slide.background = { color: P.bg };
+  slide.addShape("rect", { x: 0, y: 0, w: 0.16, h: 7.5, fill: { color: P.ink } });
+  slide.addShape("rect", { x: 0, y: 0, w: 0.16, h: 1.6, fill: { color: accent } });
+
+  txt(slide, eyebrow.toUpperCase(), {
+    x: MX, y: 0.9, w: MW, h: 0.4, fontFace: F, fontSize: 11, bold: true, color: accent, charSpacing: 3,
+  });
+  txt(slide, assetName, {
+    x: MX, y: 1.55, w: MW, h: 1.4, fontFace: F, fontSize: 32, bold: true, color: P.ink, valign: "top",
+  });
+  slide.addShape("rect", { x: MX + 0.02, y: 3.05, w: 0.9, h: 0.04, fill: { color: accent } });
+  txt(slide, subtitle, { x: MX, y: 3.25, w: MW, h: 0.7, fontFace: F, fontSize: 13, color: P.muted, valign: "top" });
+
+  const cellW = MW / Math.max(1, kpis.length);
+  kpis.forEach(([label, value, hi], i) => {
+    const x = MX + i * cellW;
+    slide.addShape("line", { x, y: 4.5, w: 0, h: 1.0, line: { color: P.line, width: 1 } } as any);
+    txt(slide, label, { x: x + 0.15, y: 4.55, w: cellW - 0.3, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
+    txt(slide, value, { x: x + 0.15, y: 4.8, w: cellW - 0.3, h: 0.7, fontFace: F, fontSize: 19, bold: true, color: hi ? P.accent2 : P.ink });
+  });
+
+  txt(slide, `${BRAND}  ·  ${TODAY()}  ·  Confidential`, {
+    x: MX, y: 6.6, w: MW, h: 0.3, fontFace: F, fontSize: 10, color: P.faint,
+  });
+  return slide;
+}
+
+/** A labelled statistic in a panel — used for the modelled economics. */
+function statCard(slide: any, x: number, y: number, w: number, h: number, label: string, value: string, hi = false) {
+  slide.addShape("rect", { x, y, w, h, fill: { color: hi ? P.calloutBg : P.panel }, line: { type: "none" } });
+  slide.addShape("rect", { x, y, w: 0.06, h, fill: { color: hi ? P.accent2 : P.accent } });
+  txt(slide, label.toUpperCase(), { x: x + 0.22, y: y + 0.12, w: w - 0.4, h: 0.28, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
+  txt(slide, value, { x: x + 0.22, y: y + 0.42, w: w - 0.4, h: h - 0.55, fontFace: F, fontSize: 20, bold: true, color: P.ink, valign: "top" });
+}
+
+/**
+ * Board-ready diagnosis deck. Every slide whose data is absent is skipped
+ * rather than emitted empty, and a dimension or market the evidence could not
+ * support says so in place of a number.
+ */
+export async function exportDiagnosisPPTX(
+  diagnosis: Diagnosis,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+  opts?: ExportOptions,
+) {
+  const PptxGenJS = (await import("pptxgenjs")).default;
+
+  const includeMarkets = opts?.includeMarkets !== false;
+  const includeEvidence = opts?.includeEvidence !== false;
+
+  const reportName = DIAGNOSIS_REPORT_NAME(branch);
+  const pptx = newDeck(PptxGenJS, `${assetName} — ${reportName}`);
+
+  const dimensions: DimensionScore[] = Array.isArray(diagnosis.dimensions) ? diagnosis.dimensions : [];
+  const perMarket: MarketScore[] = Array.isArray(diagnosis.perMarket) ? diagnosis.perMarket : [];
+  const topRisks = (Array.isArray(diagnosis.topRisks) ? diagnosis.topRisks : []).map(sText).filter(Boolean);
+  const swingFactors = (Array.isArray(diagnosis.swingFactors) ? diagnosis.swingFactors : []).map(sText).filter(Boolean);
+  const ipFlags = Array.isArray(diagnosis.ipFlags) ? diagnosis.ipFlags : [];
+  const valueLevers = Array.isArray(diagnosis.valueLevers) ? diagnosis.valueLevers : [];
+  const coverage = Array.isArray(diagnosis.coverage) ? diagnosis.coverage : [];
+
+  const scored = dimensions.filter((d) => d.score != null);
+  const uncomputed = dimensions.length - scored.length;
+  const topDimension = scored.slice().sort(byScoreDesc)[0];
+
+  const consulted = Array.from(new Set(dimensions.flatMap((d) => (Array.isArray(d.sourcesConsulted) ? d.sourcesConsulted : []).map(sText).filter(Boolean))));
+  const SRC = consulted.slice(0, 8).join(" · ") || "CartaOS — public regulatory, clinical, IP & pricing sources";
+
+  // ─── Title ──────────────────────────────────────────────────────────────
+  titleSlide(
+    pptx,
+    reportName,
+    assetName,
+    branch === "off_patent"
+      ? "Is this asset worth taking into these markets — and what does the evidence actually support?"
+      : "What is this asset worth, what would change that, and where is the evidence thin?",
+    [
+      ["VERDICT", verdictLabel(diagnosis.verdict), true],
+      ["WORTHINESS", diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "n/a", false],
+      ["CONFIDENCE", cap(diagnosis.verdictConfidence) || "n/a", false],
+      ["MARKETS ASSESSED", String(perMarket.length), false],
+    ],
+    P.accent,
+  );
+
+  // ─── Verdict ────────────────────────────────────────────────────────────
+  {
+    const slide = contentSlide(
+      pptx, "Diagnosis",
+      sText(diagnosis.thesis) ? truncate(sText(diagnosis.thesis), 110) : `${verdictLabel(diagnosis.verdict)} on ${assetName}`,
+      P.accent, SRC,
+    );
+    slide.addShape("rect", { x: MX, y: 1.75, w: HALF, h: 1.5, fill: { color: P.calloutBg }, line: { type: "none" } });
+    slide.addShape("rect", { x: MX, y: 1.75, w: 0.07, h: 1.5, fill: { color: P.accent2 } });
+    txt(slide, "VERDICT", { x: MX + 0.25, y: 1.9, w: HALF - 0.5, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.muted, charSpacing: 1 });
+    txt(slide, verdictLabel(diagnosis.verdict), { x: MX + 0.25, y: 2.2, w: HALF - 0.5, h: 0.9, fontFace: F, fontSize: 34, bold: true, color: P.accent2, valign: "top" });
+
+    statCard(slide, COL_R, 1.75, (HALF - GUT) / 2, 1.5, "Worthiness",
+      diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "Not computable");
+    statCard(slide, COL_R + (HALF - GUT) / 2 + GUT, 1.75, (HALF - GUT) / 2, 1.5, "Verdict confidence",
+      cap(diagnosis.verdictConfidence) || "Not stated");
+
+    if (sText(diagnosis.thesis)) {
+      txt(slide, "THESIS", { x: MX, y: 3.5, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
+      txt(slide, sText(diagnosis.thesis), {
+        x: MX, y: 3.8, w: MW, h: 1.5, fontFace: F, fontSize: 12.5, color: P.ink, valign: "top", lineSpacingMultiple: 1.15,
+      });
+    }
+    if (branch === "innovative" && sText(diagnosis.inflectionLever)) {
+      txt(slide, "BIGGEST VALUE-INFLECTION LEVER", { x: MX, y: 5.4, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
+      txt(slide, sText(diagnosis.inflectionLever), { x: MX, y: 5.7, w: MW, h: 0.9, fontFace: F, fontSize: 11.5, color: P.ink, valign: "top" });
+    }
+  }
+
+  // ─── Dimension scorecard ────────────────────────────────────────────────
+  if (dimensions.length) {
+    const slide = contentSlide(
+      pptx, "Diagnosis · Scorecard",
+      topDimension
+        ? `${dimensionLabel(branch, topDimension.key)} is the strongest dimension`
+        : "No dimension could be scored from the connected evidence",
+      P.accent,
+      uncomputed
+        ? `${uncomputed} of ${dimensions.length} dimensions not computable · ${SRC}`
+        : SRC,
+    );
+    const rows: any[][] = [
+      ["Dimension", "Score", "Confidence", "Basis"].map((t) => ({ text: t, options: cellHead() })),
+      ...dimensions.map((d) => {
+        const nc = d.score == null;
+        return [
+          { text: dimensionLabel(branch, d.key), options: cellBody({ bold: true, color: nc ? P.faint : P.ink }) },
+          {
+            text: nc ? "Not computable" : ` ${dotScale(d.score ?? 0)}  ${Math.round(d.score ?? 0)}`,
+            options: cellBody({ bold: true, color: nc ? P.faint : P.accent2 }),
+          },
+          { text: nc ? "—" : (cap(d.confidence) || "—"), options: cellBody({ color: P.muted, fontSize: 10 }) },
+          {
+            text: nc
+              ? truncate(sText(d.notComputable) || "No reason recorded", 90)
+              : d.computed === true ? "Computed" : "Reasoned",
+            options: cellBody({ fontSize: 10, color: nc ? P.accent2 : P.muted }),
+          },
+        ];
+      }),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.4, 2.6, 1.5, 4.633],
+      rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Per-market ─────────────────────────────────────────────────────────
+  if (includeMarkets && perMarket.length) {
+    const ranked = perMarket.slice().sort(byScoreDesc);
+    const shown = ranked.slice(0, 10);
+    const leadMarket = ranked.find((m) => m.score != null);
+    const slide = contentSlide(
+      pptx, "Diagnosis · Markets",
+      leadMarket ? `${countryLabel(leadMarket.country)} leads the market set` : "No market could be scored from the connected evidence",
+      P.accent,
+      shown.length < ranked.length ? `Top ${shown.length} of ${ranked.length} markets by score · ${SRC}` : SRC,
+    );
+    const rows: any[][] = [
+      ["Market", "Score", "Verdict", "Read"].map((t) => ({ text: t, options: cellHead() })),
+      ...shown.map((m) => {
+        const nc = m.score == null;
+        return [
+          { text: countryLabel(m.country), options: cellBody({ bold: true, color: nc ? P.faint : P.ink }) },
+          {
+            text: nc ? "Not computable" : ` ${dotScale(m.score ?? 0)}  ${Math.round(m.score ?? 0)}`,
+            options: cellBody({ bold: true, color: nc ? P.faint : P.accent2 }),
+          },
+          { text: verdictLabel(m.verdict), options: cellBody({ fontSize: 10, color: P.muted }) },
+          {
+            text: truncate(
+              nc ? (sText((m as Record<string, unknown>).notComputable) || sText(m.summary) || "Not stated") : (sText(m.summary) || "Not stated"),
+              150,
+            ),
+            options: cellBody({ fontSize: 10 }),
+          },
+        ];
+      }),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [2.6, 2.2, 1.6, 5.733],
+      rowH: 0.44, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Risks & swing factors ──────────────────────────────────────────────
+  if (topRisks.length || swingFactors.length) {
+    const slide = contentSlide(pptx, "Diagnosis · Risk", "What could kill this, and what most moves the score", P.accent, SRC);
+    if (topRisks.length) {
+      txt(slide, "TOP RISKS", { x: MX, y: BODY_TOP + 0.15, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.ink, charSpacing: 1 });
+      txt(slide, topRisks.slice(0, 5).map((t) => ({ text: truncate(t, 220), options: { bullet: { code: "2022" }, fontSize: 12, color: P.ink } })),
+        { x: MX, y: BODY_TOP + 0.5, w: HALF - 0.2, h: 4.2, fontFace: F, valign: "top", paraSpaceAfter: 6 });
+    }
+    if (swingFactors.length) {
+      txt(slide, "SWING FACTORS — RESOLVE THESE FIRST", { x: COL_R, y: BODY_TOP + 0.15, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
+      txt(slide, swingFactors.slice(0, 5).map((t) => ({ text: truncate(t, 220), options: { bullet: { code: "2022" }, fontSize: 12, color: P.ink } })),
+        { x: COL_R, y: BODY_TOP + 0.5, w: HALF - 0.2, h: 4.2, fontFace: F, valign: "top", paraSpaceAfter: 6 });
+    }
+  }
+
+  // ─── IP flags (innovative) ──────────────────────────────────────────────
+  if (branch === "innovative" && ipFlags.length) {
+    const slide = contentSlide(
+      pptx, "Diagnosis · IP & FTO", "Flags counsel must clear before any commitment", P.accent,
+      "A screen of public patent and regulatory records — not a legal opinion",
+    );
+    const rows: any[][] = [
+      ["Severity", "Claim / flag", "Why it matters", "Citation"].map((t) => ({ text: t, options: cellHead() })),
+      ...ipFlags.slice(0, 9).map((f) => [
+        { text: (sText(f.severity) || "not stated").toUpperCase(), options: cellBody({ bold: true, color: P.accent2, fontSize: 10 }) },
+        { text: truncate(sText(f.flag) || sText(f.claim) || sText(f.label) || "Unnamed flag", 110), options: cellBody({ bold: true }) },
+        { text: truncate(sText(f.note) || sText(f.whyItMatters) || sText(f.why) || "Not stated", 150), options: cellBody({ fontSize: 10 }) },
+        { text: truncate(sText(f.citation) || sText(f.source) || "Not cited", 60), options: cellBody({ fontSize: 9.5, color: P.muted }) },
+      ]),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [1.3, 3.6, 4.533, 2.7],
+      rowH: 0.5, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Value levers (off-patent) ──────────────────────────────────────────
+  if (branch === "off_patent" && valueLevers.length) {
+    const slide = contentSlide(
+      pptx, "Diagnosis · Value levers", "Where value still sits in an already-approved asset", P.accent, SRC,
+    );
+    const rows: any[][] = [
+      ["Lever", "Score", "Confidence", "Basis"].map((t) => ({ text: t, options: cellHead() })),
+      ...valueLevers.slice(0, 10).map((l) => {
+        const nc = readNotComputable(l.notComputable);
+        const raw = Number(l.score);
+        const hasScore = !nc.flag && Number.isFinite(raw);
+        return [
+          { text: sText(l.lever) || sText(l.label) || sText(l.key) || "Unnamed lever", options: cellBody({ bold: true, color: hasScore ? P.ink : P.faint }) },
+          {
+            text: hasScore ? ` ${dotScale(raw)}  ${Math.round(raw)}` : "Not computable",
+            options: cellBody({ bold: true, color: hasScore ? P.accent2 : P.faint }),
+          },
+          { text: hasScore ? (cap(l.confidence) || "—") : "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+          {
+            text: hasScore
+              ? (l.computed === true ? "Computed" : "Reasoned")
+              : truncate(nc.reason || sText(l.dataGap) || "No reason recorded", 90),
+            options: cellBody({ fontSize: 10, color: hasScore ? P.muted : P.accent2 }),
+          },
+        ];
+      }),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.4, 2.6, 1.5, 4.633],
+      rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Evidence ───────────────────────────────────────────────────────────
+  if (includeEvidence) {
+    const items = dimensions.flatMap((d) =>
+      (Array.isArray(d.evidence) ? d.evidence : []).map((e: EvidenceItem) => ({ dim: dimensionLabel(branch, d.key), e })),
+    );
+    // Strongest first: sourced findings before estimates, then by source tier.
+    const strongest = items
+      .slice()
+      .sort((a, b) => {
+        const kind = (a.e.kind === "evidence" ? 0 : 1) - (b.e.kind === "evidence" ? 0 : 1);
+        if (kind !== 0) return kind;
+        return (a.e.tier ?? 9) - (b.e.tier ?? 9);
+      })
+      .slice(0, 9);
+
+    if (strongest.length) {
+      const slide = contentSlide(
+        pptx, "Diagnosis · Evidence", "The evidence the verdict rests on", P.accent,
+        `${items.length} evidence items recorded across ${dimensions.length} dimensions — strongest shown`,
+      );
+      const rows: any[][] = [
+        ["Claim", "Dimension", "Type", "Source", "Tier"].map((t) => ({ text: t, options: cellHead() })),
+        ...strongest.map(({ dim, e }) => [
+          { text: truncate(sText(e.claim) || "—", 170), options: cellBody({ fontSize: 10.5 }) },
+          { text: truncate(dim, 40), options: cellBody({ fontSize: 10, bold: true }) },
+          {
+            text: e.kind === "estimate" ? "Estimate" : "Evidence",
+            options: cellBody({ fontSize: 10, bold: true, color: e.kind === "estimate" ? P.accent2 : P.muted }),
+          },
+          { text: truncate(sText(e.source) || "Not stated", 46), options: cellBody({ fontSize: 10, color: P.muted }) },
+          { text: e.tier != null ? `T${e.tier}` : "—", options: cellBody({ fontSize: 10, color: P.muted, align: "center" }) },
+        ]),
+      ];
+      slide.addTable(rows, {
+        x: MX, y: BODY_TOP + 0.15, w: MW, colW: [4.6, 2.4, 1.3, 2.6, 1.233],
+        rowH: 0.48, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+      });
+    }
+  }
+
+  // ─── Basis of preparation ───────────────────────────────────────────────
+  {
+    const gaps = coverage.filter((c) => (c.unwired ?? []).length > 0);
+    const slide = contentSlide(pptx, "Basis of preparation", "How to read this diagnosis", P.accent, "CartaOS diagnosis engine");
+    const points = [
+      "Internal strategic decision support only — not medical, regulatory or legal advice, and not promotional material.",
+      "Every score is generated by CartaOS from the sources named against it. Items marked Estimate are model inferences, not sourced findings.",
+      "Dimensions and markets the evidence base could not support are stated as not computable, with the reason — they are never estimated, defaulted or shown as zero.",
+      uncomputed
+        ? `${uncomputed} of ${dimensions.length} dimensions could not be computed in this run.`
+        : "Every dimension in this run was computable from the connected evidence.",
+      gaps.length
+        ? `${gaps.length} dimension${gaps.length === 1 ? "" : "s"} had applicable sources with no connected client; those scores were computed without that evidence.`
+        : "",
+      "Verify every figure against primary sources before transacting.",
+    ].filter(Boolean);
+    txt(slide, points.map((t) => ({ text: t, options: { bullet: { code: "2022" }, fontSize: 12.5, color: P.ink } })),
+      { x: MX, y: BODY_TOP + 0.25, w: MW, h: 4.6, fontFace: F, valign: "top", paraSpaceAfter: 8, lineSpacingMultiple: 1.15 });
+  }
+
+  await pptx.writeFile({ fileName: `${safeFilename(assetName)}_Diagnosis.pptx` });
+}
+
+/**
+ * The PPT counterpart of exportStrategyPDF. Same deterministic discipline: the
+ * economics are recomputed here from `strategy.assumptions` by the pure engine,
+ * never read off narrated route objects, and a route missing a required input
+ * names that input instead of showing a number.
+ */
+export async function exportStrategyPPTX(
+  strategy: Strategy,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+  opts?: ExportOptions,
+) {
+  const [PptxGenJS, engine] = await Promise.all([
+    import("pptxgenjs").then((m) => m.default),
+    import("@/server/services/strategy/model"),
+  ]);
+
+  const includeEvidence = opts?.includeEvidence !== false;
+  const branchLabel = branch === "off_patent" ? "Off-Patent" : "Innovative";
+  const deckName = `${branchLabel} Route Strategy`;
+  const pptx = newDeck(PptxGenJS, `${assetName} — ${deckName}`);
+
+  // ── Recompute from the assumptions as they stand ──────────────────────────
+  const assumptions = Array.isArray(strategy.assumptions) ? strategy.assumptions : [];
+  const values: Record<string, number> = {};
+  for (const a of assumptions) {
+    if (String(a.value).trim() === "") continue;
+    const n = Number(a.value);
+    if (Number.isFinite(n)) values[a.key] = n;
+  }
+  const required = branch === "off_patent" ? engine.OFF_PATENT_REQUIRED : engine.INNOVATIVE_REQUIRED;
+  const results = engine.modelAllRoutes(branch, values);
+  const byKey = new Map(results.map((r) => [r.key, r]));
+  const routes = Array.isArray(strategy.routes) ? strategy.routes : [];
+  /** Fit gates which route may be recommended; economics rank the survivors. */
+  const fit = Object.fromEntries(routes.map((r) => [r.key, r.score] as [string, number | null | undefined]));
+  const recommendation = engine.recommend(results, fit);
+  const best = recommendation?.route ?? null;
+  const scen = engine.runScenarios(branch, values, 20);
+  const sens = best ? engine.sensitivity(branch, values, best.key, 20).slice(0, 6) : [];
+
+  const recommendedKey = best?.key ?? sText(strategy.recommendedRoute);
+  const recommended = routes.find((r) => r.key === recommendedKey);
+  const missing = required.filter((k) => !Number.isFinite(values[k]));
+  const labelOf = (key: string) => sText(assumptions.find((a) => a.key === key)?.label) || key;
+  const routeLabel = (key: string) =>
+    sText(routes.find((r) => r.key === key)?.label) || sText(byKey.get(key)?.label) || key;
+  const scenNpv = (set: typeof scen.base, key: string) => {
+    const r = set.find((x) => x.key === key);
+    return r && r.computable ? compactUsd(r.npv) : "n/a";
+  };
+  const computableRoutes = routes.filter((r) => byKey.get(r.key)?.computable);
+  const SRC = "Deterministic CartaOS strategy model, computed from the assumption set in this deck";
+
+  // ─── Title ──────────────────────────────────────────────────────────────
+  titleSlide(
+    pptx,
+    deckName,
+    assetName,
+    "Every commercialisation and partnering route modelled from one assumption set — NPV, IRR, break-even and the dependency that would break the plan",
+    [
+      ["RECOMMENDED ROUTE", recommended?.label ?? (best ? best.label : "Not computable"), true],
+      ["MODELLED NPV", best ? compactUsd(best.npv) : "n/a", false],
+      ["BREAK-EVEN", best?.breakEvenYear != null ? `Year ${best.breakEvenYear}` : "n/a", false],
+      ["ROUTES MODELLED", `${computableRoutes.length} of ${routes.length}`, false],
+    ],
+    P.accent,
+  );
+
+  // ─── Recommendation ─────────────────────────────────────────────────────
+  {
+    const slide = contentSlide(
+      pptx, "Strategy · Recommendation",
+      best ? `${routeLabel(best.key)} realises the most value` : "No route is computable on the current assumptions",
+      P.accent, SRC,
+    );
+    let y = BODY_TOP + 0.15;
+
+    if (recommendation?.lowFit) {
+      slide.addShape("rect", { x: MX, y, w: MW, h: 0.72, fill: { color: P.calloutBg }, line: { type: "none" } });
+      slide.addShape("rect", { x: MX, y, w: 0.07, h: 0.72, fill: { color: P.accent2 } });
+      txt(slide, [
+        { text: "NO ROUTE CLEARED THE FIT BAR   ", options: { fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 } },
+        { text: "This is the best economics available, not a route judged open to this asset. Treat it as a ceiling on value, not a recommendation to execute.", options: { fontSize: 11, color: P.ink } },
+      ], { x: MX + 0.25, y: y + 0.05, w: MW - 0.5, h: 0.64, fontFace: F, valign: "middle" });
+      y += 0.92;
+    }
+
+    if (best) {
+      const cw = (MW - 3 * GUT) / 4;
+      const cards: [string, string, boolean][] = [
+        ["NPV", compactUsd(best.npv), true],
+        ["IRR", best.irr != null ? `${best.irr.toFixed(1)}%` : "n/a", false],
+        ["Break-even", best.breakEvenYear != null ? `Year ${best.breakEvenYear}` : "Never in horizon", false],
+        ["Peak revenue", compactUsd(best.peakRevenue), false],
+      ];
+      cards.forEach(([label, value, hi], i) => statCard(slide, MX + i * (cw + GUT), y, cw, 1.3, label, value, hi));
+      y += 1.55;
+
+      txt(slide, "SCENARIO RANGE — EVERY DRIVER MOVED TOGETHER BY ±20%", { x: MX, y, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
+      txt(slide, `Downside ${scenNpv(scen.downside, best.key)}     ·     Base ${compactUsd(best.npv)}     ·     Upside ${scenNpv(scen.upside, best.key)}`,
+        { x: MX, y: y + 0.28, w: MW, h: 0.45, fontFace: F, fontSize: 14, bold: true, color: P.ink });
+      y += 0.9;
+
+      const dependency = sText(recommended?.keyDependency) || sText(best.keyDependency);
+      if (dependency) {
+        txt(slide, "KEY DEPENDENCY — WHAT WOULD BREAK THIS PLAN", { x: MX, y, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
+        txt(slide, dependency, { x: MX, y: y + 0.28, w: MW, h: 0.8, fontFace: F, fontSize: 12, color: P.ink, valign: "top" });
+      }
+    } else {
+      txt(slide, `No route can be modelled until these assumptions are supplied: ${missing.map(labelOf).join(", ") || "none recorded"}.`,
+        { x: MX, y, w: MW, h: 1.0, fontFace: F, fontSize: 14, color: P.accent2, valign: "top" });
+    }
+
+    if (recommendation?.setAside.length) {
+      txt(slide, `Passed over on fit despite higher NPV: ${recommendation.setAside.map((s) => `${routeLabel(s.key)} (${compactUsd(s.npv)}, fit ${s.score})`).join(" · ")}`,
+        { x: MX, y: 6.25, w: MW, h: 0.5, fontFace: F, fontSize: 10, color: P.muted, valign: "top" });
+    }
+  }
+
+  // ─── Route comparison ───────────────────────────────────────────────────
+  if (routes.length) {
+    const slide = contentSlide(pptx, "Strategy · Route comparison", "Every route, one assumption set", P.accent, SRC);
+    const ordered = [...computableRoutes, ...routes.filter((r) => byKey.get(r.key)?.computable !== true)];
+    const rows: any[][] = [
+      ["Route", "Score", "NPV", "IRR", "Break-even", "Peak revenue"].map((t) => ({ text: t, options: cellHead() })),
+      ...ordered.slice(0, 9).map((r) => {
+        const e = byKey.get(r.key);
+        const isRec = r.key === recommendedKey;
+        if (!e || !e.computable) {
+          const miss = e && !e.computable ? e.missing : required;
+          return [
+            { text: r.label, options: cellBody({ bold: true, color: P.faint }) },
+            { text: r.score != null ? String(r.score) : "n/a", options: cellBody({ color: P.faint, align: "center" }) },
+            { text: `Not computable — needs ${miss.map(labelOf).join(", ")}`, options: cellBody({ fontSize: 9.5, color: P.accent2 }) },
+            { text: "—", options: cellBody({ color: P.faint, align: "center" }) },
+            { text: "—", options: cellBody({ color: P.faint, align: "center" }) },
+            { text: "—", options: cellBody({ color: P.faint, align: "center" }) },
+          ];
+        }
+        return [
+          { text: r.label, options: cellBody({ bold: true, color: P.ink }) },
+          { text: r.score != null ? String(r.score) : "n/a", options: cellBody({ align: "center" }) },
+          { text: compactUsd(e.npv), options: cellBody({ bold: true, color: P.accent2, align: "right" }) },
+          { text: e.irr != null ? `${e.irr.toFixed(1)}%` : "n/a", options: cellBody({ align: "right" }) },
+          { text: e.breakEvenYear != null ? `Y${e.breakEvenYear}` : "never", options: cellBody({ align: "center" }) },
+          { text: compactUsd(e.peakRevenue), options: cellBody({ align: "right", bold: isRec }) },
+        ];
+      }),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.4, 1.0, 2.6, 1.2, 1.4, 2.533],
+      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Assumptions ────────────────────────────────────────────────────────
+  if (assumptions.length) {
+    const assumed = assumptions.filter((a) => a.basis !== "sourced").length;
+    const slide = contentSlide(
+      pptx, "Strategy · Assumptions", "What every figure in this deck rests on", P.accent,
+      `${assumed} of ${assumptions.length} inputs are the model's own estimate — challenge those first`,
+    );
+    const rows: any[][] = [
+      ["Assumption", "Value", "Unit", "Basis"].map((t) => ({ text: t, options: cellHead() })),
+      ...assumptions.slice(0, 11).map((a) => {
+        const supplied = String(a.value ?? "").trim() !== "";
+        const sourced = a.basis === "sourced";
+        return [
+          { text: sText(a.label) || a.key, options: cellBody({ bold: true, color: P.ink }) },
+          {
+            text: supplied ? String(a.value) : "Not supplied",
+            options: cellBody({ align: "right", bold: supplied, color: supplied ? P.ink : P.accent2 }),
+          },
+          { text: sText(a.unit) || "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+          {
+            text: sourced ? truncate(`Sourced — ${sText(a.source) || "source not named"}`, 90) : "Assumed — not sourced",
+            options: cellBody({ fontSize: 10, color: sourced ? P.muted : P.accent2, bold: !sourced }),
+          },
+        ];
+      }),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [4.2, 2.0, 1.6, 4.333],
+      rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Scenarios ──────────────────────────────────────────────────────────
+  if (computableRoutes.length) {
+    const slide = contentSlide(
+      pptx, "Strategy · Scenarios", "How the routes hold up when every driver moves together", P.accent,
+      "Every scenario driver moved ±20% at once; routes that cannot be modelled are excluded rather than defaulted",
+    );
+    const rows: any[][] = [
+      ["Route", "Downside NPV", "Base NPV", "Upside NPV"].map((t) => ({ text: t, options: cellHead() })),
+      ...computableRoutes.slice(0, 9).map((r) => {
+        const isRec = r.key === recommendedKey;
+        return [
+          { text: r.label, options: cellBody({ bold: true, color: P.ink }) },
+          { text: scenNpv(scen.downside, r.key), options: cellBody({ align: "right", color: P.muted }) },
+          { text: scenNpv(scen.base, r.key), options: cellBody({ align: "right", bold: true, color: isRec ? P.accent2 : P.ink }) },
+          { text: scenNpv(scen.upside, r.key), options: cellBody({ align: "right", color: P.muted }) },
+        ];
+      }),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [4.333, 2.6, 2.6, 2.6],
+      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Sensitivity ────────────────────────────────────────────────────────
+  if (sens.length && best) {
+    const slide = contentSlide(
+      pptx, "Strategy · Sensitivity",
+      `${labelOf(sens[0].key)} dominates the outcome`,
+      P.accent,
+      `Each driver moved ±20% on its own, everything else held, against ${routeLabel(best.key)}`,
+    );
+    const rows: any[][] = [
+      ["#", "Variable", "NPV at -20%", "NPV at +20%", "Swing"].map((t) => ({ text: t, options: cellHead() })),
+      ...sens.map((s, i) => [
+        { text: String(i + 1), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
+        { text: labelOf(s.key), options: cellBody({ bold: true, color: P.ink }) },
+        { text: compactUsd(s.low), options: cellBody({ align: "right" }) },
+        { text: compactUsd(s.high), options: cellBody({ align: "right" }) },
+        { text: compactUsd(s.swing), options: cellBody({ align: "right", bold: true, color: P.accent2 }) },
+      ]),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [0.8, 4.333, 2.4, 2.4, 2.2],
+      rowH: 0.5, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Partner shortlist ──────────────────────────────────────────────────
+  const partners = Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [];
+  if (partners.length) {
+    const slide = contentSlide(pptx, "Strategy · Counterparties", "Partner shortlist", P.accent, SRC);
+    const rows: any[][] = [
+      ["#", "Partner", "Type", "Score", "Geographies", "Why them"].map((t) => ({ text: t, options: cellHead() })),
+      ...partners.slice(0, 9).map((p, i) => [
+        { text: String(i + 1), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
+        { text: p.name, options: cellBody({ bold: true, color: P.ink }) },
+        { text: sText(p.kind) || "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: p.score != null ? String(p.score) : "n/a", options: cellBody({ align: "center" }) },
+        { text: (p.geographies ?? []).map(countryLabel).join(", ") || "—", options: cellBody({ fontSize: 10 }) },
+        { text: truncate(sText(p.rationale) || "Not stated", 150), options: cellBody({ fontSize: 10 }) },
+      ]),
+    ];
+    slide.addTable(rows, {
+      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [0.6, 2.4, 1.6, 0.9, 2.0, 4.633],
+      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+  }
+
+  // ─── Evidence behind the routes ─────────────────────────────────────────
+  if (includeEvidence) {
+    const items = [
+      ...routes.flatMap((r) => (Array.isArray(r.evidence) ? r.evidence : []).map((e: EvidenceItem) => ({ subject: r.label, e }))),
+      ...partners.flatMap((p) => (Array.isArray(p.evidence) ? p.evidence : []).map((e: EvidenceItem) => ({ subject: p.name, e }))),
+    ];
+    const strongest = items
+      .slice()
+      .sort((a, b) => {
+        const kind = (a.e.kind === "evidence" ? 0 : 1) - (b.e.kind === "evidence" ? 0 : 1);
+        if (kind !== 0) return kind;
+        return (a.e.tier ?? 9) - (b.e.tier ?? 9);
+      })
+      .slice(0, 9);
+
+    if (strongest.length) {
+      const slide = contentSlide(
+        pptx, "Strategy · Evidence", "What the route reads are built on", P.accent,
+        "Items marked Estimate are CartaOS inferences, not sourced findings",
+      );
+      const rows: any[][] = [
+        ["Subject", "Claim", "Type", "Source"].map((t) => ({ text: t, options: cellHead() })),
+        ...strongest.map(({ subject, e }) => [
+          { text: truncate(subject, 44), options: cellBody({ bold: true, fontSize: 10 }) },
+          { text: truncate(sText(e.claim) || "—", 190), options: cellBody({ fontSize: 10.5 }) },
+          {
+            text: e.kind === "estimate" ? "Estimate" : "Evidence",
+            options: cellBody({ fontSize: 10, bold: true, color: e.kind === "estimate" ? P.accent2 : P.muted }),
+          },
+          { text: truncate(sText(e.source) || "Not stated", 50), options: cellBody({ fontSize: 10, color: P.muted }) },
+        ]),
+      ];
+      slide.addTable(rows, {
+        x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.0, 5.0, 1.3, 2.833],
+        rowH: 0.48, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+      });
+    }
+  }
+
+  await pptx.writeFile({ fileName: `${safeFilename(assetName)}_Strategy.pptx` });
+}

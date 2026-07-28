@@ -66,7 +66,20 @@
       "Bash(node --env-file=.env ./verify-legacy.mjs __TRACKED_VAR__/legacy-tables-backup.json)",
       "Bash(cp C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/legacy-tables-backup.json C:/Users/anast/cartaos-legacy-tables-backup-2026-07-28.json)",
       "Read(//c/Users/anast/**)",
-      "Bash(./node_modules/.bin/eslint server/routers/admin.ts)"
+      "Bash(./node_modules/.bin/eslint server/routers/admin.ts)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST -H \"Content-Type: application/json\" -d '{\"assetName\":\"x\",\"geographies\":[\"US\"]}' http://localhost:3000/api/orchestrator)",
+      "Bash(curl -s -X POST -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls -d @/tmp/pr12.json)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/12/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(curl -s -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/12)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('state:',d['state'],'| merged:',d['merged'],'| commits:',d['commits'],'| files:',d['changed_files'],'| +'+str\\(d['additions']\\)+'/-'+str\\(d['deletions']\\)\\)\")",
+      "Bash(sed -n '/export const DiagnosisSchema/,/^}\\);/p' types/run.ts)",
+      "Bash(sed -n '/export const DimensionScoreSchema/,/^}\\);/p;/export const MarketScoreSchema/,/^}\\);/p;/export const EvidenceItemSchema/,/^}\\);/p' types/run.ts)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(./node_modules/.bin/tsc --noEmit --listFiles)",
+      "Bash(./node_modules/.bin/eslint lib/exports.ts)",
+      "Bash(./node_modules/.bin/eslint components/run/export-menu.tsx components/run/diagnosis-shell.tsx components/run/strategy-results.tsx)",
+      "Bash(grep -E \"^\\\\S*\\\\.tsx$|warning|error\")",
+      "Bash(./node_modules/.bin/eslint components/run/strategy-results.tsx)"
     ]
   }
 }
