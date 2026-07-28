@@ -67,7 +67,7 @@ export const GEOGRAPHY_COLORS: Record<Geography, string> = {
 
 // ─── Agent IDs & Status ─────────────────────────────────────────────────────
 
-export type AgentId = "benchmarking" | "partner" | "negotiation" | "synthesis" | "executionPlan" | "outLicensingStrategy";
+export type AgentId = "benchmarking" | "partner" | "negotiation" | "synthesis" | "executionPlan" | "outLicensingStrategy" | "innovativeDiagnosis";
 
 export type AgentStatus = "idle" | "scraping" | "analyzing" | "complete" | "error";
 
@@ -78,6 +78,7 @@ export const AGENT_META: Record<AgentId, { label: string; description: string; c
   synthesis:    { label: "Deal Package", description: "Contract, DD, data room & intelligence", color: "#EC4899", icon: "Briefcase" },
   executionPlan:{ label: "Execution Plan", description: "Timeline, stakeholders & dependencies", color: "#F97316", icon: "Rocket" },
   outLicensingStrategy: { label: "Out-Licensing Strategy", description: "Per-region market, legal, commercial & IP assessment", color: "#0EA5E9", icon: "Globe" },
+  innovativeDiagnosis: { label: "Innovative Diagnosis", description: "Science, IP and partnerability worthiness for a novel asset", color: "#8B5CF6", icon: "Microscope" },
 };
 
 // ─── SSE Events ─────────────────────────────────────────────────────────────
@@ -103,7 +104,8 @@ export type AgentResult =
   | { agentId: "negotiation"; leveragePoints: NegotiationLeverage[] }
   | { agentId: "synthesis"; contract: string; dueDiligence: DDSection[]; dataPackage: DataPackageItem[]; intelligence: IntelSection[] }
   | { agentId: "executionPlan"; plan: ExecutionPlanOutput }
-  | { agentId: "outLicensingStrategy"; report: OutLicensingReport };
+  | { agentId: "outLicensingStrategy"; report: OutLicensingReport }
+  | { agentId: "innovativeDiagnosis"; diagnosis: import("./run").Diagnosis };
 
 // ─── Out-Licensing Strategy Report Types ────────────────────────────────────
 

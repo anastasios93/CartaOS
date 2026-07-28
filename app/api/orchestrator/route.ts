@@ -157,6 +157,18 @@ export async function POST(req: Request) {
   // Run agents in background (don't await — stream starts immediately)
   (async () => {
     try {
+      // The innovative branch runs its own single agent: the off-patent pipeline
+      // (benchmarking/partner/negotiation → synthesis/execution/assessment) is
+      // framed end-to-end for approved off-patent assets and must not be pointed
+      // at a novel compound (§7 — the branches share no prompt or source set).
+      if (intake.assetType === "innovative") {
+        const { runInnovativeDiagnosisAgent } = await import("@/server/agents/innovative-diagnosis");
+        sendEvent({ agent: "innovativeDiagnosis", type: "status", status: "idle", message: "Queued…" });
+        await runInnovativeDiagnosisAgent(intake, sendEvent);
+        sendEvent({ type: "done" });
+        return;
+      }
+
       // Dynamic import to avoid bundling issues
       const [
         { runBenchmarkingAgent },
@@ -261,12 +273,15 @@ export async function POST(req: Request) {
         const runId = await runRowPromise;
         if (runId) {
           const { mapReportToDiagnosis } = await import("@/server/services/run-mapper");
+          const innovativeCapture = captured["innovativeDiagnosis"];
           const strategyCapture = captured["outLicensingStrategy"];
           const executionCapture = captured["executionPlan"];
           const report = (strategyCapture?.result as { report?: unknown } | undefined)?.report;
-          const diagnosis = report
-            ? mapReportToDiagnosis(report as Parameters<typeof mapReportToDiagnosis>[0])
-            : null;
+          // The innovative agent emits the Diagnosis envelope directly; the
+          // off-patent report is mapped into it.
+          const diagnosis =
+            (innovativeCapture?.result as { diagnosis?: unknown } | undefined)?.diagnosis ??
+            (report ? mapReportToDiagnosis(report as Parameters<typeof mapReportToDiagnosis>[0]) : null);
           await db.run.update({
             where: { id: runId },
             data: {
@@ -276,7 +291,9 @@ export async function POST(req: Request) {
                 ? ({ legacy: { agent: "executionPlan", result: (executionCapture.result as { plan?: unknown }).plan ?? executionCapture.result } } as Prisma.InputJsonValue)
                 : Prisma.JsonNull,
               log: runLog as Prisma.InputJsonValue,
-              error: diagnosis ? null : (strategyCapture?.error ?? "assessment produced no report"),
+              error: diagnosis
+                ? null
+                : (innovativeCapture?.error ?? strategyCapture?.error ?? "assessment produced no report"),
             },
           });
         }

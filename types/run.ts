@@ -154,6 +154,27 @@ export const DiagnosisSchema = z.looseObject({
   /** Off-patent: 10-lever value scan; innovative: IP/FTO flags — branch-specific. */
   valueLevers: z.array(z.record(z.string(), z.unknown())).optional(),
   ipFlags: z.array(z.record(z.string(), z.unknown())).optional(),
+  /** Innovative (§4.2): the single event that most changes what the asset is worth. */
+  inflectionLever: z.string().optional(),
+  /** Steelman: angles considered and explicitly rejected, with the reason. */
+  consideredAndRejected: z.array(z.object({ opportunity: z.string(), reason: z.string() })).optional(),
+  /**
+   * Per-dimension source coverage (§7): which registry sources were consulted
+   * and which apply but have no connected client. Drives the "no source
+   * connected" state instead of a silently thin score.
+   */
+  coverage: z
+    .array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        consulted: z.array(z.string()),
+        unwired: z.array(z.string()),
+      }),
+    )
+    .optional(),
+  /** The full branch-native report, when one exists (off-patent). */
+  report: z.record(z.string(), z.unknown()).optional(),
   completedAt: z.string().optional(),
 });
 export type Diagnosis = z.infer<typeof DiagnosisSchema>;
