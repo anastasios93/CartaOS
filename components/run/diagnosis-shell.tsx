@@ -13,7 +13,7 @@
  * config/dimensions.ts; the branch decides which agent's result is watched.
  */
 
-import { useMemo, useRef, useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,11 @@ import { CriteriaChips } from "@/components/run/criteria-chips";
 import { RunFileUpload } from "@/components/run/file-upload";
 import { RunConsole } from "@/components/run/run-console";
 import { useAgentStream } from "@/hooks/use-agent-stream";
+import { useRunLog } from "@/hooks/use-run-log";
 import { trpc } from "@/lib/trpc";
 import { DEFAULT_GEOGRAPHIES } from "@/config/geographies";
 import { criteriaToSearchCriteria } from "@/lib/criteria-bridge";
-import type { AssetType, Criterion, RunFile, RunLogEvent } from "@/types/run";
+import type { AssetType, Criterion, RunFile } from "@/types/run";
 import type { AgentsMap } from "@/types/hub";
 import { ArrowRight, History, FlaskConical, Stethoscope, type LucideIcon } from "lucide-react";
 
@@ -79,43 +80,6 @@ export interface DiagnosisShellProps {
   renderRunViewer: (run: SavedRunView) => ReactNode;
   /** Header icon; defaults to the stethoscope used by 1A. */
   icon?: LucideIcon;
-}
-
-/** Accumulates agent-stream state changes into run-console events. */
-function useRunLog(agents: AgentsMap): RunLogEvent[] & { reset: () => void } {
-  const [events, setEvents] = useState<RunLogEvent[]>([]);
-  const prevRef = useRef<Record<string, { msg?: string; sources?: number; done?: boolean; error?: string }>>({});
-
-  useEffect(() => {
-    const next: RunLogEvent[] = [];
-    const at = new Date().toISOString();
-    for (const [id, state] of Object.entries(agents)) {
-      const prev = (prevRef.current[id] ??= {});
-      if (state.statusMessage && state.statusMessage !== prev.msg) {
-        prev.msg = state.statusMessage;
-        next.push({ at, kind: "status", message: state.statusMessage, source: id, phase: id });
-      }
-      if (state.sources.length && state.sources.length !== prev.sources) {
-        prev.sources = state.sources.length;
-        next.push({ at, kind: "source_hit", message: `${state.sources.length} sources consulted`, source: id, phase: id });
-      }
-      if (state.result && !prev.done) {
-        prev.done = true;
-        next.push({ at, kind: "result", message: "completed", source: id, phase: id });
-      }
-      if (state.error && state.error !== prev.error) {
-        prev.error = state.error;
-        next.push({ at, kind: "error", message: state.error, source: id, phase: id });
-      }
-    }
-    if (next.length) setEvents((e) => [...e, ...next]);
-  }, [agents]);
-
-  const reset = useCallback(() => {
-    prevRef.current = {};
-    setEvents([]);
-  }, []);
-  return useMemo(() => Object.assign(events, { reset }), [events, reset]) as RunLogEvent[] & { reset: () => void };
 }
 
 /** The lead clause of a dimension question — enough to orient, never a wall of text. */
@@ -340,7 +304,7 @@ export function DiagnosisShell({
       </Card>
 
       {/* Live run console */}
-      {hadRun && <RunConsole events={log} running={isRunning} onCancel={reset} title="Diagnosis run" />}
+      {hadRun && <RunConsole events={log.events} running={isRunning} onCancel={reset} title="Diagnosis run" />}
 
       {/* Live results — verdict first, detail on expand (§8 progressive disclosure) */}
       {!!liveResult && renderResults(liveResult, { agents, assetQuery: asset })}
