@@ -10,7 +10,6 @@
 
 import { DiagnosisShell } from "@/components/run/diagnosis-shell";
 import { OutLicensingStrategyResults } from "@/components/hub/results/out-licensing-strategy-results";
-import { ExecutionPlanResults } from "@/components/hub/results/execution-plan-results";
 import { OFF_PATENT_DIMENSIONS } from "@/config/dimensions";
 import type { OutLicensingReport } from "@/types/hub";
 import { Stethoscope } from "lucide-react";
@@ -30,10 +29,9 @@ export default function DiagnosisPage() {
       dimensions={OFF_PATENT_DIMENSIONS}
       agentId="outLicensingStrategy"
       icon={Stethoscope}
-      renderResults={(result, { agents, assetQuery }) => {
+      renderResults={(result, { assetQuery }) => {
         const report = (result as { report?: OutLicensingReport } | null)?.report;
         if (!report) return null;
-        const plan = (agents.executionPlan.result as { plan?: unknown } | null)?.plan;
         return (
           <>
             {report.verdict && (
@@ -45,7 +43,6 @@ export default function DiagnosisPage() {
               />
             )}
             <OutLicensingStrategyResults data={{ agentId: "outLicensingStrategy", report }} />
-            {plan != null && <ExecutionPlanResults data={{ agentId: "executionPlan", plan } as never} />}
           </>
         );
       }}
