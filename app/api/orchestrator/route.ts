@@ -10,7 +10,10 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import type { SSEEvent, AgentId, AgentResult } from "@/types/hub";
 
-export const maxDuration = 300;
+// The off-patent pipeline is three core agents, a ~20-source evidence pull and
+// a sharded per-market assessment. At 300s it was killed mid-assessment on
+// every real run, so nothing ever persisted. Fluid compute allows 800.
+export const maxDuration = 800;
 export const dynamic = "force-dynamic";
 
 const CriteriaSchema = z
@@ -156,15 +159,11 @@ export async function POST(req: Request) {
         { runBenchmarkingAgent },
         { runPartnerAgent },
         { runNegotiationAgent },
-        { runSynthesisAgent },
-        { runExecutionPlanAgent },
         { runOutLicensingStrategyAgent },
       ] = await Promise.all([
         import("@/server/agents/benchmarking"),
         import("@/server/agents/partner"),
         import("@/server/agents/negotiation"),
-        import("@/server/agents/synthesis"),
-        import("@/server/agents/execution-plan"),
         import("@/server/agents/out-licensing-strategy"),
       ]);
 
@@ -176,8 +175,11 @@ export async function POST(req: Request) {
         { id: "negotiation", run: runNegotiationAgent },
       ];
 
-      // Send initial status for all agents (including synthesis, execution plan & out-licensing strategy)
-      const POST_AGENTS: AgentId[] = ["synthesis", "executionPlan", "outLicensingStrategy"];
+      // The assessment is the only post-barrier agent. Synthesis and the legacy
+      // execution plan used to run here too; nothing rendered synthesis at all,
+      // and the execution plan was superseded by the Execution pillar — two Opus
+      // calls per run whose output was thrown away.
+      const POST_AGENTS: AgentId[] = ["outLicensingStrategy"];
       for (const id of [...CORE_IDS, ...POST_AGENTS]) {
         const isPost = POST_AGENTS.includes(id);
         sendEvent({ agent: id, type: "status", status: "idle", message: isPost ? "Waiting for diagnosis & strategy..." : "Queued..." });
@@ -199,15 +201,11 @@ export async function POST(req: Request) {
         agents.map(agent => agent.run(intake, capturingSendEvent))
       );
 
-      // Run synthesis + execution plan + out-licensing strategy in PARALLEL
+      // The assessment, once the core agents have supplied its context.
       if (collectedResults.length > 0) {
-        await Promise.allSettled([
-          runSynthesisAgent(intake, collectedResults, sendEvent),
-          runExecutionPlanAgent(intake, collectedResults, sendEvent),
-          runOutLicensingStrategyAgent(intake, collectedResults, sendEvent),
-        ]);
+        await runOutLicensingStrategyAgent(intake, collectedResults, sendEvent);
       } else {
-        for (const id of ["synthesis", "executionPlan", "outLicensingStrategy"] as AgentId[]) {
+        for (const id of ["outLicensingStrategy"] as AgentId[]) {
           sendEvent({ agent: id, type: "error", error: "No agent results to synthesize — all upstream agents failed." });
           sendEvent({ agent: id, type: "status", status: "error", message: "No upstream results available" });
         }
@@ -224,14 +222,13 @@ export async function POST(req: Request) {
       // response completes — anything awaited after that never lands.
 
       // Persist the Run spine row: the assessment maps into the Diagnosis
-      // envelope; the execution-plan output rides along for the later pillar.
+      // envelope. Execution is written by its own pillar, never from here.
       try {
         const runId = await runRowPromise;
         if (runId) {
           const { mapReportToDiagnosis } = await import("@/server/services/run-mapper");
           const innovativeCapture = captured["innovativeDiagnosis"];
           const strategyCapture = captured["outLicensingStrategy"];
-          const executionCapture = captured["executionPlan"];
           const report = (strategyCapture?.result as { report?: unknown } | undefined)?.report;
           // The innovative agent emits the Diagnosis envelope directly; the
           // off-patent report is mapped into it.
@@ -243,9 +240,6 @@ export async function POST(req: Request) {
             data: {
               status: diagnosis ? "diagnosed" : "error",
               diagnosis: (diagnosis ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-              execution: executionCapture?.result
-                ? ({ legacy: { agent: "executionPlan", result: (executionCapture.result as { plan?: unknown }).plan ?? executionCapture.result } } as Prisma.InputJsonValue)
-                : Prisma.JsonNull,
               log: runLog as Prisma.InputJsonValue,
               error: diagnosis
                 ? null
