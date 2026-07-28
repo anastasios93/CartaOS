@@ -3,7 +3,7 @@
 import { useReducer, useCallback, useRef } from "react";
 import type { HubIntakeForm, AgentId, AgentState, AgentsMap, SSEEvent } from "@/types/hub";
 
-const AGENT_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "synthesis", "executionPlan", "outLicensingStrategy", "innovativeDiagnosis"];
+const AGENT_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "synthesis", "executionPlan", "outLicensingStrategy", "innovativeDiagnosis", "strategy"];
 
 const initialAgentState: AgentState = {
   status: "idle",
@@ -55,7 +55,8 @@ export function useAgentStream() {
   const isRunningRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const deploy = useCallback(async (form: HubIntakeForm) => {
+  // Strategy runs post to their own endpoint but stream the same event shape.
+  const deploy = useCallback(async (form: HubIntakeForm, endpoint = "/api/orchestrator") => {
     if (isRunningRef.current) return;
     isRunningRef.current = true;
     dispatch({ type: "reset" });
@@ -64,7 +65,7 @@ export function useAgentStream() {
     abortRef.current = controller;
 
     try {
-      const res = await fetch("/api/orchestrator", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
