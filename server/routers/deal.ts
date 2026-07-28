@@ -49,16 +49,6 @@ export const dealRouter = router({
       return { items, nextCursor };
     }),
 
-  getById: protectedProcedure.input(z.string()).query(async ({ ctx, input }) => {
-    const ownerScope = await getOwnerScope(ctx);
-    const deal = await ctx.db.deal.findFirst({
-      where: { id: input, ...ownerScope },
-      include: { tags: true, clauses: true, licensor: true, licensee: true, comparisons: true },
-    });
-    if (!deal) throw new Error("Not found");
-    return deal;
-  }),
-
   create: protectedProcedure
     .input(
       z.object({
@@ -91,66 +81,4 @@ export const dealRouter = router({
       });
     }),
 
-  filterOptions: protectedProcedure.query(async ({ ctx }) => {
-    const [indications, territories, licensors, licensees] = await Promise.all([
-      ctx.db.deal.findMany({
-        select: { indication: true },
-        distinct: ["indication"],
-        where: { indication: { not: null } },
-      }),
-      ctx.db.deal.findMany({
-        select: { territoryScope: true },
-        distinct: ["territoryScope"],
-        where: { territoryScope: { not: null } },
-      }),
-      ctx.db.deal.findMany({
-        select: { licensorName: true },
-        distinct: ["licensorName"],
-      }),
-      ctx.db.deal.findMany({
-        select: { licenseeName: true },
-        distinct: ["licenseeName"],
-      }),
-    ]);
-
-    const companySet = new Set<string>();
-    licensors.forEach((r) => companySet.add(r.licensorName));
-    licensees.forEach((r) => companySet.add(r.licenseeName));
-
-    return {
-      indications: indications
-        .map((i) => i.indication)
-        .filter(Boolean)
-        .sort() as string[],
-      territories: territories
-        .map((t) => t.territoryScope)
-        .filter(Boolean)
-        .sort() as string[],
-      companies: [...companySet].sort(),
-    };
-  }),
-
-  stats: protectedProcedure.query(async ({ ctx }) => {
-    const [totalDeals, dealsByType, dealsByStage, recentDeals] = await Promise.all([
-      ctx.db.deal.count(),
-      ctx.db.deal.groupBy({ by: ["dealType"], _count: true }),
-      ctx.db.deal.groupBy({ by: ["developmentStage"], _count: true }),
-      ctx.db.deal.findMany({
-        take: 5,
-        orderBy: { announcedDate: "desc" },
-        select: {
-          id: true,
-          title: true,
-          dealType: true,
-          licensorName: true,
-          licenseeName: true,
-          upfrontPayment: true,
-          totalDealValue: true,
-          announcedDate: true,
-        },
-      }),
-    ]);
-
-    return { totalDeals, dealsByType, dealsByStage, recentDeals };
-  }),
 });

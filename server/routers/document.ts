@@ -58,27 +58,6 @@ export const documentRouter = router({
     });
   }),
 
-  // ─── Get a single document by ID (with ownership check) ──────────────────
-  getById: protectedProcedure
-    .input(z.string())
-    .query(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-
-      const document = await ctx.db.document.findUnique({
-        where: { id: input },
-        include: { extractedDeal: true },
-      });
-
-      if (!document || document.userId !== userId) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Document not found",
-        });
-      }
-
-      return document;
-    }),
-
   // ─── Extract deal terms from the document using Claude ────────────────────
   extract: protectedProcedure
     .input(z.object({ documentId: z.string() }))

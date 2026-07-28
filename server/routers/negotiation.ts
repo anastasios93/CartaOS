@@ -71,30 +71,6 @@ export const negotiationRouter = router({
     return n;
   }),
 
-  create: protectedProcedure
-    .input(
-      z.object({
-        title: z.string().min(1),
-        companyId: z.string(),
-        orgId: z.string(),
-        proposedUpfront: z.number().optional(),
-        proposedMilestones: z.number().optional(),
-        proposedRoyaltyLow: z.number().optional(),
-        proposedRoyaltyHigh: z.number().optional(),
-        proposedTerritory: z.string().optional(),
-        targetCloseDate: z
-          .string()
-          .transform((s) => new Date(s))
-          .optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      return ctx.db.negotiation.create({
-        data: { ...input, ownerId: ctx.session.user.id },
-        include: { company: true },
-      });
-    }),
-
   updateStatus: protectedProcedure
     .input(
       z.object({

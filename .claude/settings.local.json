@@ -47,7 +47,18 @@
       "Read(//tmp/**)",
       "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/9/merge -d '{\"merge_method\":\"merge\"}')",
       "Bash(npx vercel *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/10/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(grep -rn \"href=\\\\\"/\\\\|push\\(\\\\\"/\\\\|replace\\(\\\\\"/\\\\|href={\\\\`/\" app components --include=*.tsx -o)",
+      "Bash(sort -t: -k1)",
+      "Bash(grep -oE '\\\\.[a-zA-Z]+\\\\.[a-zA-Z]+$')",
+      "Bash(python -)",
+      "Bash(awk 'NR>=230 && NR<=501 && /`/ {print NR\": \"$0}' \"app/\\(dashboard\\)/deals/page.tsx\")",
+      "Bash(grep -n \"companies/\\\\${\" \"app/\\(dashboard\\)/companies/page.tsx\" \"app/\\(dashboard\\)/workspace/[id]/page.tsx\")",
+      "Bash(python -c \"import json;d=json.load\\(open\\('package.json'\\)\\);print\\('valid JSON'\\);print\\([k for k in d['dependencies'] if 'azure' in k or 'microsoft' in k] or 'no azure/ms deps'\\)\")",
+      "Bash(./node_modules/.bin/eslint \"app/\\(dashboard\\)/deals/page.tsx\" \"app/\\(dashboard\\)/settings/page.tsx\" \"app/\\(dashboard\\)/companies/page.tsx\" server/routers/ server/services/claude.ts)",
+      "Bash(grep -oE \"[a-z@/-]+$\")",
+      "Bash(./node_modules/.bin/eslint \"app/\\(dashboard\\)/page.tsx\" \"app/\\(dashboard\\)/layout.tsx\" components/app-sidebar.tsx)"
     ]
   }
 }

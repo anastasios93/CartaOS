@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Users,
   FolderKanban,
-  Search,
   Settings,
   LogOut,
   Rocket,
@@ -79,14 +78,6 @@ const execution = [
     title: "Deal Workspace",
     href: "/workspace",
     icon: FolderKanban,
-  },
-];
-
-const tools = [
-  {
-    title: "Live Search",
-    href: "/search",
-    icon: Search,
   },
 ];
 
@@ -176,7 +167,6 @@ export function AppSidebar() {
         <NavGroup label="Diagnosis" items={diagnosis} isActive={isActive} />
         <NavGroup label="Strategy" items={strategy} isActive={isActive} />
         <NavGroup label="Execution" items={execution} isActive={isActive} />
-        <NavGroup label="Tools" items={tools} isActive={isActive} />
         {session?.user?.isAdmin && (
           <NavGroup
             label="Admin"

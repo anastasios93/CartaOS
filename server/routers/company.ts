@@ -45,22 +45,6 @@ export const companyRouter = router({
       return { items, nextCursor };
     }),
 
-  getById: protectedProcedure.input(z.string()).query(async ({ ctx, input }) => {
-    const ownerScope = await getOwnerScope(ctx);
-    const company = await ctx.db.company.findFirst({
-      where: { id: input, ...ownerScope },
-      include: {
-        contacts: true,
-        dealsAsLicensor: { take: 10, orderBy: { announcedDate: "desc" } },
-        dealsAsLicensee: { take: 10, orderBy: { announcedDate: "desc" } },
-        pipelineAssets: true,
-        negotiations: { take: 5, orderBy: { updatedAt: "desc" } },
-      },
-    });
-    if (!company) throw new Error("Not found");
-    return company;
-  }),
-
   create: protectedProcedure
     .input(
       z.object({
@@ -78,28 +62,4 @@ export const companyRouter = router({
         data: { ...input, ownerId: ctx.session.user.id },
       });
     }),
-
-  update: protectedProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        partnerStatus: z.enum(["IDENTIFIED", "CONTACTED", "IN_DISCUSSION", "ACTIVE", "DECLINED"]).optional(),
-        notes: z.string().optional(),
-        nextAction: z.string().optional(),
-        nextActionDate: z.string().transform((s) => new Date(s)).optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const { id, ...data } = input;
-      return ctx.db.company.update({ where: { id }, data });
-    }),
-
-  stats: protectedProcedure.query(async ({ ctx }) => {
-    const [totalCompanies, byType, byStatus] = await Promise.all([
-      ctx.db.company.count(),
-      ctx.db.company.groupBy({ by: ["type"], _count: true }),
-      ctx.db.company.groupBy({ by: ["partnerStatus"], _count: true }),
-    ]);
-    return { totalCompanies, byType, byStatus };
-  }),
 });

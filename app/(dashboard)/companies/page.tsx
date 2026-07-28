@@ -134,12 +134,7 @@ export default function CompaniesPage() {
                 {companies.data.items.map((company) => (
                   <TableRow key={company.id}>
                     <TableCell>
-                      <Link
-                        href={`/companies/${company.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {company.name}
-                      </Link>
+                      <span className="font-medium">{company.name}</span>
                       {company.headquarters && (
                         <p className="text-xs text-muted-foreground">{company.headquarters}</p>
                       )}
