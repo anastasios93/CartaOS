@@ -15,7 +15,7 @@
  * inputs it needs — never a zero, never a dash that reads like a real figure.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   modelAllRoutes,
   runScenarios,
@@ -30,12 +30,12 @@ import {
 import { routesFor } from "@/config/routes";
 import { countryByCode } from "@/config/geographies";
 import { EvidenceList } from "@/components/run/evidence-badge";
-import { exportStrategyPDF } from "@/lib/exports";
+import { exportStrategyPDF, exportStrategyPPTX, type ExportOptions } from "@/lib/exports";
+import { ExportMenu, type ExportFormat } from "@/components/run/export-menu";
 import type { Assumption, EvidenceItem, PartnerCandidate, Strategy, StrategyRoute } from "@/types/run";
 import {
   ChevronDown,
   Download,
-  FileDown,
   GitBranch,
   ListOrdered,
   RotateCcw,
@@ -478,12 +478,16 @@ export function StrategyResults({
 
   const [draft, setDraft] = useState<Record<string, string>>(initialDraft);
   const [delta, setDelta] = useState(20);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
 
   // A new strategy (live result, reopened run, or a switch to manual entry)
-  // resets the panel to what was modelled.
-  useEffect(() => setDraft(initialDraft), [initialDraft]);
+  // resets the panel to what was modelled. Adjusted during render rather than
+  // in an effect: an effect would render the old draft against the new strategy
+  // for one frame, and the React Compiler rejects setState inside one.
+  const [seenStrategy, setSeenStrategy] = useState(initialDraft);
+  if (seenStrategy !== initialDraft) {
+    setSeenStrategy(initialDraft);
+    setDraft(initialDraft);
+  }
 
   const edited = useMemo(
     () => Object.keys(initialDraft).some((k) => (draft[k] ?? "") !== initialDraft[k]),
@@ -591,16 +595,10 @@ export function StrategyResults({
     downloadBlob(lines.join("\n"), `${safeName(assetName)}_strategy.csv`, "text/csv;charset=utf-8;");
   };
 
-  const downloadPdf = async () => {
-    setExporting(true);
-    setExportError(null);
-    try {
-      await exportStrategyPDF(editedStrategy, branch, assetName);
-    } catch (err) {
-      setExportError(err instanceof Error ? err.message : "Export failed");
-    } finally {
-      setExporting(false);
-    }
+  /** The menu owns busy state and error reporting; this just does the work. */
+  const runExport = async (format: ExportFormat, options: ExportOptions) => {
+    if (format === "pptx") await exportStrategyPPTX(editedStrategy, branch, assetName, options);
+    else await exportStrategyPDF(editedStrategy, branch, assetName, options);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -679,19 +677,10 @@ export function StrategyResults({
             <Download className="h-3.5 w-3.5" aria-hidden="true" />
             Download data (CSV)
           </button>
-          <button
-            type="button"
-            onClick={downloadPdf}
-            disabled={exporting}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#F97316] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-[#EA580C] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50"
-          >
-            <FileDown className="h-3.5 w-3.5" aria-hidden="true" />
-            {exporting ? "Preparing…" : "Download summary (PDF)"}
-          </button>
+          <ExportMenu onExport={runExport} showMarkets={false} label="Export report" />
           <span className="text-[11px] text-muted-foreground">
             Exports carry the assumptions as they stand right now, edits included.
           </span>
-          {exportError && <span className="text-[11px] font-medium text-red-700">{exportError}</span>}
         </div>
       </section>
 
