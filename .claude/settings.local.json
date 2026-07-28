@@ -43,7 +43,11 @@
       "Bash(cd \"C:/Users/anast/cartaos/.claude/worktrees/competent-gauss-b9c64b\" && grep -n \"^\\\\.env\" .gitignore | head -3 && cp \"C:/Users/anast/cartaos/.env\" .env && echo \"copied\" && git status --short | grep -i env || echo \"\\(.env not tracked - good\\)\")",
       "Bash(grep -o \"hidden[^,;]\\\\{0,80\\\\}\" node_modules/@base-ui/react/tabs/panel/TabsPanel.js)",
       "Bash(grep -o \"keepMounted[^,;]\\\\{0,90\\\\}\" node_modules/@base-ui/react/tabs/panel/TabsPanel.js)",
-      "Bash(grep -o \"const mounted[^;]\\\\{0,160\\\\}\\\\|let mounted[^;]\\\\{0,160\\\\}\\\\|selectedValue[^,;\\)]\\\\{0,80\\\\}\" node_modules/@base-ui/react/tabs/panel/TabsPanel.js)"
+      "Bash(grep -o \"const mounted[^;]\\\\{0,160\\\\}\\\\|let mounted[^;]\\\\{0,160\\\\}\\\\|selectedValue[^,;\\)]\\\\{0,80\\\\}\" node_modules/@base-ui/react/tabs/panel/TabsPanel.js)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/9/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(npx vercel *)",
+      "Bash(git stash *)"
     ]
   }
 }
