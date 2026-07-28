@@ -37,38 +37,32 @@ export const SOURCES: SourceDef[] = [
   // ── Regulatory / approvals / labels ────────────────────────────────────────
   { id: "drugsfda", label: "Drugs@FDA (openFDA)", module: "adapters/drugsfda", coverage: ["US"], tier: 1, notes: "404 on no-match must map to null, not throw." },
   { id: "dailymed", label: "DailyMed SPLs", module: "adapters/dailymed", coverage: ["US"], tier: 1 },
-  { id: "orange_book", label: "FDA Orange Book", module: "orange-book", coverage: ["US"], tier: 1 },
+  { id: "orange_book", label: "FDA Orange Book (openFDA)", module: "orange-book", coverage: ["US"], tier: 1, notes: "orangebook.json: search products.active_ingredients.name; patents[]/exclusivity[] at record level; 404 = no match." },
+  { id: "openfda_shortages", label: "openFDA Drug Shortages", module: "fda-shortages", coverage: ["US"], tier: 1, notes: "Search must be field-scoped (generic_name:\"X\"); bare terms 404." },
   { id: "openfda_faers", label: "openFDA adverse events", module: "fda-adverse-events", coverage: ["US"], tier: 2 },
   { id: "ema", label: "EMA medicines", module: "ema", coverage: ["DE", "FR", "IT", "ES", "NL", "BE", "AT", "PT", "IE", "PL", "CZ", "HU", "RO", "BG", "SK", "SI", "HR", "GR", "EE", "LV", "LT", "CY", "MT", "LU", "SE", "DK", "FI"], tier: 1 },
   { id: "cima_spain", label: "AEMPS CIMA (Spain)", module: "cima-spain", coverage: ["ES"], tier: 1 },
   { id: "health_canada", label: "Health Canada DPD", module: "health-canada", coverage: ["CA"], tier: 1 },
-  { id: "ema_spor", label: "EMA SPOR", module: "ema-spor", coverage: "global", tier: 1, envKey: "EMA_SPOR_API_KEY", notes: "Contract uncertain — scaffold; confirm against provider docs before relying on it." },
 
   // ── IP / exclusivity ───────────────────────────────────────────────────────
-  { id: "uspto_patentsview", label: "USPTO PatentsView", module: "uspto-patentsview", coverage: ["US"], tier: 1, envKey: "PATENTSVIEW_API_KEY" },
-  { id: "epo_ops", label: "EPO OPS", module: "epo-ops", coverage: ["DE", "FR", "IT", "ES", "GB", "NL", "BE", "AT", "CH", "PT", "IE", "PL", "SE", "DK", "NO", "FI", "TR"], tier: 1, envKey: "EPO_OPS_KEY" },
-  { id: "the_lens", label: "The Lens", module: "the-lens", coverage: "global", tier: 2, envKey: "LENS_API_TOKEN" },
   { id: "patents_generic", label: "Patent search (generic)", module: "patents", coverage: "global", tier: 2 },
 
   // ── Pricing / reimbursement / procurement ──────────────────────────────────
   { id: "nadac", label: "CMS NADAC", module: "adapters/nadac", coverage: ["US"], tier: 1, notes: "Generic (SCD) NDCs have dense coverage; brand (SBD) sparse — sample SCD first." },
   { id: "part_d_spending", label: "CMS Part D spending", module: "adapters/part-d", coverage: ["US"], tier: 1, notes: "keyword param works; Drupal-style filter[] is silently ignored." },
-  { id: "part_d_geography", label: "CMS Part D by geography", module: "adapters/part-d-geo", coverage: ["US"], tier: 1, notes: "National and state rows share one response — split on Prscrbr_Geo_Lvl; filter non-commercial geos." },
+  { id: "part_d_geography", label: "CMS Part D by geography", module: "adapters/part-d-geo", coverage: ["US"], tier: 1, notes: "UUID dataset path is the working contract — the named alias path 404s. National and state rows share one response; filter non-commercial geos." },
   { id: "cms_pricing", label: "CMS Medicaid pricing", module: "cms-pricing", coverage: ["US"], tier: 1 },
-  { id: "nice_uk", label: "NICE (UK)", module: "nice-uk", coverage: ["GB"], tier: 1, envKey: "NICE_API_KEY" },
-  { id: "pbs_australia", label: "PBS (Australia)", module: "pbs-australia", coverage: ["AU"], tier: 1, envKey: "PBS_SUBSCRIPTION_KEY" },
+  { id: "nhs_openprescribing", label: "NHS OpenPrescribing (England)", module: "nhs-openprescribing", coverage: ["GB"], tier: 1, notes: "Cloudflare-fronted — client returns null on a challenge page, rendering 'no source connected'." },
 
   // ── Epidemiology / burden / demand ─────────────────────────────────────────
   { id: "who_gho", label: "WHO GHO", module: "who-gho", coverage: "global", tier: 1 },
   { id: "who_eml", label: "WHO essential medicines (nEML)", module: "adapters/who-eml", coverage: "global", tier: 1, notes: "GraphQL only; ATC fields empty on all records — match on canonical ingredient name." },
-  { id: "ihme_gbd", label: "IHME GBD", module: "ihme-gbd", coverage: "global", tier: 2, envKey: "IHME_GBD_API_KEY" },
 
   // ── Clinical / scientific evidence ─────────────────────────────────────────
   { id: "clinical_trials", label: "ClinicalTrials.gov", module: "clinical-trials", coverage: "global", tier: 1 },
   { id: "open_targets", label: "Open Targets", module: "open-targets", coverage: "global", tier: 2 },
   { id: "pubmed", label: "PubMed", module: "pubmed", coverage: "global", tier: 2 },
   { id: "europe_pmc", label: "Europe PMC", module: "europe-pmc", coverage: "global", tier: 2 },
-  { id: "semantic_scholar", label: "Semantic Scholar", module: "semantic-scholar", coverage: "global", tier: 3, envKey: "SEMANTIC_SCHOLAR_API_KEY", notes: "Key optional — works keyless at low rate limits." },
   { id: "openalex", label: "OpenAlex", module: "openalex", coverage: "global", tier: 3 },
   { id: "crossref", label: "Crossref", module: "crossref", coverage: "global", tier: 3 },
   { id: "openaire", label: "OpenAIRE", module: "openaire", coverage: "global", tier: 3 },
