@@ -100,7 +100,11 @@
       "Bash(cp lib/exports.ts /tmp/exports.bak)",
       "Bash(sed -i 's/^const BLOCK_GAP = 0.18;.*/const BLOCK_GAP = -0.45;/' lib/exports.ts)",
       "Bash(awk '{print $5\" bytes  \"$NF}')",
-      "Bash(node C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/pdftext.cjs C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/real_diagnosis.pdf C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/pdf-text.txt)"
+      "Bash(node C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/pdftext.cjs C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/real_diagnosis.pdf C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/pdf-text.txt)",
+      "Bash(sed -i 's|console.log\\(`PDF \\\\${doc.label}: summary \\\\${summaryPages}pp / full \\\\${fullPages}pp`\\);|process.stderr.write\\(`\\\\\\\\nPDF ${doc.label}: summary ${summaryPages}pp / full ${fullPages}pp\\\\\\\\n`\\);|' tests/export-layout.test.ts)",
+      "Bash(sed -i 's|console.log\\(`PPTX \\\\${deck.label}: summary \\\\${summary.length} slides / full \\\\${full.length} slides`\\);|process.stderr.write\\(`\\\\\\\\nPPTX ${deck.label}: summary ${summary.length} slides / full ${full.length} slides\\\\\\\\n`\\);|' tests/export-layout.test.ts)",
+      "Bash(grep -n 'sectionTitle\\(\\\\s*$' lib/exports.ts)",
+      "Bash(cp lib/exports.ts /tmp/e.bak)"
     ]
   }
 }

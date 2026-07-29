@@ -19,10 +19,30 @@ import type { Strategy, Diagnosis, DimensionScore, MarketScore, EvidenceItem } f
 import { OFF_PATENT_DIMENSIONS, INNOVATIVE_DIMENSIONS } from "@/config/dimensions";
 import { countryByCode } from "@/config/geographies";
 
-/** What the user chose to include. Both default to true. */
+/** What the user chose to include. All default to true. */
 export interface ExportOptions {
+  /** Per-market detail in the appendix. */
   includeMarkets?: boolean;
+  /** Evidence tables in the appendix. */
   includeEvidence?: boolean;
+  /** Detail behind the summary. Default true; false yields a summary-only file. */
+  includeAppendix?: boolean;
+}
+
+/**
+ * Every deliverable is built in two parts: a short decision-ready summary a
+ * reader can stop at, and — behind one unmistakable divider — the full detail
+ * the summary was drawn from. Appendix sections are numbered A1, A2, … so the
+ * reader always knows which part they are in, and the word "Appendix" itself is
+ * reserved for the divider so it stays findable.
+ */
+const APPENDIX_LINE =
+  "Everything the summary is drawn from: per-market detail, all ten levers, the evidence and the sources.";
+
+/** Numbers appendix sections in emission order: A1, A2, A3 … */
+function appendixCounter(): (label: string) => string {
+  let n = 0;
+  return (label: string) => `A${++n} — ${label}`;
 }
 
 // ─── Brand & design tokens ───────────────────────────────────────────────────
@@ -389,6 +409,39 @@ function sectionTitle(state: PdfState, eyebrow: string, title: string, takeaway?
   doc.setLineWidth(0.75);
   doc.line(margin, state.y + 6, state.pageWidth - margin, state.y + 6);
   state.y += 20;
+}
+
+/**
+ * The one page that separates the decision-ready summary from the detail. It
+ * always starts a fresh page and always says what is behind it, so a reader who
+ * stops at the summary knows exactly what they are choosing not to read.
+ */
+function appendixDivider(state: PdfState) {
+  newPage(state);
+  const { doc, margin } = state;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(state.accent);
+  doc.text("PART 2 OF 2", margin, state.y, { charSpace: 2 });
+
+  doc.setFontSize(30);
+  doc.setTextColor(INK);
+  doc.text("Appendix", margin, state.y + 40);
+  state.y += 40 + 16;
+
+  doc.setDrawColor(GOLD);
+  doc.setLineWidth(1.5);
+  doc.line(margin, state.y, margin + 64, state.y);
+  state.y += 22;
+
+  paragraph(state, APPENDIX_LINE, 11, MUTED);
+  paragraph(
+    state,
+    "Sections are numbered A1 onwards. Nothing in the summary is missing from here; everything here is the basis for something in the summary.",
+    9.5,
+    MUTED,
+  );
 }
 
 function lead(state: PdfState, text: string) {
@@ -1232,14 +1285,17 @@ export async function buildStrategyPdf(
   const required = branch === "off_patent" ? engine.OFF_PATENT_REQUIRED : engine.INNOVATIVE_REQUIRED;
   const results = engine.modelAllRoutes(branch, values);
   const byKey = new Map(results.map((r) => [r.key, r]));
-  const best = engine.recommendRoute(results);
+  const routes = Array.isArray(strategy.routes) ? strategy.routes : [];
+  /** Fit gates which route may be recommended; economics rank the survivors. */
+  const fit = Object.fromEntries(routes.map((r) => [r.key, r.score] as [string, number | null | undefined]));
+  const recommendation = engine.recommend(results, fit);
+  const best = recommendation?.route ?? null;
   const scen = engine.runScenarios(branch, values, 20);
   const scenNpv = (set: typeof scen.base, key: string) => {
     const r = set.find((x) => x.key === key);
     return r && r.computable ? compactUsd(r.npv) : "n/a";
   };
   const sens = best ? engine.sensitivity(branch, values, best.key, 20).slice(0, 6) : [];
-  const routes = Array.isArray(strategy.routes) ? strategy.routes : [];
   const recommendedKey = best?.key ?? sText(strategy.recommendedRoute);
   const recommended = routes.find((r) => r.key === recommendedKey);
   const missing = required.filter((k) => !Number.isFinite(values[k]));
@@ -1247,17 +1303,24 @@ export async function buildStrategyPdf(
 
   const computable = routes.filter((r) => byKey.get(r.key)?.computable);
   const uncomputable = routes.filter((r) => byKey.get(r.key)?.computable === false);
+  const partners = Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [];
+  const includeAppendix = opts?.includeAppendix !== false;
+  const routeLabel = (key: string) =>
+    sText(routes.find((r) => r.key === key)?.label) || sText(byKey.get(key)?.label) || key;
 
   coverPage(
     state,
     `${branchLabel} Route Strategy`,
-    recommended
-      ? `${recommended.label} is the route that realises the most value`
+    best
+      ? `${sText(recommended?.label) || routeLabel(best.key)} is the route that realises the most value`
       : "Route comparison and modelled economics",
     "Every commercialisation and partnering route modelled from one assumption set — NPV, IRR, break-even and the dependency that would break the plan",
     assetName,
     [
-      { label: "Recommended route", value: recommended?.label ?? "Not computable" },
+      // The engine can recommend a route the narrated payload never described.
+      // Fall back to the engine's own label rather than reporting the
+      // recommendation itself as not computable while printing its NPV below.
+      { label: "Recommended route", value: sText(recommended?.label) || (best ? routeLabel(best.key) : "Not computable") },
       { label: "Modelled NPV", value: best ? compactUsd(best.npv) : "n/a" },
       { label: "Break-even", value: best?.breakEvenYear != null ? `Year ${best.breakEvenYear}` : "n/a" },
       { label: "Routes modelled", value: `${computable.length} of ${routes.length}` },
@@ -1271,6 +1334,52 @@ export async function buildStrategyPdf(
     MUTED,
   );
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 1 — EXECUTIVE SUMMARY. Short enough to stop here.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  sectionTitle(
+    state,
+    "Executive summary",
+    best
+      ? `${sText(recommended?.label) || routeLabel(best.key)} is the route to commit to`
+      : "No route can be modelled on the current assumptions",
+    best
+      ? [
+          `Modelled NPV ${compactUsd(best.npv)}`,
+          `IRR ${best.irr != null ? `${best.irr.toFixed(1)}%` : "n/a"}`,
+          `break-even ${best.breakEvenYear != null ? `year ${best.breakEvenYear}` : "never within the horizon"}`,
+          `${computable.length} of ${routes.length} routes modelled`,
+        ].join("   ·   ")
+      : `Missing inputs: ${missing.map(labelOf).join(", ") || "none recorded"}`,
+  );
+  if (recommendation?.lowFit) {
+    tinyLabel(state, "No route cleared the fit bar");
+    paragraph(
+      state,
+      "No route was judged actually open to this asset. The figures above are the best economics available, not a route to execute — read them as a ceiling on value.",
+      10.5,
+      NEG,
+    );
+  }
+  if (best) {
+    const summaryDependency = sText(recommended?.keyDependency) || sText(best.keyDependency);
+    if (summaryDependency) {
+      tinyLabel(state, "Key dependency — what would break this plan");
+      paragraph(state, summaryDependency);
+    }
+  } else {
+    paragraph(
+      state,
+      "Until those inputs are supplied no route has an economic case at all, and nothing below should be read as one.",
+      10.5,
+      NEG,
+    );
+  }
+  if (includeAppendix) {
+    paragraph(state, "Full route economics, every assumption and the evidence behind them are in the appendix.", 9.5, MUTED);
+  }
+
   // ── What to do next ───────────────────────────────────────────────────────
   const nextSteps = strategyNextActions({
     recommended,
@@ -1279,7 +1388,7 @@ export async function buildStrategyPdf(
     missing,
     labelOf,
     sens,
-    partners: Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [],
+    partners,
     assumptions,
     uncomputable,
     strategy,
@@ -1305,11 +1414,117 @@ export async function buildStrategyPdf(
     }, autoTable);
   }
 
+  // ── Route comparison — the top four, on the three figures that decide it ──
+  const summaryRoutes = computable
+    .slice()
+    .sort((a, b) => {
+      const ea = byKey.get(a.key);
+      const eb = byKey.get(b.key);
+      return ((eb?.computable ? eb.npv : 0) ?? 0) - ((ea?.computable ? ea.npv : 0) ?? 0);
+    })
+    .slice(0, 4);
+  if (summaryRoutes.length) {
+    sectionTitle(
+      state,
+      "Route comparison",
+      summaryRoutes.length === 1
+        ? "One route clears the model on the current assumptions"
+        : `The ${summaryRoutes.length} strongest routes on one assumption set`,
+      computable.length > summaryRoutes.length || uncomputable.length
+        ? "The strongest routes by modelled NPV. Every route, including those still missing an input, is in the appendix."
+        : "Score is the fit read for this asset; NPV, IRR and break-even are model output.",
+    );
+    table(state, {
+      head: [["Route", "Fit", "NPV", "IRR", "Break-even"]],
+      body: summaryRoutes.map((r) => {
+        const e = byKey.get(r.key);
+        const econ = e && e.computable ? e : null;
+        return [
+          r.label + (r.key === recommendedKey ? "  (recommended)" : ""),
+          r.score != null ? String(r.score) : "n/a",
+          compactUsd(econ?.npv),
+          econ?.irr != null ? `${econ.irr.toFixed(1)}%` : "n/a",
+          econ?.breakEvenYear != null ? `Year ${econ.breakEvenYear}` : "never",
+        ];
+      }),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 190 },
+        1: { halign: "right", cellWidth: 50 },
+        2: { halign: "right", fontStyle: "bold", textColor: POS },
+        3: { halign: "right" },
+        4: { halign: "center" },
+      },
+    }, autoTable);
+  }
+
+  // ── The assumptions that decide the answer ────────────────────────────────
+  const dominant = sens.slice(0, 3);
+  if (dominant.length && best) {
+    sectionTitle(
+      state,
+      "What the answer turns on",
+      `${labelOf(dominant[0].key)} dominates the outcome — settle it first`,
+      `Each driver moved ±20% on its own against ${sText(recommended?.label) || routeLabel(best.key)}. These are the inputs worth arguing about; the rest barely move the answer.`,
+    );
+    table(state, {
+      head: [["Variable", "NPV swing across ±20%", "Basis today"]],
+      body: dominant.map((s) => [
+        labelOf(s.key),
+        compactUsd(s.swing),
+        assumptions.find((a) => a.key === s.key)?.basis === "sourced" ? "Sourced" : "Assumed — not sourced",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 200 },
+        1: { halign: "right", fontStyle: "bold", textColor: POS, cellWidth: 150 },
+        2: { textColor: MUTED },
+      },
+    }, autoTable);
+  }
+
+  // ── Partner shortlist — the three to open with ────────────────────────────
+  if (partners.length) {
+    const shortlist = partners.slice(0, 3);
+    sectionTitle(
+      state,
+      "Counterparties",
+      `Open with ${sText(shortlist[0]?.name) || "the top-ranked counterparty"}`,
+      partners.length > shortlist.length
+        ? `The three highest-fit counterparties; the full shortlist of ${partners.length} is in the appendix.`
+        : "Ranked by fit against this asset and this route.",
+    );
+    table(state, {
+      head: [["#", "Partner", "Type", "Fit", "Why them"]],
+      body: shortlist.map((p, i) => [
+        String(i + 1),
+        p.name,
+        sText(p.kind) || "—",
+        p.score != null ? String(p.score) : "n/a",
+        truncate(sText(p.rationale), 130) || "Not stated",
+      ]),
+      columnStyles: {
+        0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 24 },
+        1: { fontStyle: "bold", textColor: INK, cellWidth: 110 },
+        2: { cellWidth: 90, textColor: MUTED },
+        3: { halign: "right", cellWidth: 36 },
+        4: { textColor: BODY },
+      },
+    }, autoTable);
+  }
+
+  // A summary-only file stops here: no divider, no appendix.
+  if (!includeAppendix) return state.doc;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 2 — APPENDIX
+  // ══════════════════════════════════════════════════════════════════════════
+  appendixDivider(state);
+  const ax = appendixCounter();
+
   // ── Recommendation ────────────────────────────────────────────────────────
   sectionTitle(
     state,
-    "Recommendation",
-    recommended?.label ?? "No route is computable on the current assumptions",
+    ax("Recommendation"),
+    sText(recommended?.label) || (best ? routeLabel(best.key) : "No route is computable on the current assumptions"),
     best
       ? `NPV ${compactUsd(best.npv)} · IRR ${best.irr != null ? `${best.irr.toFixed(1)}%` : "n/a"} · break-even ${best.breakEvenYear != null ? `year ${best.breakEvenYear}` : "never within the horizon"} · peak revenue ${compactUsd(best.peakRevenue)}`
       : `Missing inputs: ${missing.map(labelOf).join(", ") || "none recorded"}`,
@@ -1334,7 +1549,7 @@ export async function buildStrategyPdf(
   // ── Route comparison ──────────────────────────────────────────────────────
   sectionTitle(
     state,
-    "Route Comparison",
+    ax("Route comparison"),
     "Every route, one assumption set",
     "Score is the fit read for this asset at this stage; all financial figures are model output.",
   );
@@ -1393,7 +1608,7 @@ export async function buildStrategyPdf(
   newPage(state);
   sectionTitle(
     state,
-    "Assumptions",
+    ax("Assumptions"),
     "What every figure above rests on",
     "Sourced assumptions carry a citation; assumed ones are the model's own estimate and are the first thing to challenge.",
   );
@@ -1429,7 +1644,7 @@ export async function buildStrategyPdf(
   if (sens.length && best) {
     sectionTitle(
       state,
-      "Sensitivity",
+      ax("Sensitivity"),
       sens[0] ? `${labelOf(sens[0].key)} dominates the outcome` : "Which variables dominate the outcome",
       `Each driver moved ±20% on its own, everything else held, against ${best.label}.`,
     );
@@ -1453,9 +1668,8 @@ export async function buildStrategyPdf(
   }
 
   // ── Partner shortlist ─────────────────────────────────────────────────────
-  const partners = Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [];
   if (partners.length) {
-    sectionTitle(state, "Counterparties", "Partner shortlist");
+    sectionTitle(state, ax("Counterparties"), "Partner shortlist");
     table(state, {
       head: [["#", "Partner", "Type", "Score", "Geographies", "Why them"]],
       body: partners.map((p, i) => [
@@ -1503,7 +1717,7 @@ export async function buildStrategyPdf(
       }
     }
     if (rows.length) {
-      sectionTitle(state, "Appendix", "Evidence behind the routes", "Every claim, and whether it is sourced or inferred.");
+      sectionTitle(state, ax("Evidence"), "Evidence behind the routes", "Every claim, and whether it is sourced or inferred.");
       table(state, {
         head: [["Route / partner", "Claim", "Kind", "Source"]],
         body: rows,
@@ -1904,6 +2118,113 @@ function leadRegion(f: OffPatentFacade): any | null {
   return ranked[0] ?? null;
 }
 
+// ── Executive-summary selections ────────────────────────────────────────────
+// The summary is a selection from the same payload the appendix renders in
+// full — never a separate, re-worded version of it. These helpers make that
+// selection once so the PDF and the deck cannot drift apart.
+
+/** The markets that lead the set: score-ranked, with the verdict and one line. */
+function summaryMarkets(
+  diagnosis: Diagnosis,
+  f: OffPatentFacade,
+  limit = 3,
+): { label: string; score: string; verdict: string; read: string }[] {
+  const perMarket: MarketScore[] = Array.isArray(diagnosis.perMarket) ? diagnosis.perMarket : [];
+  if (perMarket.length) {
+    return perMarket
+      .slice()
+      .sort(byScoreDesc)
+      .slice(0, limit)
+      .map((m) => ({
+        label: countryLabel(m.country),
+        score: scoreCell(m.score, (m as Record<string, unknown>).notComputable),
+        verdict: verdictLabel(m.verdict),
+        read: sText(m.summary) || "No read recorded",
+      }));
+  }
+  return f.regions
+    .slice()
+    .sort((a: any, b: any) => (b.worthiness?.score ?? b.score ?? -1) - (a.worthiness?.score ?? a.score ?? -1))
+    .slice(0, limit)
+    .map((r: any) => ({
+      label: r.label,
+      score: r.score != null ? String(Math.round(r.score)) : "Not computable — no score recorded",
+      verdict: r.businessCase?.verdict || r.worthiness?.rating || "Not stated",
+      read: r.worthiness?.thesis || r.businessCase?.valueProposition || "No read recorded",
+    }));
+}
+
+/** Top levers (off-patent) or top dimensions (innovative), each with one play. */
+function summaryPlays(
+  diagnosis: Diagnosis,
+  f: OffPatentFacade,
+  branch: "off_patent" | "innovative",
+  limit = 3,
+): { name: string; score: string; play: string }[] {
+  if (branch === "off_patent" && f.levers.length) {
+    return scoredLevers(f)
+      .slice(0, limit)
+      .map((l: any) => ({
+        name: l.name,
+        score: `${Math.round(l.score)}/100`,
+        play: sText(l.actions[0]) || (l.estValue ? `Estimated value ${l.estValue}` : "") || "No play recorded for this lever",
+      }));
+  }
+  const dims: DimensionScore[] = Array.isArray(diagnosis.dimensions) ? diagnosis.dimensions : [];
+  return dims
+    .filter((d) => d.score != null)
+    .sort(byScoreDesc)
+    .slice(0, limit)
+    .map((d) => ({
+      name: dimensionLabel(branch, d.key),
+      score: `${Math.round(d.score as number)}/100`,
+      play:
+        sText(d.summary)
+        || sText((Array.isArray(d.evidence) ? d.evidence : [])[0]?.claim)
+        || "No read recorded for this dimension",
+    }));
+}
+
+/** The falsifiers: what would change the answer rather than the confidence. */
+function summaryFlips(diagnosis: Diagnosis, f: OffPatentFacade, limit = 3): string[] {
+  const swing = (Array.isArray(diagnosis.swingFactors) ? diagnosis.swingFactors : []).map(sText).filter(Boolean);
+  return (f.whatWouldFlipIt.length ? f.whatWouldFlipIt : swing).slice(0, limit);
+}
+
+/** The biggest risks, high-impact first, capped so the summary stays a summary. */
+function summaryRisks(diagnosis: Diagnosis, f: OffPatentFacade, limit = 4): string[] {
+  const out: string[] = [];
+  const push = (s: string) => {
+    if (s && out.length < limit && !out.includes(s)) out.push(s);
+  };
+  const line = (r: any) => `${r.risk}${r.mitigation ? ` — mitigation: ${r.mitigation}` : ""}`;
+  for (const r of f.risks.filter((x: any) => x.impact === "High")) push(line(r));
+  for (const r of f.risks.filter((x: any) => x.impact !== "High")) push(line(r));
+  for (const r of (Array.isArray(diagnosis.topRisks) ? diagnosis.topRisks : []).map(sText)) push(r);
+  return out;
+}
+
+/**
+ * Where the evidence is thin, phrased as what to connect. Null when nothing is
+ * missing — an empty "gaps" section reads as a gap that was not looked for.
+ */
+function summaryGaps(
+  diagnosis: Diagnosis,
+  branch: "off_patent" | "innovative",
+): { notComputable: number; total: number; lines: string[] } | null {
+  const dims: DimensionScore[] = Array.isArray(diagnosis.dimensions) ? diagnosis.dimensions : [];
+  const notComputable = dims.filter((d) => d.score == null).length;
+  const coverage = Array.isArray(diagnosis.coverage) ? diagnosis.coverage : [];
+  const lines = coverage
+    .filter((c) => (c.unwired ?? []).length > 0)
+    .map(
+      (c) =>
+        `Connect ${(c.unwired ?? []).join(", ")} — "${sText(c.label) || dimensionLabel(branch, c.key)}" is scored without it today.`,
+    );
+  if (!notComputable && !lines.length) return null;
+  return { notComputable, total: dims.length, lines };
+}
+
 // ── "What to do next" ───────────────────────────────────────────────────────
 
 export interface NextAction {
@@ -2037,6 +2358,7 @@ export async function buildDiagnosisPdf(
 
   const includeMarkets = opts?.includeMarkets !== false;
   const includeEvidence = opts?.includeEvidence !== false;
+  const includeAppendix = opts?.includeAppendix !== false;
 
   const reportName = DIAGNOSIS_REPORT_NAME(branch);
   const state = newPdf(jsPDF, reportName, assetName, STRATEGY_COLOR);
@@ -2088,7 +2410,44 @@ export async function buildDiagnosisPdf(
     MUTED,
   );
 
-  // ── What to do next — the front-loaded action list ────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 1 — EXECUTIVE SUMMARY. Short enough to stop here.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const headlineThesis = sText(diagnosis.thesis) || f.opportunityThesis;
+  sectionTitle(
+    state,
+    "Executive summary",
+    `${f.verdict || verdictLabel(diagnosis.verdict)} — ${assetName}`,
+    [
+      diagnosis.worthinessScore != null
+        ? `Worthiness ${Math.round(diagnosis.worthinessScore)}/100`
+        : "Worthiness not computable from the connected evidence",
+      `verdict confidence ${(f.verdictConfidence || cap(diagnosis.verdictConfidence) || "not stated").toLowerCase()}`,
+      `${scored.length} of ${dimensions.length} dimensions scored`,
+    ]
+      .filter(Boolean)
+      .join("   ·   "),
+  );
+  if (headlineThesis) lead(state, headlineThesis);
+  if (f.opportunityThesis && f.opportunityThesis !== headlineThesis) {
+    tinyLabel(state, "Opportunity thesis");
+    paragraph(state, f.opportunityThesis);
+  }
+  if (branch === "innovative" && sText(diagnosis.inflectionLever)) {
+    tinyLabel(state, "Biggest value-inflection lever");
+    paragraph(state, sText(diagnosis.inflectionLever));
+  }
+  if (includeAppendix) {
+    paragraph(
+      state,
+      "This is the decision in five sections. The full assessment — every dimension, every market, every lever and the evidence behind them — is in the appendix.",
+      9.5,
+      MUTED,
+    );
+  }
+
+  // ── What to do next — the centrepiece of the summary ──────────────────────
   if (actions.length) {
     sectionTitle(
       state,
@@ -2112,10 +2471,103 @@ export async function buildDiagnosisPdf(
     }, autoTable);
   }
 
+  // ── Lead markets ──────────────────────────────────────────────────────────
+  const leadMarkets = summaryMarkets(diagnosis, f, 3);
+  if (leadMarkets.length) {
+    sectionTitle(
+      state,
+      "Lead markets",
+      `${leadMarkets[0].label} leads the set — take it first`,
+      includeAppendix
+        ? "The three strongest markets in this run. Full per-market detail is in the appendix."
+        : "The three strongest markets in this run, ranked by score.",
+    );
+    table(state, {
+      head: [["Market", "Score", "Verdict", "The read"]],
+      body: leadMarkets.map((m) => [m.label, m.score, m.verdict, truncate(m.read, 150)]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 96 },
+        1: { cellWidth: 120 },
+        2: { cellWidth: 66 },
+        3: { textColor: BODY },
+      },
+    }, autoTable);
+  }
+
+  // ── The plays that carry the value ────────────────────────────────────────
+  const plays = summaryPlays(diagnosis, f, branch, 3);
+  if (plays.length) {
+    sectionTitle(
+      state,
+      branch === "off_patent" && f.levers.length ? "Top value levers" : "Strongest dimensions",
+      `Start with "${plays[0].name}" — the strongest play in this run`,
+      includeAppendix
+        ? "The three highest-scoring, each with the single move it supports. Every lever and dimension, with its evidence, is in the appendix."
+        : "The three highest-scoring, each with the single move it supports.",
+    );
+    table(state, {
+      head: [[branch === "off_patent" && f.levers.length ? "Lever" : "Dimension", "Score", "Recommended play"]],
+      body: plays.map((p) => [p.name, p.score, truncate(p.play, 150)]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 150 },
+        1: { halign: "right", fontStyle: "bold", cellWidth: 60 },
+        2: { textColor: BODY },
+      },
+    }, autoTable);
+  }
+
+  // ── The binding constraint and the biggest risks ──────────────────────────
+  const flipsSummary = summaryFlips(diagnosis, f, 3);
+  const risksSummary = summaryRisks(diagnosis, f, 4);
+  if (flipsSummary.length || risksSummary.length) {
+    sectionTitle(
+      state,
+      "What would change this",
+      flipsSummary[0] ? `The binding constraint: ${truncate(flipsSummary[0], 110)}` : "What could kill this",
+      "Obtaining the evidence below either confirms the verdict or overturns it; the risks are what has to be owned either way.",
+    );
+    if (flipsSummary.length) {
+      tinyLabel(state, "What would flip the verdict");
+      bullets(state, flipsSummary.map((s) => truncate(s, 170)), STRATEGY_COLOR);
+    }
+    if (risksSummary.length) {
+      tinyLabel(state, "Biggest risks");
+      bullets(state, risksSummary.map((s) => truncate(s, 170)), INK);
+    }
+  }
+
+  // ── Where the evidence is thin. Skipped entirely when nothing is missing. ──
+  const gaps = summaryGaps(diagnosis, branch);
+  if (gaps) {
+    sectionTitle(
+      state,
+      "Where the evidence is thin",
+      gaps.lines.length
+        ? `Connect ${gaps.lines.length} source set${gaps.lines.length === 1 ? "" : "s"} to firm up this verdict`
+        : `${gaps.notComputable} of ${gaps.total} dimensions could not be computed`,
+      gaps.notComputable
+        ? `${gaps.notComputable} of ${gaps.total} dimensions state why they could not be computed rather than showing a number.`
+        : "Every dimension was computable, but sources that apply to this asset are not connected.",
+    );
+    if (gaps.lines.length) bullets(state, gaps.lines, NEG);
+  }
+
+  // A summary-only file stops here: no divider, no appendix.
+  if (!includeAppendix) {
+    sourceNote(state, DIAGNOSIS_DISCLAIMER);
+    return state.doc;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 2 — APPENDIX
+  // ══════════════════════════════════════════════════════════════════════════
+  appendixDivider(state);
+  const ax = appendixCounter();
+
   // ── Verdict & thesis ──────────────────────────────────────────────────────
   sectionTitle(
     state,
-    "Verdict",
+    ax("Verdict"),
     `${f.verdict || verdictLabel(diagnosis.verdict)} — ${assetName}`,
     [
       diagnosis.worthinessScore != null
@@ -2179,7 +2631,7 @@ export async function buildDiagnosisPdf(
     const p = f.assetProfile;
     sectionTitle(
       state,
-      "Asset profile",
+      ax("Asset profile"),
       p.name ? `${p.name}${p.developmentStage ? ` — ${p.developmentStage}` : ""}` : "The asset under assessment",
       p.description || undefined,
     );
@@ -2233,7 +2685,7 @@ export async function buildDiagnosisPdf(
   if (dimensions.length) {
     sectionTitle(
       state,
-      "Dimension scores",
+      ax("Dimension scores"),
       topDimension
         ? `${dimensionLabel(branch, topDimension.key)} is the strongest dimension`
         : "No dimension could be scored from the connected evidence",
@@ -2276,7 +2728,7 @@ export async function buildDiagnosisPdf(
     const live = leverRows ? scoredLevers(f) : [];
     sectionTitle(
       state,
-      "Value levers",
+      ax("Value levers"),
       live[0]
         ? `"${live[0].name}" is the strongest play — start there`
         : "Where value still sits in an already-approved asset",
@@ -2362,7 +2814,7 @@ export async function buildDiagnosisPdf(
     const leadMarket = ranked.find((m) => m.score != null);
     sectionTitle(
       state,
-      "Markets",
+      ax("Markets"),
       leadMarket
         ? `${countryLabel(leadMarket.country)} leads the market set — take it first`
         : "No market could be scored from the connected evidence",
@@ -2398,7 +2850,7 @@ export async function buildDiagnosisPdf(
     pageBreak(state);
     sectionTitle(
       state,
-      "Regional assessment",
+      ax("Regional assessment"),
       leadReg
         ? `${leadReg.label} leads on ${leadReg.worthiness ? "commercial worthiness" : "commercial opportunity"} — concentrate effort there`
         : "Regional opportunity matrix",
@@ -2432,7 +2884,7 @@ export async function buildDiagnosisPdf(
       pageBreak(state);
       sectionTitle(
         state,
-        `${r.label} · ${r.attractiveness || "not rated"}`,
+        ax(`${r.label} · ${r.attractiveness || "not rated"}`),
         r.businessCase?.verdict
           ? `${r.label} — ${r.businessCase.verdict}${r.score != null ? ` (${Math.round(r.score)}/100)` : ""}`
           : `${r.label}${r.score != null ? ` — ${Math.round(r.score)}/100` : ""}`,
@@ -2539,7 +2991,7 @@ export async function buildDiagnosisPdf(
     const first = f.recommendations[0];
     sectionTitle(
       state,
-      "Recommendations",
+      ax("Recommendations"),
       `Prioritise ${first.region} via ${first.structure || "out-licensing"}`,
       "Ranked by priority; each row is a route to open, not an option to consider.",
     );
@@ -2579,7 +3031,7 @@ export async function buildDiagnosisPdf(
     const firstStep = cp.steps[0];
     sectionTitle(
       state,
-      "Business case",
+      ax("Business case"),
       firstStep ? `Start with step ${firstStep.step} — ${firstStep.action}` : "Commercial channels and go-to-market",
       cp.summary || undefined,
     );
@@ -2628,7 +3080,7 @@ export async function buildDiagnosisPdf(
     const high = f.risks.filter((r: any) => r.impact === "High");
     sectionTitle(
       state,
-      "Flaws & blockers",
+      ax("Flaws & blockers"),
       high.length
         ? `${high.length} high-impact blocker${high.length === 1 ? "" : "s"} must be owned before committing`
         : "What could kill this, and what most moves the score",
@@ -2670,7 +3122,7 @@ export async function buildDiagnosisPdf(
     pageBreak(state);
     sectionTitle(
       state,
-      "IP & freedom to operate",
+      ax("IP & freedom to operate"),
       "Flags counsel must clear before any commitment",
       "A screen of public patent and regulatory records, not a legal opinion. Nothing below clears freedom to operate.",
     );
@@ -2696,7 +3148,7 @@ export async function buildDiagnosisPdf(
   if (f.whatWouldFlipIt.length) {
     sectionTitle(
       state,
-      "What would flip the verdict",
+      ax("What would flip the verdict"),
       "The evidence that would change this answer — go and get it",
       "Each item is falsifiable: obtaining it either confirms the verdict or overturns it.",
     );
@@ -2708,7 +3160,7 @@ export async function buildDiagnosisPdf(
   if (rejectedRows.length) {
     sectionTitle(
       state,
-      "Considered and rejected",
+      ax("Considered and rejected"),
       "The angles argued for and then excluded — do not reopen these without new evidence",
       "Each was steelmanned before being set aside; the reason is the bar new evidence has to clear.",
     );
@@ -2735,7 +3187,7 @@ export async function buildDiagnosisPdf(
       const estimates = evidenceRows.filter((r) => r[2] === "Estimate").length;
       sectionTitle(
         state,
-        "Evidence",
+        ax("Evidence"),
         estimates
           ? `${estimates} of ${evidenceRows.length} claims are inferences — source them before they carry a decision`
           : "Every claim is sourced",
@@ -2766,7 +3218,7 @@ export async function buildDiagnosisPdf(
     const gaps = coverage.filter((c) => (c.unwired ?? []).length > 0);
     sectionTitle(
       state,
-      "Source coverage",
+      ax("Source coverage"),
       gaps.length
         ? `Connect ${gaps.length} missing source set${gaps.length === 1 ? "" : "s"} to firm up the score`
         : "Every applicable source was connected",
@@ -2796,7 +3248,7 @@ export async function buildDiagnosisPdf(
   }
 
   if (f.sourcesUsed.length) {
-    sectionTitle(state, "Appendix", "Data sources behind this assessment");
+    sectionTitle(state, ax("Data sources"), "Every source behind this assessment");
     paragraph(state, f.sourcesUsed.join("   ·   "), 9.5, MUTED);
   }
   if (!flips.length && !actions.length) {
@@ -3167,8 +3619,12 @@ function secColumns(
   const height = (c: { items: string[] }) =>
     c.items.reduce((a, t) => a + boxH(t, HALF - 0.3, fs), 0.06);
   const needed = Math.max(...cols.map(height)) + 0.3;
-  const avail = Math.min(needed, BODY_LIMIT - 1.5);
-  secRoom(sec, avail);
+  // Ask for the room first, then size against what is actually left. Capping
+  // against a constant assumed the block always started near the top of a
+  // slide; on a real run these columns began at 2.16in, ran 5.03in, and landed
+  // on the source line and the page number.
+  secRoom(sec, Math.min(needed, BODY_LIMIT - 1.5));
+  const avail = Math.max(0.6, Math.min(needed, secRemaining(sec)));
   const y = sec.y;
   const place = (c: { label: string; items: string[]; color?: string }, x: number) => {
     txt(sec.slide, c.label.toUpperCase(), {
@@ -3730,14 +4186,28 @@ function contentSlide(pptx: any, kicker: string, title: string, accent: string, 
   return slide;
 }
 
+/**
+ * A full-bleed divider. The bands are stacked with a real gap between them and
+ * kept inside the right margin — a divider is still a slide, and the layout
+ * contract in tests/export-layout.test.ts applies to it like any other.
+ */
 function dividerSlide(pptx: any, num: string, label: string, takeaway: string, accent: string) {
   const slide = pptx.addSlide();
   slide.background = { color: P.ink };
   slide.addShape("rect", { x: 0, y: 0, w: SLIDE_W, h: 0.14, fill: { color: accent } });
-  txt(slide,num, { x: MX, y: 2.0, w: 4, h: 2.2, fontFace: F, fontSize: 120, bold: true, color: "3A3A3A" });
-  txt(slide,label, { x: MX + 0.05, y: 4.1, w: MW, h: 0.9, fontFace: F, fontSize: 32, bold: true, color: P.white });
-  slide.addShape("rect", { x: MX + 0.1, y: 5.0, w: 0.9, h: 0.05, fill: { color: accent } });
-  txt(slide,takeaway, { x: MX + 0.1, y: 5.2, w: MW, h: 0.6, fontFace: F, fontSize: 17, color: "C9C9C9" });
+  txt(slide, num, { x: MX, y: 1.75, w: 4, h: 2.0, fontFace: F, fontSize: 120, bold: true, color: "3A3A3A" });
+  txt(slide, label, { x: MX, y: 3.95, w: MW - 0.1, h: 0.85, fontFace: F, fontSize: 32, bold: true, color: P.white, valign: "top" });
+  slide.addShape("rect", { x: MX, y: 4.95, w: 0.9, h: 0.05, fill: { color: accent } });
+  txt(slide, takeaway, { x: MX, y: 5.15, w: MW - 0.1, h: 1.1, fontFace: F, fontSize: 17, color: "C9C9C9", valign: "top" });
+}
+
+/**
+ * The divider between the summary a reader may stop at and the detail behind
+ * it. The word "Appendix" appears here and only here, so "which part am I in?"
+ * is answerable from any slide.
+ */
+function appendixDividerSlide(pptx: any, accent: string) {
+  dividerSlide(pptx, "A", "Appendix", APPENDIX_LINE, accent);
 }
 
 function cellHead(): any {
@@ -3854,6 +4324,7 @@ export async function buildDiagnosisPptx(
 
   const includeMarkets = opts?.includeMarkets !== false;
   const includeEvidence = opts?.includeEvidence !== false;
+  const includeAppendix = opts?.includeAppendix !== false;
 
   const reportName = DIAGNOSIS_REPORT_NAME(branch);
   const pptx = newDeck(PptxGenJS, `${assetName} — ${reportName}`);
@@ -3899,7 +4370,41 @@ export async function buildDiagnosisPptx(
     P.accent,
   );
 
-  // ─── What to do next ────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 1 — EXECUTIVE SUMMARY. Short enough to stop here.
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    const thesis = sText(diagnosis.thesis) || f.opportunityThesis;
+    const sec = beginSection(
+      pptx,
+      "Executive summary",
+      thesis || `${f.verdict || verdictLabel(diagnosis.verdict)} on ${assetName}`,
+      P.accent,
+      SRC,
+    );
+    secStats(sec, [
+      ["Verdict", f.verdict || verdictLabel(diagnosis.verdict), true],
+      ["Worthiness", diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "Not computable", false],
+      ["Verdict confidence", f.verdictConfidence || cap(diagnosis.verdictConfidence) || "Not stated", false],
+      ["Dimensions scored", `${scored.length} of ${dimensions.length}`, false],
+    ]);
+    if (f.opportunityThesis && f.opportunityThesis !== thesis) {
+      secLabel(sec, "Opportunity thesis");
+      secText(sec, f.opportunityThesis, { fontSize: 12 });
+    }
+    if (branch === "innovative" && sText(diagnosis.inflectionLever)) {
+      secCallout(sec, "Biggest value-inflection lever", sText(diagnosis.inflectionLever), P.accent2);
+    }
+    if (includeAppendix) {
+      secText(
+        sec,
+        "This is the decision in five slides. Every dimension, market and lever, with the evidence behind it, is in the appendix that follows.",
+        { fontSize: 11, color: P.muted },
+      );
+    }
+  }
+
+  // ─── What to do next — the centrepiece of the summary ────────────────────
   if (actions.length) {
     const sec = beginSection(
       pptx,
@@ -3927,11 +4432,111 @@ export async function buildDiagnosisPptx(
     );
   }
 
+  // ─── Lead markets ───────────────────────────────────────────────────────
+  const leadMarkets = summaryMarkets(diagnosis, f, 3);
+  if (leadMarkets.length) {
+    const sec = beginSection(
+      pptx,
+      "Lead markets",
+      `${leadMarkets[0].label} leads the set — take it first`,
+      P.accent,
+      SRC,
+      includeAppendix
+        ? "The three strongest markets in this run. Full per-market detail is in the appendix."
+        : "The three strongest markets in this run, ranked by score.",
+    );
+    secTable(
+      sec,
+      ["Market", "Score", "Verdict", "The read"],
+      leadMarkets.map((m) => [
+        { text: cellFit(m.label, 2.6, 0.56), options: cellBody({ bold: true }) },
+        { text: cellFit(m.score, 2.6, 0.56, 10), options: cellBody({ fontSize: 10, bold: true, color: P.accent2 }) },
+        { text: cellFit(m.verdict, 1.6, 0.56, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: cellFit(m.read, 5.333, 0.56, 10), options: cellBody({ fontSize: 10 }) },
+      ]),
+      [2.6, 2.6, 1.6, 5.333],
+      { rowH: 0.56 },
+    );
+  }
+
+  // ─── The plays that carry the value ─────────────────────────────────────
+  const plays = summaryPlays(diagnosis, f, branch, 3);
+  const playsAreLevers = branch === "off_patent" && f.levers.length > 0;
+  if (plays.length) {
+    const sec = beginSection(
+      pptx,
+      playsAreLevers ? "Top value levers" : "Strongest dimensions",
+      `Start with "${plays[0].name}" — the strongest play in this run`,
+      P.accent,
+      SRC,
+      includeAppendix
+        ? "The three highest-scoring, each with the single move it supports. Every lever and dimension, with its evidence, is in the appendix."
+        : "The three highest-scoring, each with the single move it supports.",
+    );
+    secTable(
+      sec,
+      [playsAreLevers ? "Lever" : "Dimension", "Score", "Recommended play"],
+      plays.map((p) => [
+        { text: cellFit(p.name, 3.4, 0.56), options: cellBody({ bold: true }) },
+        { text: p.score, options: cellBody({ bold: true, color: P.accent2, align: "right" }) },
+        { text: cellFit(p.play, 7.133, 0.56, 10), options: cellBody({ fontSize: 10 }) },
+      ]),
+      [3.4, 1.6, 7.133],
+      { rowH: 0.56 },
+    );
+  }
+
+  // ─── The binding constraint and the biggest risks ───────────────────────
+  const flipsSummary = summaryFlips(diagnosis, f, 3);
+  const risksSummary = summaryRisks(diagnosis, f, 4);
+  if (flipsSummary.length || risksSummary.length) {
+    const sec = beginSection(
+      pptx,
+      "What would change this",
+      flipsSummary[0] ? `The binding constraint: ${truncate(flipsSummary[0], 100)}` : "What could kill this",
+      P.accent,
+      SRC,
+      "Obtaining the evidence on the left either confirms the verdict or overturns it; the risks on the right have to be owned either way.",
+    );
+    secColumns(
+      sec,
+      flipsSummary.length ? { label: "What would flip the verdict", items: flipsSummary, color: P.accent2 } : null,
+      risksSummary.length ? { label: "Biggest risks", items: risksSummary } : null,
+    );
+  }
+
+  // ─── Where the evidence is thin. Skipped when nothing is missing. ───────
+  const gaps = summaryGaps(diagnosis, branch);
+  if (gaps) {
+    const sec = beginSection(
+      pptx,
+      "Where the evidence is thin",
+      gaps.lines.length
+        ? `Connect ${gaps.lines.length} source set${gaps.lines.length === 1 ? "" : "s"} to firm up this verdict`
+        : `${gaps.notComputable} of ${gaps.total} dimensions could not be computed`,
+      P.accent,
+      "CartaOS source-coverage log",
+      gaps.notComputable
+        ? `${gaps.notComputable} of ${gaps.total} dimensions state why they could not be computed rather than showing a number.`
+        : "Every dimension was computable, but sources that apply to this asset are not connected.",
+    );
+    if (gaps.lines.length) secBullets(sec, gaps.lines, { fontSize: 12 });
+  }
+
+  // A summary-only deck stops here: no divider, no appendix.
+  if (!includeAppendix) return pptx;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 2 — APPENDIX
+  // ══════════════════════════════════════════════════════════════════════════
+  appendixDividerSlide(pptx, P.accent);
+  const ax = appendixCounter();
+
   // ─── Verdict ────────────────────────────────────────────────────────────
   {
     const sec = beginSection(
       pptx,
-      "Diagnosis · Verdict",
+      ax("Diagnosis · Verdict"),
       f.opportunityThesis || sText(diagnosis.thesis) || `${verdictLabel(diagnosis.verdict)} on ${assetName}`,
       P.accent,
       SRC,
@@ -3959,7 +4564,7 @@ export async function buildDiagnosisPptx(
   if (f.archetype || f.framing || f.weightedWorthiness) {
     const sec = beginSection(
       pptx,
-      "Diagnosis · Framing",
+      ax("Diagnosis · Framing"),
       f.archetype?.mode
         ? `Scored as "${f.archetype.mode}" — the rubric follows the archetype, not a default`
         : "How this verdict was framed",
@@ -4010,7 +4615,7 @@ export async function buildDiagnosisPptx(
     const p = f.assetProfile;
     const sec = beginSection(
       pptx,
-      "Diagnosis · Asset profile",
+      ax("Diagnosis · Asset profile"),
       p.name ? `${p.name}${p.developmentStage ? ` — ${p.developmentStage}` : ""}` : "The asset under assessment",
       P.accent,
       SRC,
@@ -4062,7 +4667,7 @@ export async function buildDiagnosisPptx(
   if (dimensions.length) {
     const sec = beginSection(
       pptx,
-      "Diagnosis · Scorecard",
+      ax("Diagnosis · Scorecard"),
       topDimension
         ? `${dimensionLabel(branch, topDimension.key)} is the strongest dimension`
         : "No dimension could be scored from the connected evidence",
@@ -4105,7 +4710,7 @@ export async function buildDiagnosisPptx(
     const strongest = levers.find((l: any) => !l.notComputable);
     const sec = beginSection(
       pptx,
-      "Diagnosis · Value levers",
+      ax("Diagnosis · Value levers"),
       strongest
         ? `"${strongest.name}" is the strongest play — start there`
         : "Where value still sits in an already-approved asset",
@@ -4140,7 +4745,7 @@ export async function buildDiagnosisPptx(
       if (!l.evidence.length && !l.actions.length && !l.dataGap && !l.reason) continue;
       const det = beginSection(
         pptx,
-        "Diagnosis · Value levers",
+        ax("Diagnosis · Value levers"),
         l.notComputable
           ? `${l.name} — not computable, and this is what would change that`
           : `${l.name} — ${Math.round(l.score)}/100${l.actions.length ? `: ${truncate(l.actions[0], 70)}` : ""}`,
@@ -4168,7 +4773,7 @@ export async function buildDiagnosisPptx(
     const leadMarket = ranked.find((m) => m.score != null);
     const sec = beginSection(
       pptx,
-      "Diagnosis · Markets",
+      ax("Diagnosis · Markets"),
       leadMarket ? `${countryLabel(leadMarket.country)} leads the market set — take it first` : "No market could be scored from the connected evidence",
       P.accent,
       SRC,
@@ -4203,7 +4808,7 @@ export async function buildDiagnosisPptx(
   if (f.regions.length) {
     const sec = beginSection(
       pptx,
-      "Diagnosis · Regional assessment",
+      ax("Diagnosis · Regional assessment"),
       leadReg ? `${leadReg.label} leads the regional set — concentrate effort there` : "Regional opportunity matrix",
       P.accent,
       SRC,
@@ -4233,7 +4838,7 @@ export async function buildDiagnosisPptx(
     for (const r of f.regions) {
       const sub = beginSection(
         pptx,
-        `Diagnosis · ${r.label}`,
+        ax(`Diagnosis · ${r.label}`),
         r.businessCase?.verdict
           ? `${r.label} — ${r.businessCase.verdict}${r.score != null ? ` (COS ${Math.round(r.score)}/100)` : ""}`
           : `${r.label}${r.score != null ? ` — COS ${Math.round(r.score)}/100` : ""}`,
@@ -4340,7 +4945,7 @@ export async function buildDiagnosisPptx(
         const w = r.worthiness;
         const wsec = beginSection(
           pptx,
-          `Diagnosis · ${r.label} market worthiness`,
+          ax(`Diagnosis · ${r.label} market worthiness`),
           `${r.label} — ${w.rating || "not rated"}${w.score != null ? ` (${Math.round(w.score)}/100)` : ""} on purely commercial grounds`,
           P.accent,
           SRC,
@@ -4379,7 +4984,7 @@ export async function buildDiagnosisPptx(
     const first = f.recommendations[0];
     const sec = beginSection(
       pptx,
-      "Diagnosis · Recommendations",
+      ax("Diagnosis · Recommendations"),
       `Prioritise ${first.region} — ${first.structure || "market entry"}`,
       P.accent,
       SRC,
@@ -4404,7 +5009,7 @@ export async function buildDiagnosisPptx(
       if (!r.rationale && !r.partners.length && !r.prerequisites.length && !r.roi) continue;
       const det = beginSection(
         pptx,
-        `Diagnosis · Recommendation #${r.rank}`,
+        ax(`Diagnosis · Recommendation #${r.rank}`),
         `${r.region} — ${r.structure || "structure to be set"}${r.total ? `, target ${r.total}` : ""}`,
         P.accent,
         SRC,
@@ -4428,7 +5033,7 @@ export async function buildDiagnosisPptx(
     const firstStep = cp.steps[0];
     const sec = beginSection(
       pptx,
-      "Diagnosis · Business case",
+      ax("Diagnosis · Business case"),
       firstStep ? `Start with step ${firstStep.step} — ${truncate(firstStep.action, 80)}` : "Commercial channels and go-to-market",
       P.accent,
       SRC,
@@ -4479,7 +5084,7 @@ export async function buildDiagnosisPptx(
     const high = f.risks.filter((r: any) => r.impact === "High");
     const sec = beginSection(
       pptx,
-      "Diagnosis · Flaws & blockers",
+      ax("Diagnosis · Flaws & blockers"),
       high.length
         ? `${high.length} high-impact blocker${high.length === 1 ? "" : "s"} need an owner before any commitment`
         : "What could kill this, and what most moves the score",
@@ -4515,7 +5120,7 @@ export async function buildDiagnosisPptx(
   if (branch === "innovative" && ipFlags.length) {
     const sec = beginSection(
       pptx,
-      "Diagnosis · IP & FTO",
+      ax("Diagnosis · IP & FTO"),
       "Flags counsel must clear before any commitment",
       P.accent,
       "A screen of public patent and regulatory records — not a legal opinion",
@@ -4541,7 +5146,7 @@ export async function buildDiagnosisPptx(
   if (f.whatWouldFlipIt.length || rejectedRows.length) {
     const sec = beginSection(
       pptx,
-      "Diagnosis · Calibration",
+      ax("Diagnosis · Calibration"),
       f.whatWouldFlipIt.length
         ? "The evidence that would change this answer — go and get it"
         : "The angles argued for and then set aside",
@@ -4586,7 +5191,7 @@ export async function buildDiagnosisPptx(
       const estimates = strongest.filter((x) => x.e.kind === "estimate").length;
       const sec = beginSection(
         pptx,
-        "Diagnosis · Evidence",
+        ax("Diagnosis · Evidence"),
         estimates
           ? `${estimates} of ${strongest.length} shown claims are inferences — source them before they carry a decision`
           : "The evidence the verdict rests on",
@@ -4617,7 +5222,7 @@ export async function buildDiagnosisPptx(
     const gaps = coverage.filter((c) => (c.unwired ?? []).length > 0);
     const sec = beginSection(
       pptx,
-      "Basis of preparation",
+      ax("Basis of preparation"),
       gaps.length
         ? `Connect ${gaps.length} missing source set${gaps.length === 1 ? "" : "s"} before treating these scores as settled`
         : "How to read this diagnosis",
@@ -4686,6 +5291,7 @@ export async function buildStrategyPptx(
   ]);
 
   const includeEvidence = opts?.includeEvidence !== false;
+  const includeAppendix = opts?.includeAppendix !== false;
   const branchLabel = branch === "off_patent" ? "Off-Patent" : "Innovative";
   const deckName = `${branchLabel} Route Strategy`;
   const pptx = newDeck(PptxGenJS, `${assetName} — ${deckName}`);
@@ -4742,7 +5348,52 @@ export async function buildStrategyPptx(
     P.accent,
   );
 
-  // ─── What to do next ────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 1 — EXECUTIVE SUMMARY. Short enough to stop here.
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    const sec = beginSection(
+      pptx,
+      "Executive summary",
+      best
+        ? `${sText(recommended?.label) || routeLabel(best.key)} is the route to commit to`
+        : "No route can be modelled on the current assumptions",
+      P.accent,
+      SRC,
+    );
+    if (recommendation?.lowFit) {
+      secCallout(
+        sec,
+        "No route cleared the fit bar",
+        "No route was judged actually open to this asset. The figures below are the best economics available, not a route to execute — read them as a ceiling on value.",
+        P.accent2,
+      );
+    }
+    if (best) {
+      secStats(sec, [
+        ["Modelled NPV", compactUsd(best.npv), true],
+        ["IRR", best.irr != null ? `${best.irr.toFixed(1)}%` : "n/a", false],
+        ["Break-even", best.breakEvenYear != null ? `Year ${best.breakEvenYear}` : "Never in horizon", false],
+        ["Routes modelled", `${computableRoutes.length} of ${routes.length}`, false],
+      ]);
+      const summaryDependency = sText(recommended?.keyDependency) || sText(best.keyDependency);
+      if (summaryDependency) secCallout(sec, "Key dependency — what would break this plan", summaryDependency, P.accent2);
+    } else {
+      secText(
+        sec,
+        `No route can be modelled until these assumptions are supplied: ${missing.map(labelOf).join(", ") || "none recorded"}. Until then no route has an economic case at all.`,
+        { fontSize: 13, color: P.accent2 },
+      );
+    }
+    if (includeAppendix) {
+      secText(sec, "Every route, every assumption and the evidence behind them are in the appendix that follows.", {
+        fontSize: 11,
+        color: P.muted,
+      });
+    }
+  }
+
+  // ─── What to do next — the centrepiece of the summary ────────────────────
   const nextSteps = strategyNextActions({
     recommended, best, byKey, missing, labelOf, sens, partners, assumptions, uncomputable, strategy, limit: 8,
   });
@@ -4771,11 +5422,120 @@ export async function buildStrategyPptx(
     );
   }
 
+  // ─── Route comparison — the top four, on the figures that decide it ─────
+  const summaryRoutes = computableRoutes
+    .slice()
+    .sort((a, b) => {
+      const ea = byKey.get(a.key);
+      const eb = byKey.get(b.key);
+      return ((eb?.computable ? eb.npv : 0) ?? 0) - ((ea?.computable ? ea.npv : 0) ?? 0);
+    })
+    .slice(0, 4);
+  if (summaryRoutes.length) {
+    const sec = beginSection(
+      pptx,
+      "Route comparison",
+      summaryRoutes.length === 1
+        ? "One route clears the model on the current assumptions"
+        : `The ${summaryRoutes.length} strongest routes on one assumption set`,
+      P.accent,
+      SRC,
+      computableRoutes.length > summaryRoutes.length || uncomputable.length
+        ? "The strongest routes by modelled NPV. Every route, including those still missing an input, is in the appendix."
+        : "Fit is the read for this asset; NPV, IRR and break-even are model output.",
+    );
+    secTable(
+      sec,
+      ["Route", "Fit", "NPV", "IRR", "Break-even"],
+      summaryRoutes.map((r) => {
+        const e = byKey.get(r.key);
+        const econ = e && e.computable ? e : null;
+        const isRec = r.key === recommendedKey;
+        return [
+          { text: cellFit(`${r.label}${isRec ? "  (recommended)" : ""}`, 4.333, 0.56), options: cellBody({ bold: true }) },
+          { text: r.score != null ? String(r.score) : "n/a", options: cellBody({ align: "center" }) },
+          { text: compactUsd(econ?.npv), options: cellBody({ bold: true, color: P.accent2, align: "right" }) },
+          { text: econ?.irr != null ? `${econ.irr.toFixed(1)}%` : "n/a", options: cellBody({ align: "right" }) },
+          { text: econ?.breakEvenYear != null ? `Year ${econ.breakEvenYear}` : "never", options: cellBody({ align: "center" }) },
+        ];
+      }),
+      [4.333, 1.4, 2.4, 1.8, 2.2],
+      { rowH: 0.56 },
+    );
+  }
+
+  // ─── The assumptions that decide the answer ─────────────────────────────
+  const dominant = sens.slice(0, 3);
+  if (dominant.length && best) {
+    const sec = beginSection(
+      pptx,
+      "What the answer turns on",
+      `${labelOf(dominant[0].key)} dominates the outcome — settle it first`,
+      P.accent,
+      `Each driver moved ±20% on its own, everything else held, against ${sText(recommended?.label) || routeLabel(best.key)}`,
+      "These are the inputs worth arguing about; every other driver barely moves the answer.",
+    );
+    secTable(
+      sec,
+      ["Variable", "NPV swing across ±20%", "Basis today"],
+      dominant.map((s) => {
+        const sourced = assumptions.find((a) => a.key === s.key)?.basis === "sourced";
+        return [
+          { text: cellFit(labelOf(s.key), 4.733, 0.56), options: cellBody({ bold: true }) },
+          { text: compactUsd(s.swing), options: cellBody({ bold: true, color: P.accent2, align: "right" }) },
+          {
+            text: sourced ? "Sourced" : "Assumed — not sourced, source it",
+            options: cellBody({ fontSize: 10, color: sourced ? P.muted : P.accent2, bold: !sourced }),
+          },
+        ];
+      }),
+      [4.733, 3.4, 4.0],
+      { rowH: 0.56 },
+    );
+  }
+
+  // ─── Partner shortlist — the three to open with ─────────────────────────
+  if (partners.length) {
+    const shortlist = partners.slice(0, 3);
+    const sec = beginSection(
+      pptx,
+      "Counterparties",
+      `Open with ${sText(shortlist[0]?.name) || "the top-ranked counterparty"}`,
+      P.accent,
+      SRC,
+      partners.length > shortlist.length
+        ? `The three highest-fit counterparties; the full shortlist of ${partners.length} is in the appendix.`
+        : "Ranked by fit against this asset and this route.",
+    );
+    secTable(
+      sec,
+      ["#", "Partner", "Type", "Fit", "Why them"],
+      shortlist.map((p, i) => [
+        { text: String(i + 1), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
+        { text: cellFit(p.name, 2.4, 0.56), options: cellBody({ bold: true }) },
+        { text: cellFit(sText(p.kind) || "—", 1.8, 0.56, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: p.score != null ? String(p.score) : "n/a", options: cellBody({ align: "center" }) },
+        { text: cellFit(sText(p.rationale) || "Not stated", 6.433, 0.56, 10), options: cellBody({ fontSize: 10 }) },
+      ]),
+      [0.6, 2.4, 1.8, 0.9, 6.433],
+      { rowH: 0.56 },
+    );
+  }
+
+  // A summary-only deck stops here: no divider, no appendix.
+  if (!includeAppendix) return pptx;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PART 2 — APPENDIX
+  // ══════════════════════════════════════════════════════════════════════════
+  appendixDividerSlide(pptx, P.accent);
+  const ax = appendixCounter();
+
   // ─── Recommendation ─────────────────────────────────────────────────────
   {
     const sec = beginSection(
       pptx,
-      "Strategy · Recommendation",
+      ax("Strategy · Recommendation"),
       best ? `${routeLabel(best.key)} realises the most value` : "No route is computable on the current assumptions",
       P.accent,
       SRC,
@@ -4830,7 +5590,7 @@ export async function buildStrategyPptx(
     const ordered = [...computableRoutes, ...uncomputable];
     const sec = beginSection(
       pptx,
-      "Strategy · Route comparison",
+      ax("Strategy · Route comparison"),
       "Every route, one assumption set",
       P.accent,
       SRC,
@@ -4872,7 +5632,7 @@ export async function buildStrategyPptx(
     const assumed = assumptions.filter((a) => a.basis !== "sourced").length;
     const sec = beginSection(
       pptx,
-      "Strategy · Assumptions",
+      ax("Strategy · Assumptions"),
       assumed
         ? `${assumed} of ${assumptions.length} inputs are the model's own estimate — challenge those first`
         : "Every input in this deck is sourced",
@@ -4910,7 +5670,7 @@ export async function buildStrategyPptx(
   if (computableRoutes.length) {
     const sec = beginSection(
       pptx,
-      "Strategy · Scenarios",
+      ax("Strategy · Scenarios"),
       "How the routes hold up when every driver moves together",
       P.accent,
       "Every scenario driver moved ±20% at once; routes that cannot be modelled are excluded rather than defaulted",
@@ -4936,7 +5696,7 @@ export async function buildStrategyPptx(
   if (sens.length && best) {
     const sec = beginSection(
       pptx,
-      "Strategy · Sensitivity",
+      ax("Strategy · Sensitivity"),
       `${labelOf(sens[0].key)} dominates the outcome — settle it first`,
       P.accent,
       `Each driver moved ±20% on its own, everything else held, against ${routeLabel(best.key)}`,
@@ -4960,7 +5720,7 @@ export async function buildStrategyPptx(
   if (partners.length) {
     const sec = beginSection(
       pptx,
-      "Strategy · Counterparties",
+      ax("Strategy · Counterparties"),
       `Open with ${sText(partners[0]?.name) || "the top-ranked counterparty"}`,
       P.accent,
       SRC,
@@ -4985,7 +5745,7 @@ export async function buildStrategyPptx(
   if (sequence.length) {
     const sec = beginSection(
       pptx,
-      "Strategy · Sequence",
+      ax("Strategy · Sequence"),
       "The order to run this in",
       P.accent,
       SRC,
@@ -5013,7 +5773,7 @@ export async function buildStrategyPptx(
       const estimates = strongest.filter((x) => x.e.kind === "estimate").length;
       const sec = beginSection(
         pptx,
-        "Strategy · Evidence",
+        ax("Strategy · Evidence"),
         estimates
           ? `${estimates} of ${strongest.length} shown claims are inferences — source them before they carry a decision`
           : "What the route reads are built on",
@@ -5042,7 +5802,7 @@ export async function buildStrategyPptx(
   {
     const sec = beginSection(
       pptx,
-      "Basis of preparation",
+      ax("Basis of preparation"),
       "How to read this strategy",
       P.accent,
       SRC,
