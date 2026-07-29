@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useCallback, useRef } from "react";
+import { useReducer, useCallback, useRef, useState } from "react";
 import type { HubIntakeForm, AgentId, AgentState, AgentsMap, SSEEvent } from "@/types/hub";
 
 const AGENT_IDS: AgentId[] = ["benchmarking", "partner", "negotiation", "synthesis", "executionPlan", "outLicensingStrategy", "innovativeDiagnosis", "strategy", "execution"];
@@ -25,6 +25,7 @@ function reducer(state: AgentsMap, action: Action): AgentsMap {
   if (action.type === "reset") return initialState();
 
   const { event } = action;
+  if (!("agent" in event)) return state;
   const prev = state[event.agent];
   if (!prev) return state;
 
@@ -52,6 +53,8 @@ function reducer(state: AgentsMap, action: Action): AgentsMap {
 
 export function useAgentStream() {
   const [agents, dispatch] = useReducer(reducer, undefined, initialState);
+  /** The Run this stream is writing to, so the page can address it live. */
+  const [runId, setRunId] = useState<string | null>(null);
   const isRunningRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -60,6 +63,7 @@ export function useAgentStream() {
     if (isRunningRef.current) return;
     isRunningRef.current = true;
     dispatch({ type: "reset" });
+    setRunId(null);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -96,6 +100,7 @@ export function useAgentStream() {
           try {
             const event = JSON.parse(json);
             if (event.type === "done") continue;
+            if (event.type === "run") { setRunId(event.runId); continue; }
             dispatch({ type: "event", event });
           } catch {
             // Ignore malformed events
@@ -120,6 +125,7 @@ export function useAgentStream() {
   const reset = useCallback(() => {
     abortRef.current?.abort();
     isRunningRef.current = false;
+    setRunId(null);
     dispatch({ type: "reset" });
   }, []);
 
@@ -131,5 +137,5 @@ export function useAgentStream() {
     id => agents[id].status === "complete" || agents[id].status === "error"
   );
 
-  return { agents, deploy, reset, isRunning, hasResults };
+  return { agents, deploy, reset, isRunning, hasResults, runId };
 }

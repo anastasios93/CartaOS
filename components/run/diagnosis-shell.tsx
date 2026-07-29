@@ -24,6 +24,7 @@ import { RunConsole } from "@/components/run/run-console";
 import { useAgentStream } from "@/hooks/use-agent-stream";
 import { useRunLog } from "@/hooks/use-run-log";
 import { ExportMenu, type ExportFormat } from "@/components/run/export-menu";
+import { RunNotes } from "@/components/run/run-notes";
 import { exportDiagnosisPDF, exportDiagnosisPPTX, type ExportOptions } from "@/lib/exports";
 import { mapReportToDiagnosis } from "@/server/services/run-mapper";
 import { trpc } from "@/lib/trpc";
@@ -134,7 +135,7 @@ export function DiagnosisShell({
   const [extracting, setExtracting] = useState(false);
   const [viewingRunId, setViewingRunId] = useState<string | null>(null);
 
-  const { agents, deploy, reset, isRunning } = useAgentStream();
+  const { agents, deploy, reset, isRunning, runId: liveRunId } = useAgentStream();
   const log = useRunLog(agents);
 
   const runsQuery = trpc.run.list.useQuery({ assetType: branch }, { refetchOnWindowFocus: false });
@@ -149,6 +150,15 @@ export function DiagnosisShell({
     ? toDiagnosis(viewingRun.data?.diagnosis)
     : toDiagnosis(liveResult);
   const exportName = viewingRunId ? (viewingRun.data?.assetQuery ?? "asset") : asset || "asset";
+
+  /**
+   * Notes need a run to hang off. A reopened run has one; a live run learns
+   * its id from the stream's run event. Requested for off-patent only.
+   */
+  const notesRunId = viewingRunId ?? liveRunId;
+  const showNotes = branch === "off_patent" && !!notesRunId && !isRunning;
+  const storedNotes =
+    (viewingRunId ? ((viewingRun.data?.notes ?? {}) as Record<string, unknown>) : {})?.diagnosis;
 
   const runExport = async (format: ExportFormat, options: ExportOptions) => {
     if (!exportable) throw new Error("This run has no diagnosis to export yet.");
@@ -246,6 +256,15 @@ export function DiagnosisShell({
           assetQuery: viewingRun.data.assetQuery,
           error: viewingRun.data.error ?? null,
         })}
+        {showNotes && (
+          <RunNotes
+            key={`diagnosis-${notesRunId}`}
+            runId={notesRunId!}
+            scope="diagnosis"
+            initial={typeof storedNotes === "string" ? storedNotes : ""}
+            title="Your notes on this diagnosis"
+          />
+        )}
       </div>
     );
   }
@@ -356,6 +375,14 @@ export function DiagnosisShell({
             </div>
           )}
           {renderResults(liveResult, { agents, assetQuery: asset })}
+          {showNotes && (
+            <RunNotes
+              key={`diagnosis-${notesRunId}`}
+              runId={notesRunId!}
+              scope="diagnosis"
+              title="Your notes on this diagnosis"
+            />
+          )}
         </>
       )}
 
