@@ -69,23 +69,70 @@ const truncate = (s: string, max: number): string => {
 // mojibake. Map the common ones to safe equivalents, then strip anything else
 // outside the WinAnsi-renderable range so the PDF never shows garbage.
 const PDF_GLYPHS: [RegExp, string][] = [
-  [/[→⟶➔➙➜⇒▶⮕]/g, ">"], // → ⟶ ➔ ➜ ⇒ ▶
+  [/[→⟶➔➙➜⇒▶⮕]/g, ">"],
   [/[←⇐]/g, "<"],
   [/[↔↕⬌]/g, "-"],
-  [/[•●■▪⁃∙·]/g, "·"],  // bullets → middle dot (WinAnsi-safe)
-  [/[○◦]/g, "o"],                                    // ○ ◦
-  [/[✓✔]/g, "v"],                                    // ✓ ✔
+  [/[•●■▪⁃∙·]/g, "-"],
+  [/[○◦]/g, "o"],
+  [/[✓✔]/g, "v"],
   [/[‘’‛]/g, "'"],
   [/[“”‟]/g, '"'],
+  [/[–—]/g, "-"],
+  [/[…]/g, "..."],
+  [/[   ]/g, " "],
 ];
-function pdfSafe(s: any): string {
-  let out = String(s ?? "");
-  for (const [re, rep] of PDF_GLYPHS) out = out.replace(re, rep);
-  return out.replace(
-    /[^\x09\x0A\x0D\x20-\x7E -ÿ–—…€™ŒœŠšŸŽžƒ]/g,
-    "",
-  );
+
+/**
+ * Letters that must survive as words, not as stripped stems. jsPDF's standard
+ * fonts are WinAnsi, and the text was reaching them as UTF-8 — so "genetiques
+ * repertoire" arrived as "gA©nA©riques rA©pertoire" in a client deck. German
+ * takes its conventional two-letter forms; everything else decomposes to its
+ * base letter.
+ */
+const PDF_LETTERS: [RegExp, string][] = [
+  [/ß/g, "ss"],
+  [/ä/g, "ae"],
+  [/ö/g, "oe"],
+  [/ü/g, "ue"],
+  [/æ/g, "ae"], [/Æ/g, "AE"],
+  [/œ/g, "oe"], [/Œ/g, "OE"],
+  [/ø/g, "o"],  [/Ø/g, "O"],
+  [/å/g, "aa"], [/Å/g, "Aa"],
+  [/ł/g, "l"],  [/Ł/g, "L"],
+  [/ð/g, "d"],  [/þ/g, "th"],
+  [/€/g, "EUR"], [/£/g, "GBP"], [/¥/g, "JPY"],
+];
+
+/**
+ * Everything written into a PDF goes through here. The output is pure ASCII,
+ * which the standard fonts can always render — anything richer silently turned
+ * into mojibake, which is worse than a transliteration because it is unreadable
+ * rather than merely approximate.
+ */
+/**
+ * A capital umlaut expands differently depending on the word around it:
+ * "PACKUNGSGROESSEN" in an all-caps heading, "Oesterreich" in running text.
+ * A flat mapping gets one of the two wrong every time, so look at what follows.
+ */
+function expandCapitalUmlauts(s: string): string {
+  return s.replace(/[ÄÖÜ]([A-ZÄÖÜß]||$)?/g, (_m, next = "") => {
+    const base = _m[0] === "Ä" ? "A" : _m[0] === "Ö" ? "O" : "U";
+    const shouting = typeof next === "string" && next !== "" && next === next.toUpperCase() && /[A-Z]/.test(next);
+    return (shouting ? `${base}E` : `${base}e`) + (next ?? "");
+  });
 }
+
+export function pdfSafe(s: any): string {
+  let out = String(s ?? "");
+  out = expandCapitalUmlauts(out);
+  for (const [re, rep] of PDF_GLYPHS) out = out.replace(re, rep);
+  for (const [re, rep] of PDF_LETTERS) out = out.replace(re, rep);
+  // Decompose the remaining accents and drop the combining marks, so
+  // "repertoire" keeps its letters instead of losing them to the strip below.
+  out = out.normalize("NFD").replace(new RegExp("[\\u0300-\\u036f]", "g"), "");
+  return out.replace(new RegExp("[^\\x09\\x0A\\x0D\\x20-\\x7E]", "g"), "");
+}
+
 
 // ════════════════════════════════════════════════════════════════════════════
 //  PDF ENGINE
@@ -117,6 +164,16 @@ const FOOTER_PAD = 84;   // reserve ≥ 2 cm clear at the page bottom
 
 function newPdf(jsPDF: any, reportName: string, asset: string, accent: string): PdfState {
   const doc = new jsPDF({ unit: "pt", format: "letter", compress: true });
+
+  // Sanitise at the lowest level rather than at every call site. The standard
+  // fonts are WinAnsi, so a stray non-ASCII character renders as mojibake — and
+  // it only takes one helper that forgets pdfSafe (or one that uppercases after
+  // it, turning "fuer" back into "FÜR") for that to reach a client deck. Here,
+  // nothing can bypass it.
+  const rawText = doc.text.bind(doc);
+  doc.text = (text: any, ...rest: any[]) =>
+    rawText(Array.isArray(text) ? text.map(pdfSafe) : pdfSafe(text), ...rest);
+
   return {
     doc,
     y: HEADER_TOP,
@@ -148,7 +205,7 @@ function decorate(state: PdfState) {
   doc.rect(0, 0, pageWidth, 3, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
+  doc.setFontSize(9.5);
   doc.setTextColor(FAINT);
   doc.text(state.reportName.toUpperCase(), margin, 40, { charSpace: 1.4 });
   doc.text(state.asset.toUpperCase(), pageWidth - margin, 40, {
@@ -164,7 +221,7 @@ function decorate(state: PdfState) {
   doc.setDrawColor(LINE);
   doc.line(margin, fy - 12, pageWidth - margin, fy - 12);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
+  doc.setFontSize(9.5);
   doc.setTextColor(FAINT);
   doc.text(`${BRAND}  ·  Confidential`, margin, fy);
   doc.text(`${doc.internal.getNumberOfPages()}`, pageWidth - margin, fy, {
@@ -180,6 +237,11 @@ function newPage(state: PdfState) {
 
 function ensureSpace(state: PdfState, needed: number) {
   if (state.y + needed > state.pageHeight - FOOTER_PAD) newPage(state);
+}
+
+/** Start the next section on a fresh page — unless this one already is one. */
+function pageBreak(state: PdfState) {
+  if (state.y > HEADER_TOP + 4) newPage(state);
 }
 
 // ─── Cover ───────────────────────────────────────────────────────────────────
@@ -253,7 +315,7 @@ function coverPage(
     kpis.forEach((k, i) => {
       const x = margin + i * cellW;
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
+      doc.setFontSize(9.5);
       doc.setTextColor(MUTED);
       doc.text(pdfSafe(k.label.toUpperCase()), x, bandY + 20, { charSpace: 1 });
       // value — WRAP + shrink to the cell so nothing is clipped or cut mid-word
@@ -272,7 +334,7 @@ function coverPage(
   // Meta block
   const metaY = pageHeight - 128;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(9.5);
   doc.setTextColor(MUTED);
   doc.text("PREPARED BY", margin, metaY, { charSpace: 1 });
   doc.text("DATE", pageWidth / 2, metaY, { charSpace: 1 });
@@ -283,7 +345,7 @@ function coverPage(
 
   // Confidentiality
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(9.5);
   doc.setTextColor(FAINT);
   doc.text(
     "Confidential — prepared by CartaOS from public regulatory, clinical and pricing sources. Figures noted as estimates are CartaOS-derived; verify against primary sources before transacting.",
@@ -298,11 +360,13 @@ function coverPage(
 // ─── Section / content primitives ────────────────────────────────────────────
 
 function sectionTitle(state: PdfState, eyebrow: string, title: string, takeaway?: string) {
-  ensureSpace(state, takeaway ? 84 : 60);
+  // Keep-with-next: a heading may never be the last thing on a page. Reserve the
+  // heading itself plus room for the first two lines of whatever follows it.
+  ensureSpace(state, (takeaway ? 96 : 64) + 60);
   const { doc, margin } = state;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(9.5);
   doc.setTextColor(state.accent);
   doc.text(pdfSafe(eyebrow.toUpperCase()), margin, state.y, { charSpace: 1.6 });
 
@@ -380,23 +444,23 @@ function subHeader(state: PdfState, label: string, color = INK) {
 }
 
 function tinyLabel(state: PdfState, label: string) {
-  ensureSpace(state, 16);
+  ensureSpace(state, 20);
   state.doc.setFont("helvetica", "bold");
-  state.doc.setFontSize(7.5);
+  state.doc.setFontSize(9.5);
   state.doc.setTextColor(MUTED);
-  state.doc.text(label.toUpperCase(), state.margin, state.y + 9, { charSpace: 1 });
-  state.y += 13;
+  state.doc.text(label.toUpperCase(), state.margin, state.y + 11, { charSpace: 1 });
+  state.y += 16;
 }
 
 function sourceNote(state: PdfState, text: string) {
   if (!text) return;
-  ensureSpace(state, 16);
+  ensureSpace(state, 20);
   state.doc.setFont("helvetica", "italic");
-  state.doc.setFontSize(7.5);
+  state.doc.setFontSize(9.5);
   state.doc.setTextColor(FAINT);
   const lines = state.doc.splitTextToSize(pdfSafe(`Source: ${text}`), contentW(state));
-  state.doc.text(lines, state.margin, state.y + 9);
-  state.y += lines.length * 10 + 6;
+  state.doc.text(lines, state.margin, state.y + 11);
+  state.y += lines.length * 13 + 6;
 }
 
 /** Shared table renderer — navy header, horizontal rules, zebra, auto header/footer. */
@@ -405,21 +469,55 @@ function table(state: PdfState, opts: any, autoTable: any) {
   const san = (rows: any) =>
     Array.isArray(rows) ? rows.map((r: any[]) => r.map((c) => (typeof c === "string" ? pdfSafe(c) : c))) : rows;
   opts = { ...opts, body: san(opts.body), head: san(opts.head) };
+  // Nothing a reader must read drops below 9.5pt — call sites that ask for
+  // smaller are clamped here rather than each being chased individually.
+  //
+  // The fixed column widths are also normalised: at 9.5pt a set of widths that
+  // was comfortable at 8.5pt can exceed the text block, which autoTable resolves
+  // by breaking header words mid-word ("Confidenc / e"). Scaling the fixed
+  // widths back into the available space keeps every column readable.
+  if (opts.columnStyles) {
+    const clamped: any = {};
+    for (const [k, v] of Object.entries(opts.columnStyles as Record<string, any>)) {
+      clamped[k] = v && typeof v.fontSize === "number" ? { ...v, fontSize: Math.max(9.5, v.fontSize) } : v;
+    }
+    const colCount = (opts.head?.[0]?.length ?? opts.body?.[0]?.length ?? 0) as number;
+    if (colCount > 0) {
+      let fixed = 0;
+      let fixedCount = 0;
+      for (const v of Object.values(clamped) as any[]) {
+        if (v && typeof v.cellWidth === "number") { fixed += v.cellWidth; fixedCount++; }
+      }
+      const budget = contentW(state) - Math.max(0, colCount - fixedCount) * 74;
+      if (fixed > budget && budget > 0) {
+        const k = budget / fixed;
+        for (const key of Object.keys(clamped)) {
+          const v = clamped[key];
+          if (v && typeof v.cellWidth === "number") {
+            clamped[key] = { ...v, cellWidth: Math.max(30, Math.round(v.cellWidth * k)) };
+          }
+        }
+      }
+    }
+    opts = { ...opts, columnStyles: clamped };
+  }
   autoTable(state.doc, {
     startY: state.y,
     theme: "plain",
+    // Long cells wrap inside their column rather than spilling into the next.
+    styles: { overflow: "linebreak", cellWidth: "auto", minCellHeight: 14 },
     headStyles: {
       fillColor: INK,
       textColor: "#FFFFFF",
       fontStyle: "bold",
-      fontSize: 8.5,
+      fontSize: 9.5,
       cellPadding: { top: 7, bottom: 7, left: 8, right: 8 },
       lineWidth: 0,
     },
     bodyStyles: {
-      fontSize: 8.5,
+      fontSize: 9.5,
       textColor: BODY,
-      cellPadding: { top: 6, bottom: 6, left: 8, right: 8 },
+      cellPadding: { top: 7, bottom: 7, left: 8, right: 8 },
       lineColor: LINE,
       lineWidth: { bottom: 0.5 },
     },
@@ -993,6 +1091,105 @@ const compactUsd = (n: number | null | undefined): string => {
 
 const sText = (v: unknown): string => (typeof v === "string" && v.trim() ? v.trim() : "");
 
+/** One instruction on the "What to do next" list. */
+export interface StrategyAction {
+  action: string;
+  owner: string;
+  detail: string;
+}
+
+/**
+ * The strategy equivalent of the diagnosis action list: what to commit to, what
+ * would break it, which variable to nail down first, and which inputs are still
+ * the model's own guess. Assembled only from what this run actually produced —
+ * a run with nothing computable produces a list about closing that gap, not
+ * filler.
+ */
+export function strategyNextActions(ctx: {
+  recommended: any;
+  best: any;
+  byKey: Map<string, any>;
+  missing: string[];
+  labelOf: (key: string) => string;
+  sens: any[];
+  partners: any[];
+  assumptions: any[];
+  uncomputable: any[];
+  strategy: Strategy;
+  limit?: number;
+}): StrategyAction[] {
+  const out: StrategyAction[] = [];
+  const limit = ctx.limit ?? 9;
+  const push = (action: string, owner = "", detail = "") => {
+    if (action && out.length < limit) out.push({ action, owner, detail });
+  };
+
+  if (ctx.best) {
+    const label = sText(ctx.recommended?.label) || sText(ctx.best.label) || ctx.best.key;
+    push(
+      `Commit to ${label} and build the plan against it`,
+      "Deal lead",
+      [
+        `modelled NPV ${compactUsd(ctx.best.npv)}`,
+        ctx.best.breakEvenYear != null ? `break-even year ${ctx.best.breakEvenYear}` : "no break-even inside the horizon",
+      ].join(" · "),
+    );
+    const dependency = sText(ctx.recommended?.keyDependency) || sText(ctx.best.keyDependency);
+    if (dependency) push(`De-risk the dependency that would break the plan: ${dependency}`, "Deal lead", "");
+  } else {
+    push(
+      `Supply the inputs no route can be modelled without: ${ctx.missing.map(ctx.labelOf).join(", ") || "none recorded"}`,
+      "Finance",
+      "Until then no route has an economic case at all.",
+    );
+  }
+
+  if (ctx.sens.length) {
+    const s = ctx.sens[0];
+    push(
+      `Nail down ${ctx.labelOf(s.key)} before anything else — it dominates the outcome`,
+      "Finance",
+      `Swings NPV by ${compactUsd(s.swing)} across ±20%.`,
+    );
+  }
+
+  for (const p of ctx.partners.slice(0, 2)) {
+    const name = sText(p?.name);
+    if (!name) continue;
+    push(
+      `Open a conversation with ${name}`,
+      "Business development lead",
+      [sText(p?.kind), p?.score != null ? `fit ${p.score}` : ""].filter(Boolean).join(" · "),
+    );
+  }
+
+  const sequence = Array.isArray((ctx.strategy as Record<string, unknown>).approachSequence)
+    ? ((ctx.strategy as Record<string, unknown>).approachSequence as unknown[]).map(sText).filter(Boolean)
+    : [];
+  for (const [i, s] of sequence.slice(0, 2).entries()) push(`Approach step ${i + 1}: ${s}`, "Deal lead", "");
+
+  for (const r of ctx.uncomputable.slice(0, 2)) {
+    const e = ctx.byKey.get(r.key);
+    const miss = e && !e.computable ? e.missing : [];
+    push(
+      `Obtain ${miss.map(ctx.labelOf).join(", ") || "the missing inputs"} so ${sText(r.label) || r.key} can be compared on economics`,
+      "Finance",
+      "Currently excluded from the comparison rather than defaulted to zero.",
+    );
+  }
+
+  const assumed = ctx.assumptions.filter((a) => a?.basis !== "sourced").slice(0, 2);
+  for (const a of assumed) {
+    push(
+      `Source "${sText(a.label) || a.key}" — it is the model's own estimate today`,
+      "Finance",
+      String(a.value ?? "").trim() === "" ? "Not supplied at all." : `Currently ${a.value}${sText(a.unit) ? ` ${sText(a.unit)}` : ""}.`,
+    );
+  }
+
+  return out;
+}
+
 /** The slice of autoTable's didParseCell hook this module actually reads. */
 interface ParsedCell {
   section: string;
@@ -1010,12 +1207,12 @@ interface ParsedCell {
  * deterministic engine the screen uses — so a PDF taken after the user has
  * edited assumptions reflects exactly what they were looking at.
  */
-export async function exportStrategyPDF(
+export async function buildStrategyPdf(
   strategy: Strategy,
   branch: "off_patent" | "innovative",
   assetName: string,
   opts?: ExportOptions,
-) {
+): Promise<any> {
   const [{ jsPDF, autoTable }, engine] = await Promise.all([
     loadPdfDeps(),
     import("@/server/services/strategy/model"),
@@ -1070,9 +1267,43 @@ export async function exportStrategyPDF(
   paragraph(
     state,
     "Internal strategic decision support only. The assumptions below are the model's inputs; every financial figure is computed deterministically from them and moves when they move. Figures marked as assumed are not sourced — verify them before transacting.",
-    8.5,
+    9.5,
     MUTED,
   );
+
+  // ── What to do next ───────────────────────────────────────────────────────
+  const nextSteps = strategyNextActions({
+    recommended,
+    best,
+    byKey,
+    missing,
+    labelOf,
+    sens,
+    partners: Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [],
+    assumptions,
+    uncomputable,
+    strategy,
+  });
+  if (nextSteps.length) {
+    sectionTitle(
+      state,
+      "What to do next",
+      recommended
+        ? `Commit to ${recommended.label} and close the inputs that could still move it`
+        : "Close the missing inputs before this decision can be taken",
+      "Every line is derived from this model run: the recommended route and its dependency, the variables that dominate the outcome, and the inputs still to be sourced.",
+    );
+    table(state, {
+      head: [["#", "Do this", "Owner", "Because"]],
+      body: nextSteps.map((a, i) => [String(i + 1), a.action, a.owner || "Not assigned", a.detail || "—"]),
+      columnStyles: {
+        0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 26 },
+        1: { fontStyle: "bold", textColor: INK, cellWidth: 188 },
+        2: { cellWidth: 86, textColor: MUTED },
+        3: { textColor: BODY },
+      },
+    }, autoTable);
+  }
 
   // ── Recommendation ────────────────────────────────────────────────────────
   sectionTitle(
@@ -1286,7 +1517,17 @@ export async function exportStrategyPDF(
     }
   }
 
-  state.doc.save(`${safeFilename(assetName)}_Strategy_Summary.pdf`);
+  return state.doc;
+}
+
+export async function exportStrategyPDF(
+  strategy: Strategy,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+  opts?: ExportOptions,
+) {
+  const doc = await buildStrategyPdf(strategy, branch, assetName, opts);
+  doc.save(`${safeFilename(assetName)}_Strategy_Summary.pdf`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1356,18 +1597,442 @@ function readNotComputable(raw: unknown): { flag: boolean; reason: string } {
 const DIAGNOSIS_DISCLAIMER =
   "CartaOS — this diagnosis is internal decision support, not medical, regulatory or legal advice. Every score is generated by CartaOS from the sources listed against it; dimensions and markets that could not be computed are stated as such rather than estimated.";
 
+// ════════════════════════════════════════════════════════════════════════════
+//  OFF-PATENT REPORT FACADE
+//  `Diagnosis.report` carries the whole OutLicensingReport for an off-patent
+//  run — the same payload the results screen renders. It is stored as a loose
+//  record, so every read below is defensive: a field that is absent produces an
+//  empty string / empty array, and callers skip the block entirely rather than
+//  printing a heading with nothing under it.
+// ════════════════════════════════════════════════════════════════════════════
+
+const asRec = (v: unknown): Record<string, any> =>
+  v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, any>) : {};
+const asArr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+const asStrs = (v: unknown): string[] => asArr(v).map(sText).filter(Boolean);
+const asNum = (v: unknown): number | null => {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** Non-empty when at least one of the values carries content. */
+const anyOf = (...vals: unknown[]): boolean => vals.some((v) => (Array.isArray(v) ? v.length > 0 : !!v));
+
+export interface OffPatentFacade {
+  present: boolean;
+  verdict: string;
+  verdictConfidence: string;
+  dataConfidence: string;
+  opportunityThesis: string;
+  executiveSummary: string;
+  marketWorthinessSummary: string;
+  archetype: { mode: string; rationale: string; rubricNote: string } | null;
+  framing: { narrow: string; broad: string; note: string } | null;
+  assetProfile: any | null;
+  regions: any[];
+  levers: any[];
+  recommendations: any[];
+  risks: any[];
+  commercialPlan: any | null;
+  whatWouldFlipIt: string[];
+  consideredAndRejected: { opportunity: string; reason: string }[];
+  sourcesUsed: string[];
+  weightedWorthiness: any | null;
+  appliedCriteria: any | null;
+}
+
+const EMPTY_FACADE: OffPatentFacade = {
+  present: false,
+  verdict: "",
+  verdictConfidence: "",
+  dataConfidence: "",
+  opportunityThesis: "",
+  executiveSummary: "",
+  marketWorthinessSummary: "",
+  archetype: null,
+  framing: null,
+  assetProfile: null,
+  regions: [],
+  levers: [],
+  recommendations: [],
+  risks: [],
+  commercialPlan: null,
+  whatWouldFlipIt: [],
+  consideredAndRejected: [],
+  sourcesUsed: [],
+  weightedWorthiness: null,
+  appliedCriteria: null,
+};
+
+function readRegion(raw: unknown): any {
+  const r = asRec(raw);
+  const w = asRec(r.marketWorthiness);
+  const bc = asRec(r.businessCase);
+  return {
+    code: sText(r.region),
+    label: sText(r.regionLabel) || sText(r.region) || "Market",
+    attractiveness: sText(r.attractiveness),
+    score: asNum(r.attractivenessScore),
+    market: {
+      size: sText(asRec(r.market).sizeUSD),
+      growth: sText(asRec(r.market).growthRate),
+      unmetNeed: sText(asRec(r.market).unmetNeed),
+      drivers: asStrs(asRec(r.market).drivers),
+      barriers: asStrs(asRec(r.market).barriers),
+    },
+    legal: {
+      authority: sText(asRec(r.legal).regulatoryAuthority),
+      pathway: sText(asRec(r.legal).pathway),
+      timeline: sText(asRec(r.legal).estimatedTimeline),
+      opportunities: asStrs(asRec(r.legal).exclusivityOpportunities),
+      barriers: asStrs(asRec(r.legal).barriers),
+    },
+    commercial: {
+      competitors: sText(asRec(r.commercial).competitorActivity),
+      pricing: sText(asRec(r.commercial).pricingDynamics),
+      reimbursement: sText(asRec(r.commercial).reimbursementLandscape),
+      distribution: sText(asRec(r.commercial).distributionChannels),
+      partners: asStrs(asRec(r.commercial).keyPartnerCandidates),
+    },
+    ip: {
+      patentStrength: sText(asRec(r.ip).patentStrength),
+      fto: sText(asRec(r.ip).ftoStatus),
+      years: asNum(asRec(r.ip).estimatedExclusivityYears),
+      opportunities: asStrs(asRec(r.ip).opportunities),
+      risks: asStrs(asRec(r.ip).expirationRisks),
+    },
+    cos: r.cos
+      ? {
+          marketSize: asNum(asRec(r.cos).marketSize),
+          regulatory: asNum(asRec(r.cos).regulatory),
+          ip: asNum(asRec(r.cos).ip),
+          marketAccess: asNum(asRec(r.cos).marketAccess),
+          competition: asNum(asRec(r.cos).competition),
+        }
+      : null,
+    manufacturing: r.manufacturing
+      ? { complexity: sText(asRec(r.manufacturing).complexity), notes: sText(asRec(r.manufacturing).notes) }
+      : null,
+    provenanceFlags: asStrs(r.provenanceFlags),
+    businessCase: anyOf(bc.valueProposition, bc.profitWedge, bc.economics, bc.verdict)
+      ? {
+          valueProposition: sText(bc.valueProposition),
+          profitWedge: sText(bc.profitWedge),
+          economics: sText(bc.economics),
+          verdict: sText(bc.verdict),
+        }
+      : null,
+    worthiness: anyOf(w.rating, w.score, w.thesis, w.healthcareLandscape, w.legalLandscape)
+      ? {
+          rating: sText(w.rating),
+          score: asNum(w.score),
+          thesis: sText(w.thesis),
+          healthcareLandscape: sText(w.healthcareLandscape),
+          legalLandscape: sText(w.legalLandscape),
+          marketSizeVsCompetitors: sText(w.marketSizeVsCompetitors),
+          partnershipRoom: sText(w.partnershipRoom),
+          distributionChannels: sText(w.distributionChannels),
+          novelPaths: asStrs(w.novelPaths),
+        }
+      : null,
+  };
+}
+
+function readLever(raw: unknown): any {
+  const l = asRec(raw);
+  const nc = readNotComputable(l.notComputable);
+  const score = nc.flag ? null : asNum(l.score);
+  return {
+    name: sText(l.lever) || sText(l.label) || sText(l.key) || "Unnamed lever",
+    score,
+    notComputable: nc.flag || score == null,
+    reason: nc.reason || sText(l.dataGap),
+    confidence: cap(l.confidence) || sText(l.confidence),
+    computed: l.computed === true,
+    evidence: asArr(l.evidence)
+      .map((e) => ({ finding: sText(asRec(e).finding) || sText(asRec(e).claim), source: sText(asRec(e).source) }))
+      .filter((e) => e.finding),
+    actions: asStrs(l.recommendedActions),
+    estValue: sText(l.estValueRange),
+    dataGap: sText(l.dataGap),
+  };
+}
+
+/**
+ * Pull the off-patent report off a Diagnosis. Returns a facade whose `present`
+ * flag is false when there is nothing to render (innovative runs, or an
+ * off-patent run stored before the report rode along).
+ */
+export function readOffPatentReport(diagnosis: Diagnosis): OffPatentFacade {
+  const raw = asRec((diagnosis as Record<string, unknown>)?.report);
+  if (!Object.keys(raw).length) return EMPTY_FACADE;
+
+  const arch = asRec(raw.archetype);
+  const fr = asRec(raw.opportunityFraming);
+  const prof = asRec(raw.assetProfile);
+  const plan = asRec(raw.commercialPlan);
+  const ww = asRec(raw.weightedWorthiness);
+
+  const facade: OffPatentFacade = {
+    present: true,
+    verdict: sText(raw.verdict),
+    verdictConfidence: sText(raw.verdictConfidence),
+    dataConfidence: sText(raw.dataConfidence),
+    opportunityThesis: sText(raw.opportunityThesis),
+    executiveSummary: sText(raw.executiveSummary),
+    marketWorthinessSummary: sText(raw.marketWorthinessSummary),
+    archetype: anyOf(arch.mode, arch.rationale, arch.rubricNote)
+      ? { mode: sText(arch.mode), rationale: sText(arch.rationale), rubricNote: sText(arch.rubricNote) }
+      : null,
+    framing: anyOf(fr.narrowVerdict, fr.broadVerdict, fr.note)
+      ? { narrow: sText(fr.narrowVerdict), broad: sText(fr.broadVerdict), note: sText(fr.note) }
+      : null,
+    assetProfile: Object.keys(prof).length
+      ? {
+          name: sText(prof.name),
+          description: sText(prof.description),
+          modality: sText(prof.modality),
+          therapeuticArea: sText(prof.therapeuticArea),
+          developmentStage: sText(prof.developmentStage),
+          mechanism: sText(prof.mechanism),
+          currentMarkets: asStrs(prof.currentMarkets),
+          strengths: asStrs(prof.keyStrengths),
+          challenges: asStrs(prof.keyChallenges),
+          dataPoints: asArr(prof.keyDataPoints)
+            .map((d) => ({
+              label: sText(asRec(d).label),
+              value: sText(asRec(d).value),
+              source: sText(asRec(d).source),
+              tier: sText(asRec(d).tier),
+              basis: sText(asRec(d).basis),
+            }))
+            .filter((d) => d.label || d.value),
+        }
+      : null,
+    regions: asArr(raw.regionalAnalysis).map(readRegion),
+    levers: asArr(raw.valueLevers).map(readLever),
+    recommendations: asArr(raw.recommendations)
+      .map((x) => {
+        const r = asRec(x);
+        const v = asRec(r.estimatedValue);
+        return {
+          rank: asNum(r.priorityRank) ?? 0,
+          region: sText(r.targetRegion) || "Market",
+          rationale: sText(r.rationale),
+          structure: sText(r.recommendedDealStructure),
+          upfront: sText(v.upfront),
+          total: sText(v.total),
+          royalty: sText(v.royaltyRange),
+          partners: asStrs(r.topPartnerCandidates),
+          prerequisites: asStrs(r.prerequisites),
+          timeline: sText(r.estimatedTimeline),
+          roi: sText(r.expectedROI),
+        };
+      })
+      .sort((a, b) => a.rank - b.rank),
+    risks: asArr(raw.portfolioRisks)
+      .map((x) => {
+        const r = asRec(x);
+        return {
+          category: sText(r.category),
+          risk: sText(r.risk),
+          regions: asStrs(r.affectedRegions),
+          impact: sText(r.impact),
+          likelihood: sText(r.likelihood),
+          mitigation: sText(r.mitigation),
+        };
+      })
+      .filter((r) => r.risk),
+    commercialPlan: anyOf(plan.summary, asArr(plan.channels).length, asArr(plan.howToProceed).length)
+      ? {
+          summary: sText(plan.summary),
+          channels: asArr(plan.channels)
+            .map((c) => ({
+              channel: sText(asRec(c).channel),
+              geographies: asStrs(asRec(c).geographies),
+              valueRole: sText(asRec(c).valueRole),
+              accessMechanics: sText(asRec(c).accessMechanics),
+              keyPlayers: asStrs(asRec(c).keyPlayers),
+            }))
+            .filter((c) => c.channel),
+          steps: asArr(plan.howToProceed)
+            .map((s) => ({
+              step: asNum(asRec(s).step) ?? 0,
+              action: sText(asRec(s).action),
+              geography: sText(asRec(s).geography),
+              approach: sText(asRec(s).approach),
+              timing: sText(asRec(s).timing),
+              owner: sText(asRec(s).owner),
+            }))
+            .filter((s) => s.action)
+            .sort((a, b) => a.step - b.step),
+        }
+      : null,
+    whatWouldFlipIt: asStrs(raw.whatWouldFlipIt),
+    consideredAndRejected: asArr(raw.consideredAndRejected)
+      .map((c) => ({ opportunity: sText(asRec(c).opportunity), reason: sText(asRec(c).reason) }))
+      .filter((c) => c.opportunity),
+    sourcesUsed: asStrs(raw.sourcesUsed),
+    weightedWorthiness: anyOf(ww.score, ww.method, asArr(ww.byLever).length)
+      ? {
+          score: asNum(ww.score),
+          method: sText(ww.method),
+          note: sText(ww.note),
+          byLever: asArr(ww.byLever).map((l) => ({
+            lever: sText(asRec(l).lever),
+            score: asNum(asRec(l).score),
+            weight: asNum(asRec(l).weight),
+            computed: asRec(l).computed === true,
+          })),
+        }
+      : null,
+    appliedCriteria: Object.keys(asRec(raw.appliedCriteria)).length ? asRec(raw.appliedCriteria) : null,
+  };
+  return facade;
+}
+
+/** Levers that scored, strongest first. */
+const scoredLevers = (f: OffPatentFacade): any[] =>
+  f.levers.filter((l) => !l.notComputable && l.score != null).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+
+/** The region that leads the set, by worthiness where present, else by COS. */
+function leadRegion(f: OffPatentFacade): any | null {
+  const ranked = f.regions
+    .slice()
+    .sort((a, b) => (b.worthiness?.score ?? b.score ?? -1) - (a.worthiness?.score ?? a.score ?? -1));
+  return ranked[0] ?? null;
+}
+
+// ── "What to do next" ───────────────────────────────────────────────────────
+
+export interface NextAction {
+  /** The instruction itself — imperative, and specific to this run. */
+  action: string;
+  /** Who carries it, when the payload says. Empty when it does not. */
+  owner: string;
+  /** The dependency, evidence or figure that qualifies the instruction. */
+  detail: string;
+}
+
+/**
+ * The "so what do we actually do" list, assembled only from what the payload
+ * contains. Nothing here is boilerplate: every line names a region, a lever, a
+ * dependency or a source that this run produced. An empty list means the run
+ * carried nothing actionable, and the section is skipped rather than padded.
+ */
+export function buildNextActions(
+  diagnosis: Diagnosis,
+  f: OffPatentFacade,
+  branch: "off_patent" | "innovative",
+  limit = 10,
+): NextAction[] {
+  const out: NextAction[] = [];
+  const push = (action: string, owner = "", detail = "") => {
+    if (action && out.length < limit) out.push({ action, owner, detail });
+  };
+
+  // 1. The recommended route and the dependency that gates it.
+  const top = f.recommendations[0];
+  if (top) {
+    push(
+      `Pursue ${top.structure || "market entry"} in ${top.region}`,
+      "Business development lead",
+      [top.total ? `target total value ${top.total}` : "", top.timeline ? `over ${top.timeline}` : ""]
+        .filter(Boolean)
+        .join(", "),
+    );
+    if (top.prerequisites.length) {
+      push(`Clear the gating prerequisite before opening talks: ${top.prerequisites[0]}`, "Deal team", top.prerequisites[1] ?? "");
+    }
+    if (top.partners.length) {
+      push(`Open outreach to ${top.partners.slice(0, 3).join(", ")}`, "Business development lead", top.roi);
+    }
+  }
+  const second = f.recommendations[1];
+  if (second) {
+    push(
+      `Keep ${second.region} warm as the fallback route (${second.structure || "structure to be set"})`,
+      "Business development lead",
+      second.upfront ? `modelled upfront ${second.upfront}` : "",
+    );
+  }
+
+  // 2. The highest-scoring levers, each with its own recommended play.
+  for (const l of scoredLevers(f).slice(0, 3)) {
+    if (!l.actions.length) continue;
+    push(
+      `Capture "${l.name}" (${Math.round(l.score)}/100): ${l.actions[0]}`,
+      "Commercial lead",
+      [l.estValue ? `est. value ${l.estValue}` : "", l.confidence ? `${l.confidence} confidence` : ""]
+        .filter(Boolean)
+        .join(" · "),
+    );
+  }
+
+  // 3. Sequenced commercial plan — these already carry an owner.
+  for (const s of (f.commercialPlan?.steps ?? []).slice(0, 2)) {
+    push(
+      `Step ${s.step}: ${s.action}`,
+      s.owner,
+      [s.geography, s.approach, s.timing].filter(Boolean).join(" · "),
+    );
+  }
+
+  // 4. Falsifiers — what would change the answer.
+  for (const w of f.whatWouldFlipIt.slice(0, 2)) {
+    push(`Commission the evidence that settles this: ${w}`, "Research lead", "This would flip the verdict.");
+  }
+
+  // 5. Kill criteria — the high-impact risks, with the mitigation as the instruction.
+  for (const r of f.risks.filter((x) => x.impact === "High").slice(0, 2)) {
+    push(
+      `Kill criterion — stop if unresolved: ${r.risk}`,
+      "Risk owner",
+      r.mitigation ? `Mitigation: ${r.mitigation}` : "",
+    );
+  }
+
+  // 6. Close the stated gaps rather than leaving a dead end.
+  for (const l of f.levers.filter((x) => x.notComputable && (x.reason || x.dataGap)).slice(0, 2)) {
+    push(`Obtain the missing input for "${l.name}": ${l.reason || l.dataGap}`, "Data owner", "Lever is not computable until then.");
+  }
+  const gaps = asArr((diagnosis as Record<string, unknown>)?.coverage)
+    .map(asRec)
+    .filter((c) => asStrs(c.unwired).length);
+  for (const g of gaps.slice(0, 2)) {
+    push(
+      `Connect ${asStrs(g.unwired).join(", ")} so ${sText(g.label) || sText(g.key) || "this dimension"} can be scored on full evidence`,
+      "Data owner",
+      "Scored today without that source.",
+    );
+  }
+
+  // 7. Branch fallbacks — a run with no report still gets a next step.
+  const swing = asStrs((diagnosis as Record<string, unknown>)?.swingFactors);
+  for (const s of swing.slice(0, 2)) push(`Resolve first — it moves the answer, not just the confidence: ${s}`, "", "");
+  const risks = asStrs((diagnosis as Record<string, unknown>)?.topRisks);
+  for (const r of risks.slice(0, 1)) push(`Put a mitigation owner against the lead risk: ${r}`, "", "");
+  if (branch === "innovative") {
+    const lever = sText((diagnosis as Record<string, unknown>)?.inflectionLever);
+    if (lever) push(`Fund the value-inflection lever: ${lever}`, "", "");
+  }
+
+  return out;
+}
+
 /**
  * The defensible version of the diagnosis: the verdict and its thesis, every
  * dimension score with the basis behind it, the per-market read, the risks, the
  * branch-specific flags or levers, and — the part that makes the rest
  * inspectable — the evidence and the source-coverage log.
  */
-export async function exportDiagnosisPDF(
+export async function buildDiagnosisPdf(
   diagnosis: Diagnosis,
   branch: "off_patent" | "innovative",
   assetName: string,
   opts?: ExportOptions,
-) {
+): Promise<any> {
   const { jsPDF, autoTable } = await loadPdfDeps();
 
   const includeMarkets = opts?.includeMarkets !== false;
@@ -1385,6 +2050,13 @@ export async function exportDiagnosisPDF(
   const rejected = Array.isArray(diagnosis.consideredAndRejected) ? diagnosis.consideredAndRejected : [];
   const coverage = Array.isArray(diagnosis.coverage) ? diagnosis.coverage : [];
 
+  // The full off-patent report, when the run carried one. Every section built
+  // from it is skipped silently when the corresponding field is absent.
+  const f = readOffPatentReport(diagnosis);
+  const leadReg = leadRegion(f);
+  const bestLever = scoredLevers(f)[0];
+  const actions = buildNextActions(diagnosis, f, branch, 10);
+
   const scored = dimensions.filter((d) => d.score != null);
   const notComputable = dimensions.length - scored.length;
   const topDimension = scored.slice().sort(byScoreDesc)[0];
@@ -1399,28 +2071,52 @@ export async function exportDiagnosisPDF(
     "Every scored dimension with the evidence behind it, the per-market read, and an explicit account of what could not be computed",
     assetName,
     [
-      { label: "Verdict", value: verdictLabel(diagnosis.verdict) },
+      { label: "Verdict", value: f.verdict || verdictLabel(diagnosis.verdict) },
       {
         label: "Worthiness score",
         value: diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "n/a",
       },
-      { label: "Verdict confidence", value: cap(diagnosis.verdictConfidence) || "n/a" },
-      { label: "Markets assessed", value: String(perMarket.length) },
+      { label: "Verdict confidence", value: f.verdictConfidence || cap(diagnosis.verdictConfidence) || "n/a" },
+      { label: "Lead market", value: leadReg?.label ?? (perMarket.length ? `${perMarket.length} assessed` : "n/a") },
     ],
   );
 
   paragraph(
     state,
     "Internal strategic decision support only. Not medical advice, not promotional material, and not a substitute for regulatory, IP or legal review. Scores are generated from the named sources; anything the evidence base could not support is marked not computable rather than estimated.",
-    8.5,
+    9.5,
     MUTED,
   );
+
+  // ── What to do next — the front-loaded action list ────────────────────────
+  if (actions.length) {
+    sectionTitle(
+      state,
+      "What to do next",
+      f.recommendations[0]
+        ? `Open ${f.recommendations[0].region} first, then work the list below in order`
+        : bestLever
+          ? `Start with "${bestLever.name}" — the highest-scoring play in this run`
+          : "The moves this diagnosis actually supports",
+      "Every line below is drawn from this run's own output — the recommended route and its dependency, the strongest levers, the evidence that would flip the verdict, and the gaps to close.",
+    );
+    table(state, {
+      head: [["#", "Do this", "Owner", "Because"]],
+      body: actions.map((a, i) => [String(i + 1), a.action, a.owner || "Not assigned", a.detail || "—"]),
+      columnStyles: {
+        0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 26 },
+        1: { fontStyle: "bold", textColor: INK, cellWidth: 188 },
+        2: { cellWidth: 86, textColor: MUTED },
+        3: { textColor: BODY },
+      },
+    }, autoTable);
+  }
 
   // ── Verdict & thesis ──────────────────────────────────────────────────────
   sectionTitle(
     state,
     "Verdict",
-    `${verdictLabel(diagnosis.verdict)} — ${assetName}`,
+    `${f.verdict || verdictLabel(diagnosis.verdict)} — ${assetName}`,
     [
       diagnosis.worthinessScore != null
         ? `Worthiness ${Math.round(diagnosis.worthinessScore)}/100`
@@ -1432,21 +2128,117 @@ export async function exportDiagnosisPDF(
       .join("   ·   "),
   );
   if (sText(diagnosis.thesis)) lead(state, sText(diagnosis.thesis));
+  if (f.opportunityThesis && f.opportunityThesis !== sText(diagnosis.thesis)) {
+    tinyLabel(state, "Opportunity thesis");
+    paragraph(state, f.opportunityThesis);
+  }
+  if (f.executiveSummary) {
+    tinyLabel(state, "Executive summary");
+    paragraph(state, f.executiveSummary);
+  }
+  if (f.archetype) {
+    tinyLabel(state, `Value-capture archetype${f.archetype.mode ? ` — ${f.archetype.mode}` : ""}`);
+    if (f.archetype.rationale) paragraph(state, f.archetype.rationale);
+    if (f.archetype.rubricNote) paragraph(state, `Scoring lens: ${f.archetype.rubricNote}`, 9.5, MUTED);
+  }
+  if (f.framing) {
+    subHeader(state, "Two questions — framing the verdict", STRATEGY_COLOR);
+    if (f.framing.narrow) { tinyLabel(state, "Narrow — the off-patent in-license trade"); paragraph(state, f.framing.narrow); }
+    if (f.framing.broad) { tinyLabel(state, "Broad — is there any real market value"); paragraph(state, f.framing.broad); }
+    if (f.framing.note) paragraph(state, f.framing.note, 9.5, MUTED);
+  }
   if (branch === "innovative" && sText(diagnosis.inflectionLever)) {
     tinyLabel(state, "Biggest value-inflection lever");
     paragraph(state, sText(diagnosis.inflectionLever));
+  }
+  if (f.weightedWorthiness && f.weightedWorthiness.score != null) {
+    subHeader(state, `Client-weighted worthiness — ${Math.round(f.weightedWorthiness.score)}/100`, STRATEGY_COLOR);
+    if (f.weightedWorthiness.method) paragraph(state, f.weightedWorthiness.method, 9.5, MUTED);
+    if (f.weightedWorthiness.byLever.length) {
+      table(state, {
+        head: [["Lever", "Score", "Weight", "Basis"]],
+        body: f.weightedWorthiness.byLever.map((l: any) => [
+          l.lever || "Unnamed lever",
+          l.score != null ? String(Math.round(l.score)) : "n/a",
+          l.weight != null ? String(Math.round(l.weight)) : "n/a",
+          l.computed ? "Computed" : "Reasoned",
+        ]),
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 200 },
+          1: { halign: "right", cellWidth: 60 },
+          2: { halign: "right", cellWidth: 60 },
+          3: { textColor: MUTED },
+        },
+      }, autoTable);
+    }
+    if (f.weightedWorthiness.note) paragraph(state, f.weightedWorthiness.note, 9.5, MUTED);
+  }
+
+  // ── Asset profile (off-patent report) ─────────────────────────────────────
+  if (f.assetProfile) {
+    const p = f.assetProfile;
+    sectionTitle(
+      state,
+      "Asset profile",
+      p.name ? `${p.name}${p.developmentStage ? ` — ${p.developmentStage}` : ""}` : "The asset under assessment",
+      p.description || undefined,
+    );
+    const facts: [string, string][] = [
+      ["Modality", p.modality],
+      ["Mechanism", p.mechanism],
+      ["Therapeutic area", p.therapeuticArea],
+      ["Development stage", p.developmentStage],
+      ["Current markets", p.currentMarkets.join(", ")],
+    ];
+    const filled = facts.filter(([, v]) => !!v);
+    if (filled.length) {
+      table(state, {
+        body: filled,
+        columnStyles: { 0: { fontStyle: "bold", textColor: INK, cellWidth: 150 }, 1: { textColor: BODY } },
+      }, autoTable);
+    }
+    if (p.strengths.length) { subHeader(state, "Key strengths — lead with these", POS); bullets(state, p.strengths, POS); }
+    if (p.challenges.length) { subHeader(state, "Key challenges — plan around these", INK); bullets(state, p.challenges, INK); }
+    if (p.dataPoints.length) {
+      subHeader(state, "Key data points", INK);
+      const tier3 = p.dataPoints.filter((d: any) => d.tier === "Tier 3").length;
+      if (tier3) {
+        paragraph(
+          state,
+          `${tier3} of ${p.dataPoints.length} data points rest on Tier-3 sources — verify these independently before relying on them.`,
+          9.5,
+          MUTED,
+        );
+      }
+      table(state, {
+        head: [["Metric", "Value", "Source", "Tier", "Basis"]],
+        body: p.dataPoints.map((d: any) => [
+          d.label || "—",
+          d.value || "—",
+          d.source || "Not stated",
+          d.tier || "Not tiered",
+          d.basis === "inference" ? "Inference" : d.basis === "evidence" ? "Evidence" : "—",
+        ]),
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 104 },
+          2: { textColor: MUTED },
+          3: { cellWidth: 56 },
+          4: { cellWidth: 64, textColor: MUTED },
+        },
+      }, autoTable);
+    }
   }
 
   // ── Dimension scores ──────────────────────────────────────────────────────
   if (dimensions.length) {
     sectionTitle(
       state,
-      "Dimension Scores",
+      "Dimension scores",
       topDimension
         ? `${dimensionLabel(branch, topDimension.key)} is the strongest dimension`
         : "No dimension could be scored from the connected evidence",
       notComputable
-        ? `${notComputable} of ${dimensions.length} dimensions could not be computed; each states why in place of a number.`
+        ? `${notComputable} of ${dimensions.length} dimensions could not be computed; each states why in place of a number — connect the named source to close it.`
         : "Computed dimensions are owned by the deterministic layer; reasoned dimensions are the model's read of the cited evidence.",
     );
     table(state, {
@@ -1458,10 +2250,10 @@ export async function exportDiagnosisPDF(
         d.computed === true ? "Computed" : "Reasoned",
       ]),
       columnStyles: {
-        0: { fontStyle: "bold", textColor: INK, cellWidth: 132 },
-        1: { cellWidth: 170 },
-        2: { cellWidth: 62 },
-        3: { cellWidth: 60, textColor: MUTED, fontSize: 8 },
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 118 },
+        1: { cellWidth: 148 },
+        2: { cellWidth: 76 },
+        3: { cellWidth: 72, textColor: MUTED },
       },
       didParseCell: (data: ParsedCell) => {
         if (data.section !== "body" || data.column.index !== 1) return;
@@ -1477,7 +2269,94 @@ export async function exportDiagnosisPDF(
     }, autoTable);
   }
 
-  // ── Per-market ────────────────────────────────────────────────────────────
+  // ── Value levers ──────────────────────────────────────────────────────────
+  const leverRows = f.present && f.levers.length ? f.levers : null;
+  if (branch === "off_patent" && (leverRows || valueLevers.length)) {
+    pageBreak(state);
+    const live = leverRows ? scoredLevers(f) : [];
+    sectionTitle(
+      state,
+      "Value levers",
+      live[0]
+        ? `"${live[0].name}" is the strongest play — start there`
+        : "Where value still sits in an already-approved asset",
+      "Levers the evidence base cannot support are marked with the input that would make them computable, never scored to a plausible-looking number.",
+    );
+    if (leverRows) {
+      table(state, {
+        head: [["Lever", "Score", "Confidence", "Est. value", "Basis"]],
+        body: leverRows.map((l: any) => [
+          l.name,
+          l.notComputable ? `Not computable — ${l.reason || "no reason recorded"}` : String(Math.round(l.score)),
+          l.notComputable ? "—" : (l.confidence || "—"),
+          l.estValue || "—",
+          l.notComputable ? "Not computable" : l.computed ? "Computed" : "Reasoned",
+        ]),
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 104 },
+          1: { cellWidth: 132 },
+          2: { cellWidth: 76 },
+          4: { cellWidth: 76, textColor: MUTED },
+        },
+        didParseCell: (data: ParsedCell) => {
+          if (data.section !== "body" || data.column.index !== 1) return;
+          const l = leverRows[data.row.index];
+          if (l && l.notComputable) {
+            data.cell.styles.textColor = NEG;
+            data.cell.styles.fontStyle = "italic";
+          }
+        },
+      }, autoTable);
+
+      // Per-lever detail — evidence, plays, value and the gap that limits it.
+      for (const l of [...scoredLevers(f), ...f.levers.filter((x: any) => x.notComputable)]) {
+        ensureSpace(state, 90);
+        subHeader(
+          state,
+          l.notComputable ? `${l.name} — not computable` : `${l.name} — ${Math.round(l.score)}/100`,
+          l.notComputable ? INK : STRATEGY_COLOR,
+        );
+        if (l.evidence.length) {
+          tinyLabel(state, "Evidence");
+          bullets(state, l.evidence.map((e: any) => (e.source ? `${e.finding} — ${e.source}` : e.finding)));
+        }
+        if (l.actions.length) {
+          tinyLabel(state, "Recommended plays");
+          bullets(state, l.actions, STRATEGY_COLOR);
+        }
+        if (l.estValue) { tinyLabel(state, "Estimated value"); paragraph(state, l.estValue); }
+        if (l.dataGap || l.reason) {
+          tinyLabel(state, "Evidence needed to close this");
+          paragraph(state, `Obtain: ${l.dataGap || l.reason}`, 9.5, MUTED);
+        }
+      }
+    } else {
+      table(state, {
+        head: [["Lever", "Score", "Confidence", "Basis"]],
+        body: valueLevers.map((l) => {
+          const nc = readNotComputable(l.notComputable);
+          const raw = Number(l.score);
+          const hasScore = !nc.flag && Number.isFinite(raw);
+          return [
+            sText(l.lever) || sText(l.label) || sText(l.key) || "Unnamed lever",
+            hasScore
+              ? String(Math.round(raw))
+              : `Not computable — ${nc.reason || sText(l.dataGap) || "no reason recorded"}`,
+            cap(l.confidence) || "—",
+            nc.flag ? "Not computable" : l.computed === true ? "Computed" : "Reasoned",
+          ];
+        }),
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 118 },
+          1: { cellWidth: 158 },
+          2: { cellWidth: 76 },
+          3: { cellWidth: 72, textColor: MUTED },
+        },
+      }, autoTable);
+    }
+  }
+
+  // ── Markets ───────────────────────────────────────────────────────────────
   if (includeMarkets && perMarket.length) {
     const ranked = perMarket.slice().sort(byScoreDesc);
     const leadMarket = ranked.find((m) => m.score != null);
@@ -1485,7 +2364,7 @@ export async function exportDiagnosisPDF(
       state,
       "Markets",
       leadMarket
-        ? `${countryLabel(leadMarket.country)} leads the market set`
+        ? `${countryLabel(leadMarket.country)} leads the market set — take it first`
         : "No market could be scored from the connected evidence",
       "Ranked by score; markets the evidence could not support are listed last and say why.",
     );
@@ -1514,98 +2393,329 @@ export async function exportDiagnosisPDF(
     }, autoTable);
   }
 
-  // ── Risks and swing factors ───────────────────────────────────────────────
-  if (topRisks.length || swingFactors.length) {
+  // ── Regional assessment (off-patent report) ───────────────────────────────
+  if (f.regions.length) {
+    pageBreak(state);
     sectionTitle(
       state,
-      "Risk",
-      "What could kill this, and what most moves the score",
+      "Regional assessment",
+      leadReg
+        ? `${leadReg.label} leads on ${leadReg.worthiness ? "commercial worthiness" : "commercial opportunity"} — concentrate effort there`
+        : "Regional opportunity matrix",
+      "Attractiveness blends market, regulatory, commercial and IP into one 0–100 read; market worthiness is the separate purely-commercial verdict.",
+    );
+    table(state, {
+      head: [["Region", "Rating", "COS", "Worthiness", "Market size", "Growth", "Patent", "FTO"]],
+      body: f.regions.map((r: any) => [
+        r.label,
+        r.attractiveness || "—",
+        r.score != null ? String(Math.round(r.score)) : "n/a",
+        r.worthiness ? `${r.worthiness.rating || "—"}${r.worthiness.score != null ? ` (${Math.round(r.worthiness.score)})` : ""}` : "Not assessed",
+        r.market.size || "—",
+        r.market.growth || "—",
+        r.ip.patentStrength || "—",
+        r.ip.fto || "—",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: INK, cellWidth: 62 },
+        2: { halign: "right", fontStyle: "bold", cellWidth: 40 },
+        3: { cellWidth: 88 },
+      },
+    }, autoTable);
+    if (f.marketWorthinessSummary) {
+      subHeader(state, "Market worthiness — the cross-market read", STRATEGY_COLOR);
+      paragraph(state, f.marketWorthinessSummary, 10.5, INK);
+    }
+    if (f.sourcesUsed.length) sourceNote(state, f.sourcesUsed.join(", "));
+
+    for (const r of f.regions) {
+      pageBreak(state);
+      sectionTitle(
+        state,
+        `${r.label} · ${r.attractiveness || "not rated"}`,
+        r.businessCase?.verdict
+          ? `${r.label} — ${r.businessCase.verdict}${r.score != null ? ` (${Math.round(r.score)}/100)` : ""}`
+          : `${r.label}${r.score != null ? ` — ${Math.round(r.score)}/100` : ""}`,
+        r.worthiness?.thesis || r.businessCase?.valueProposition || undefined,
+      );
+
+      if (r.provenanceFlags.length) {
+        subHeader(state, "Provenance flags — verify before relying", INK);
+        bullets(state, r.provenanceFlags, INK);
+      }
+
+      if (r.businessCase) {
+        subHeader(state, `Business case — ${r.businessCase.verdict || "call not stated"}`, STRATEGY_COLOR);
+        if (r.businessCase.valueProposition) paragraph(state, r.businessCase.valueProposition, 10.5, INK);
+        if (r.businessCase.profitWedge) { tinyLabel(state, "Where the profitable case is"); paragraph(state, r.businessCase.profitWedge); }
+        if (r.businessCase.economics) { tinyLabel(state, "Economics"); paragraph(state, r.businessCase.economics); }
+      }
+
+      if (r.cos) {
+        const cosRows: [string, number | null][] = [
+          ["Market size", r.cos.marketSize],
+          ["Regulatory", r.cos.regulatory],
+          ["IP runway", r.cos.ip],
+          ["Market access", r.cos.marketAccess],
+          ["Low competition", r.cos.competition],
+        ];
+        const present = cosRows.filter(([, v]) => v != null);
+        if (present.length) {
+          subHeader(state, "Commercial opportunity score — drivers", INK_2);
+          table(state, {
+            head: [["Driver", "Score"]],
+            body: present.map(([k, v]) => [k, String(Math.round(v as number))]),
+            columnStyles: { 0: { fontStyle: "bold", textColor: INK, cellWidth: 180 }, 1: { halign: "right", cellWidth: 70 } },
+          }, autoTable);
+        }
+      }
+
+      writeDimension(state, autoTable, "Market & epidemiology", [
+        ["Size", r.market.size],
+        ["Growth", r.market.growth],
+        ["Unmet need", r.market.unmetNeed],
+      ], r.market.drivers, r.market.barriers);
+
+      writeDimension(state, autoTable, "Regulatory pathway", [
+        ["Authority", r.legal.authority],
+        ["Pathway", r.legal.pathway],
+        ["Timeline", r.legal.timeline],
+      ], r.legal.opportunities, r.legal.barriers);
+
+      writeDimension(state, autoTable, "Market access & competition", [
+        ["Competitive density", r.commercial.competitors],
+        ["Pricing / HTA", r.commercial.pricing],
+        ["Reimbursement", r.commercial.reimbursement],
+        ["Distribution", r.commercial.distribution],
+      ], r.commercial.partners, []);
+
+      writeDimension(state, autoTable, "IP & exclusivity", [
+        ["Patent strength", r.ip.patentStrength],
+        ["FTO status", r.ip.fto],
+        ["Est. exclusivity", r.ip.years != null ? `${r.ip.years} years` : null],
+      ], r.ip.opportunities, r.ip.risks);
+
+      if (r.manufacturing && (r.manufacturing.complexity || r.manufacturing.notes)) {
+        writeDimension(state, autoTable, "Manufacturing & CMC", [
+          ["Complexity", r.manufacturing.complexity],
+          ["Notes", r.manufacturing.notes],
+        ], [], []);
+      }
+
+      if (r.worthiness) {
+        const w = r.worthiness;
+        ensureSpace(state, 80);
+        subHeader(
+          state,
+          `Market worthiness — ${w.rating || "not rated"}${w.score != null ? `  (${Math.round(w.score)}/100)` : ""}`,
+          STRATEGY_COLOR,
+        );
+        if (w.thesis) paragraph(state, w.thesis, 10.5, INK);
+        const wRows: [string, string][] = [
+          ["Healthcare landscape", w.healthcareLandscape],
+          ["Legal landscape", w.legalLandscape],
+          ["Market size vs competitors", w.marketSizeVsCompetitors],
+          ["Room for partnerships", w.partnershipRoom],
+          ["Distribution channels", w.distributionChannels],
+        ];
+        const wPresent = wRows.filter(([, v]) => !!v);
+        if (wPresent.length) {
+          table(state, {
+            body: wPresent,
+            columnStyles: { 0: { fontStyle: "bold", textColor: INK, cellWidth: 150 }, 1: { textColor: BODY } },
+          }, autoTable);
+        }
+        if (w.novelPaths.length) {
+          tinyLabel(state, "Novel paths to capture the market");
+          bullets(state, w.novelPaths, STRATEGY_COLOR);
+        }
+      }
+    }
+  }
+
+  // ── Recommendations (off-patent report) ───────────────────────────────────
+  if (f.recommendations.length) {
+    pageBreak(state);
+    const first = f.recommendations[0];
+    sectionTitle(
+      state,
+      "Recommendations",
+      `Prioritise ${first.region} via ${first.structure || "out-licensing"}`,
+      "Ranked by priority; each row is a route to open, not an option to consider.",
+    );
+    table(state, {
+      head: [["#", "Region", "Structure", "Upfront", "Total", "Royalty", "Timeline"]],
+      body: f.recommendations.map((r: any) => [
+        String(r.rank || "—"),
+        r.region,
+        r.structure || "—",
+        r.upfront || "—",
+        r.total || "—",
+        r.royalty || "—",
+        r.timeline || "—",
+      ]),
+      columnStyles: {
+        0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 30 },
+        1: { fontStyle: "bold", textColor: INK, cellWidth: 66 },
+        3: { textColor: POS, fontStyle: "bold" },
+        4: { textColor: POS, fontStyle: "bold" },
+        5: { textColor: POS },
+      },
+    }, autoTable);
+    for (const r of f.recommendations) {
+      ensureSpace(state, 90);
+      subHeader(state, `#${r.rank} ${r.region}`, STRATEGY_COLOR);
+      if (r.rationale) paragraph(state, r.rationale);
+      if (r.partners.length) { tinyLabel(state, "Top partner candidates — open these conversations"); paragraph(state, r.partners.join("   ·   ")); }
+      if (r.prerequisites.length) { tinyLabel(state, "Prerequisites to clear first"); bullets(state, r.prerequisites); }
+      if (r.roi) { tinyLabel(state, "Expected ROI"); paragraph(state, r.roi, 10, POS); }
+    }
+  }
+
+  // ── Business case / commercial plan (off-patent report) ───────────────────
+  if (f.commercialPlan) {
+    const cp = f.commercialPlan;
+    pageBreak(state);
+    const firstStep = cp.steps[0];
+    sectionTitle(
+      state,
+      "Business case",
+      firstStep ? `Start with step ${firstStep.step} — ${firstStep.action}` : "Commercial channels and go-to-market",
+      cp.summary || undefined,
+    );
+    if (cp.channels.length) {
+      subHeader(state, "Commercial channels", STRATEGY_COLOR);
+      table(state, {
+        head: [["Channel", "Geos", "Where the value is", "How to win it"]],
+        body: cp.channels.map((c: any) => [
+          c.channel,
+          c.geographies.join(", ") || "—",
+          c.valueRole || "—",
+          [c.accessMechanics, c.keyPlayers.length ? `Players: ${c.keyPlayers.join(", ")}` : ""].filter(Boolean).join("  "),
+        ]),
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 92 },
+          1: { cellWidth: 66 },
+          2: { cellWidth: 130 },
+        },
+      }, autoTable);
+    }
+    if (cp.steps.length) {
+      subHeader(state, "How to proceed", STRATEGY_COLOR);
+      table(state, {
+        head: [["#", "Action", "Geography", "Approach", "Timing", "Owner"]],
+        body: cp.steps.map((s: any) => [
+          String(s.step),
+          s.action,
+          s.geography || "—",
+          s.approach || "—",
+          s.timing || "—",
+          s.owner || "Not assigned",
+        ]),
+        columnStyles: {
+          0: { halign: "center", fontStyle: "bold", textColor: STRATEGY_COLOR, cellWidth: 24 },
+          1: { cellWidth: 150, fontStyle: "bold", textColor: INK },
+          3: { textColor: POS },
+          5: { textColor: MUTED },
+        },
+      }, autoTable);
+    }
+  }
+
+  // ── Flaws & blockers ──────────────────────────────────────────────────────
+  if (f.risks.length || topRisks.length || swingFactors.length) {
+    pageBreak(state);
+    const high = f.risks.filter((r: any) => r.impact === "High");
+    sectionTitle(
+      state,
+      "Flaws & blockers",
+      high.length
+        ? `${high.length} high-impact blocker${high.length === 1 ? "" : "s"} must be owned before committing`
+        : "What could kill this, and what most moves the score",
       "Swing factors are the variables to resolve first — they change the answer, not just the confidence.",
     );
-    if (topRisks.length) {
-      subHeader(state, "Top risks", INK);
-      bullets(state, topRisks, INK);
+    if (f.risks.length) {
+      table(state, {
+        head: [["Category", "Risk", "Impact", "Likely", "Regions", "Mitigation — do this"]],
+        body: f.risks.map((r: any) => [
+          r.category || "—",
+          r.risk,
+          r.impact || "—",
+          r.likelihood || "—",
+          r.regions.join(", ") || "—",
+          r.mitigation || "No mitigation recorded — assign an owner to define one",
+        ]),
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 62 },
+          1: { cellWidth: 106 },
+          2: { cellWidth: 48 },
+          3: { cellWidth: 48 },
+          4: { cellWidth: 56 },
+          5: { cellWidth: 120 },
+        },
+        didParseCell: (data: ParsedCell) => {
+          if (data.section === "body" && data.column.index === 2 && String(data.cell.raw) === "High") {
+            data.cell.styles.textColor = NEG;
+            data.cell.styles.fontStyle = "bold";
+          }
+        },
+      }, autoTable);
     }
-    if (swingFactors.length) {
-      subHeader(state, "Swing factors", STRATEGY_COLOR);
-      bullets(state, swingFactors, STRATEGY_COLOR);
-    }
+    if (topRisks.length) { subHeader(state, "Top risks", INK); bullets(state, topRisks, INK); }
+    if (swingFactors.length) { subHeader(state, "Swing factors — resolve these first", STRATEGY_COLOR); bullets(state, swingFactors, STRATEGY_COLOR); }
   }
 
   // ── IP / freedom-to-operate flags (innovative) ────────────────────────────
   if (branch === "innovative" && ipFlags.length) {
-    newPage(state);
+    pageBreak(state);
     sectionTitle(
       state,
-      "IP & Freedom to Operate",
+      "IP & freedom to operate",
       "Flags counsel must clear before any commitment",
       "A screen of public patent and regulatory records, not a legal opinion. Nothing below clears freedom to operate.",
     );
     table(state, {
       head: [["Severity", "Claim / flag", "Why it matters", "Citation"]],
-      body: ipFlags.map((f) => [
-        (sText(f.severity) || "not stated").toUpperCase(),
-        sText(f.flag) || sText(f.claim) || sText(f.label) || "Unnamed flag",
-        sText(f.note) || sText(f.whyItMatters) || sText(f.why) || "Not stated",
-        sText(f.citation) || sText(f.source) || "Not cited",
+      body: ipFlags.map((fl) => [
+        (sText(fl.severity) || "not stated").toUpperCase(),
+        sText(fl.flag) || sText(fl.claim) || sText(fl.label) || "Unnamed flag",
+        sText(fl.note) || sText(fl.whyItMatters) || sText(fl.why) || "Not stated",
+        sText(fl.citation) || sText(fl.source) || "Not cited",
       ]),
       columnStyles: {
-        0: { fontStyle: "bold", cellWidth: 58, textColor: NEG },
-        1: { fontStyle: "bold", textColor: INK, cellWidth: 150 },
+        0: { fontStyle: "bold", cellWidth: 62, textColor: NEG },
+        1: { fontStyle: "bold", textColor: INK, cellWidth: 140 },
         2: { textColor: BODY },
-        3: { cellWidth: 96, textColor: MUTED, fontSize: 8 },
+        3: { cellWidth: 92, textColor: MUTED },
       },
     }, autoTable);
   }
 
-  // ── Value levers (off-patent) ─────────────────────────────────────────────
-  if (branch === "off_patent" && valueLevers.length) {
-    newPage(state);
+  // ── What would flip the verdict / considered and rejected ─────────────────
+  const flips = f.whatWouldFlipIt.length ? f.whatWouldFlipIt : swingFactors;
+  if (f.whatWouldFlipIt.length) {
     sectionTitle(
       state,
-      "Value Levers",
-      "Where value still sits in an already-approved asset",
-      "Levers the evidence base cannot support are marked, never scored to a plausible-looking number.",
+      "What would flip the verdict",
+      "The evidence that would change this answer — go and get it",
+      "Each item is falsifiable: obtaining it either confirms the verdict or overturns it.",
     );
-    table(state, {
-      head: [["Lever", "Score", "Confidence", "Status"]],
-      body: valueLevers.map((l) => {
-        const nc = readNotComputable(l.notComputable);
-        const raw = Number(l.score);
-        const hasScore = !nc.flag && Number.isFinite(raw);
-        return [
-          sText(l.lever) || sText(l.label) || sText(l.key) || "Unnamed lever",
-          hasScore
-            ? String(Math.round(raw))
-            : `Not computable — ${nc.reason || sText(l.dataGap) || "no reason recorded"}`,
-          cap(l.confidence) || "—",
-          nc.flag ? "Not computable" : l.computed === true ? "Computed" : "Reasoned",
-        ];
-      }),
-      columnStyles: {
-        0: { fontStyle: "bold", textColor: INK, cellWidth: 132 },
-        1: { cellWidth: 176 },
-        2: { cellWidth: 62 },
-        3: { cellWidth: 66, textColor: MUTED, fontSize: 8 },
-      },
-    }, autoTable);
+    bullets(state, f.whatWouldFlipIt, STRATEGY_COLOR);
   }
-
-  // ── Considered and rejected (steelman) ────────────────────────────────────
-  if (rejected.length) {
+  const rejectedRows = f.consideredAndRejected.length
+    ? f.consideredAndRejected
+    : rejected.map((r) => ({ opportunity: sText(r.opportunity), reason: sText(r.reason) }));
+  if (rejectedRows.length) {
     sectionTitle(
       state,
-      "Steelman",
       "Considered and rejected",
-      "The angles that were argued for and then excluded, with the reason each failed.",
+      "The angles argued for and then excluded — do not reopen these without new evidence",
+      "Each was steelmanned before being set aside; the reason is the bar new evidence has to clear.",
     );
     table(state, {
       head: [["Opportunity", "Why it was rejected"]],
-      body: rejected.map((r) => [sText(r.opportunity) || "—", sText(r.reason) || "Not stated"]),
-      columnStyles: {
-        0: { fontStyle: "bold", textColor: INK, cellWidth: 180 },
-        1: { textColor: BODY },
-      },
+      body: rejectedRows.map((r: any) => [r.opportunity || "—", r.reason || "Not stated"]),
+      columnStyles: { 0: { fontStyle: "bold", textColor: INK, cellWidth: 180 }, 1: { textColor: BODY } },
     }, autoTable);
   }
 
@@ -1621,22 +2731,25 @@ export async function exportDiagnosisPDF(
       ]),
     );
     if (evidenceRows.length) {
-      newPage(state);
+      pageBreak(state);
+      const estimates = evidenceRows.filter((r) => r[2] === "Estimate").length;
       sectionTitle(
         state,
         "Evidence",
-        "Every claim, its source and its tier",
+        estimates
+          ? `${estimates} of ${evidenceRows.length} claims are inferences — source them before they carry a decision`
+          : "Every claim is sourced",
         "Items marked Estimate are CartaOS inferences, not sourced findings; a claim with no named source is shown as such rather than dressed as evidence.",
       );
       table(state, {
         head: [["Dimension", "Claim", "Type", "Source", "Tier"]],
         body: evidenceRows,
         columnStyles: {
-          0: { fontStyle: "bold", textColor: INK, cellWidth: 96 },
+          0: { fontStyle: "bold", textColor: INK, cellWidth: 86 },
           1: { textColor: BODY },
-          2: { cellWidth: 54 },
-          3: { cellWidth: 100, textColor: MUTED, fontSize: 8 },
-          4: { cellWidth: 38, textColor: MUTED, fontSize: 8 },
+          2: { cellWidth: 60 },
+          3: { cellWidth: 88, textColor: MUTED },
+          4: { cellWidth: 44, textColor: MUTED },
         },
         didParseCell: (data: ParsedCell) => {
           if (data.section === "body" && data.column.index === 2 && String(data.cell.raw) === "Estimate") {
@@ -1653,9 +2766,9 @@ export async function exportDiagnosisPDF(
     const gaps = coverage.filter((c) => (c.unwired ?? []).length > 0);
     sectionTitle(
       state,
-      "Source Coverage",
+      "Source coverage",
       gaps.length
-        ? `${gaps.length} of ${coverage.length} dimensions were scored without every applicable source`
+        ? `Connect ${gaps.length} missing source set${gaps.length === 1 ? "" : "s"} to firm up the score`
         : "Every applicable source was connected",
       "Which registry sources were actually consulted per dimension, and which apply to this asset but have no connected client.",
     );
@@ -1675,16 +2788,36 @@ export async function exportDiagnosisPDF(
     if (gaps.length) {
       paragraph(
         state,
-        "The sources listed above as applicable but not connected do apply to this asset and were not consulted — no client is wired to them. The scores on those dimensions were computed without that evidence, and connecting those sources may move them.",
+        "The sources listed above as applicable but not connected do apply to this asset and were not consulted — no client is wired to them. Connect them and re-run before treating those dimensions as settled.",
         9.5,
         MUTED,
       );
     }
   }
 
+  if (f.sourcesUsed.length) {
+    sectionTitle(state, "Appendix", "Data sources behind this assessment");
+    paragraph(state, f.sourcesUsed.join("   ·   "), 9.5, MUTED);
+  }
+  if (!flips.length && !actions.length) {
+    // Nothing actionable was recorded — say so rather than leaving the reader
+    // to conclude the run simply had nothing to add.
+    paragraph(state, "This run recorded no explicit next steps or falsifiers.", 9.5, MUTED);
+  }
+
   sourceNote(state, DIAGNOSIS_DISCLAIMER);
 
-  state.doc.save(`${safeFilename(assetName)}_Diagnosis.pdf`);
+  return state.doc;
+}
+
+export async function exportDiagnosisPDF(
+  diagnosis: Diagnosis,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+  opts?: ExportOptions,
+) {
+  const doc = await buildDiagnosisPdf(diagnosis, branch, assetName, opts);
+  doc.save(`${safeFilename(assetName)}_Diagnosis.pdf`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1722,6 +2855,19 @@ const COL_R = MX + HALF + GUT;        // right-column x
 const BODY_TOP = 1.6;
 const FOOTER_Y = 6.95;                // source (left) + page number (right)
 
+/**
+ * Hard layout contract for every deck this module builds:
+ *  - body content lives between the section rule and BODY_LIMIT;
+ *  - the only things allowed at or below BODY_LIMIT are the footer band
+ *    (source note + slide number), which must still finish inside the slide;
+ *  - nothing extends right of RIGHT_LIMIT;
+ *  - nothing is set below PPT_MIN_PT.
+ * tests/export-layout.test.ts asserts all four against the generated XML.
+ */
+const BODY_LIMIT = 6.85;
+const BLOCK_GAP = 0.18;               // minimum gutter between stacked blocks
+const PPT_MIN_PT = 10;
+
 const MASTER = "CARTA";
 
 const dotScale = (score: number): string => {
@@ -1734,7 +2880,7 @@ const dotScale = (score: number): string => {
  * the largest size ≤ maxPt whose wrapped text fits the box height, with a 15%
  * export safety margin and a hard floor. Accounts for forced line breaks.
  */
-function fitFont(text: string, wIn: number, hIn: number, maxPt: number, minPt = 9): number {
+function fitFont(text: string, wIn: number, hIn: number, maxPt: number, minPt = PPT_MIN_PT): number {
   const t = (text ?? "").trim();
   if (!t) return maxPt;
   const wPt = Math.max(36, wIn * 72);
@@ -1755,26 +2901,318 @@ function fitFont(text: string, wIn: number, hIn: number, maxPt: number, minPt = 
  * Works for a plain string and for rich-text run arrays (runs scale together).
  */
 function txt(slide: any, text: any, opts: any = {}): any {
-  const o: any = { fontFace: F, wrap: true, fit: "shrink", margin: 5, lineSpacingMultiple: 1.1, ...opts };
+  const o: any = { fontFace: F, wrap: true, fit: "shrink", margin: 5, lineSpacingMultiple: 1.15, ...opts };
+  if (typeof o.fontSize === "number") o.fontSize = Math.max(PPT_MIN_PT, o.fontSize);
   if (typeof o.w === "number" && typeof o.h === "number") {
     if (typeof text === "string") {
       const maxPt = typeof o.fontSize === "number" ? o.fontSize : 14;
-      o.fontSize = fitFont(text, o.w - 0.15, o.h, maxPt);
+      o.fontSize = Math.max(PPT_MIN_PT, fitFont(text, o.w - 0.15, o.h, maxPt));
     } else if (Array.isArray(text)) {
+      for (const r of text) {
+        if (r && r.options && typeof r.options.fontSize === "number") {
+          r.options.fontSize = Math.max(PPT_MIN_PT, r.options.fontSize);
+        }
+      }
       const full = text.map((r: any) => (r && r.text) || "").join("");
-      const maxRun = Math.max(8, ...text.map((r: any) => (r && r.options && r.options.fontSize) || 12));
+      const maxRun = Math.max(PPT_MIN_PT, ...text.map((r: any) => (r && r.options && r.options.fontSize) || 12));
       const fitted = fitFont(full, o.w - 0.15, o.h, maxRun);
       if (fitted < maxRun) {
         const ratio = fitted / maxRun;
         for (const r of text) {
           if (r && r.options && typeof r.options.fontSize === "number") {
-            r.options.fontSize = Math.max(8, Math.round(r.options.fontSize * ratio * 10) / 10);
+            r.options.fontSize = Math.max(PPT_MIN_PT, Math.round(r.options.fontSize * ratio * 10) / 10);
           }
         }
       }
     }
   }
   return slide.addText(text, o);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PPTX LAYOUT ENGINE
+//  PowerPoint is absolutely positioned, so overlap is a real failure mode, not
+//  a styling nit. Every deck below is built through one downward cursor per
+//  slide: a block is measured, checked against the body floor, drawn, and the
+//  cursor advanced past it by its own height plus a gutter. No block is ever
+//  hard-coded into a vertical band another block also claims.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Conservative wrapped-height estimate (inches) for text in a box of width wIn. */
+function boxH(text: string, wIn: number, fontPt: number, lineSpacing = 1.15): number {
+  const t = String(text ?? "");
+  const usable = Math.max(0.6, wIn - 0.2);
+  const cpl = Math.max(6, Math.floor((usable * 72) / (fontPt * 0.52)));
+  let lines = 0;
+  for (const p of t.split("\n")) lines += Math.max(1, Math.ceil(p.length / cpl));
+  return (lines * fontPt * 1.24 * lineSpacing) / 72 + 0.14;
+}
+
+/** Trim until the text fits maxH — used only where a block genuinely cannot page. */
+function clampText(text: string, wIn: number, fontPt: number, maxH: number): string {
+  let t = String(text ?? "");
+  let guard = 0;
+  while (t.length > 24 && boxH(t, wIn, fontPt) > maxH && guard++ < 60) {
+    t = truncate(t, Math.max(24, Math.floor(t.length * 0.82)));
+  }
+  return t;
+}
+
+interface Sec {
+  pptx: any;
+  slide: any;
+  /** The downward cursor. Nothing is ever drawn above it on this slide. */
+  y: number;
+  kicker: string;
+  title: string;
+  accent: string;
+  source: string;
+  slides: number;
+}
+
+/** Header, rule and footer band. Returns the slide and where the body starts. */
+function frameSlide(pptx: any, kicker: string, title: string, accent: string, source: string) {
+  const slide = pptx.addSlide({ masterName: MASTER });
+  slide.addShape("rect", { x: 0, y: 0, w: SLIDE_W, h: 0.14, fill: { color: accent } });
+
+  txt(slide, kicker.toUpperCase(), {
+    x: MX, y: 0.34, w: MW, h: 0.28, fontFace: F, fontSize: 11, bold: true, color: P.muted, charSpacing: 2, valign: "middle",
+  });
+
+  const titleText = clampText(title, MW, 20, 0.95);
+  const titleH = Math.max(0.58, Math.min(0.95, boxH(titleText, MW, 20, 1.1)));
+  txt(slide, titleText, {
+    x: MX, y: 0.72, w: MW, h: titleH, fontFace: F, fontSize: 20, bold: true, color: P.ink, valign: "top",
+  });
+
+  const ruleY = 0.72 + titleH + 0.06;
+  slide.addShape("line", { x: MX, y: ruleY, w: MW, h: 0, line: { color: P.line, width: 1 } } as any);
+
+  txt(slide, `Source: ${source || "CartaOS — public regulatory, clinical, IP & pricing sources"}`, {
+    x: MX, y: FOOTER_Y, w: MW - 1.0, h: 0.3, fontFace: F, fontSize: PPT_MIN_PT, color: P.faint, valign: "middle",
+  });
+
+  return { slide, bodyTop: Math.max(1.55, ruleY + 0.18) };
+}
+
+/** Open a section. Everything after this is placed through the cursor. */
+function beginSection(
+  pptx: any,
+  kicker: string,
+  title: string,
+  accent: string,
+  source: string,
+  takeaway?: string,
+): Sec {
+  const { slide, bodyTop } = frameSlide(pptx, kicker, title, accent, source);
+  const sec: Sec = { pptx, slide, y: bodyTop, kicker, title, accent, source, slides: 1 };
+  if (takeaway) {
+    const text = clampText(takeaway, MW - 0.3, 12, 0.9);
+    const h = Math.min(0.9, boxH(text, MW - 0.3, 12));
+    sec.slide.addShape("rect", { x: MX, y: sec.y, w: MW, h, fill: { color: P.calloutBg }, line: { type: "none" } });
+    sec.slide.addShape("rect", { x: MX, y: sec.y, w: 0.07, h, fill: { color: accent } });
+    txt(sec.slide, text, {
+      x: MX + 0.22, y: sec.y, w: MW - 0.34, h, fontFace: F, fontSize: 12, bold: true, color: P.ink, valign: "middle",
+    });
+    sec.y += h + BLOCK_GAP;
+  }
+  return sec;
+}
+
+/** Continue on a fresh slide carrying the same heading, marked as a continuation. */
+function continueSection(sec: Sec) {
+  const title = sec.title.endsWith(" (cont.)") ? sec.title : `${sec.title} (cont.)`;
+  const { slide, bodyTop } = frameSlide(sec.pptx, sec.kicker, title, sec.accent, sec.source);
+  sec.slide = slide;
+  sec.y = bodyTop;
+  sec.title = title;
+  sec.slides += 1;
+}
+
+const secRemaining = (sec: Sec) => BODY_LIMIT - sec.y;
+
+/** Reserve h inches; page first when the block would cross the body floor. */
+function secRoom(sec: Sec, h: number) {
+  if (sec.y + h > BODY_LIMIT) continueSection(sec);
+}
+
+/** Place one measured block and advance the cursor past it. */
+function secBlock(sec: Sec, h: number, draw: (y: number) => void) {
+  secRoom(sec, h);
+  draw(sec.y);
+  sec.y += h + BLOCK_GAP;
+}
+
+/**
+ * A small uppercase label above a block. Keep-with-next: it pages first rather
+ * than stranding itself at the bottom of a slide with its content overleaf.
+ */
+function secLabel(sec: Sec, label: string, color = P.muted) {
+  secRoom(sec, 0.26 + 0.7);
+  secBlock(sec, 0.26, (y) =>
+    txt(sec.slide, label.toUpperCase(), {
+      x: MX, y, w: MW, h: 0.26, fontFace: F, fontSize: PPT_MIN_PT, bold: true, color, charSpacing: 1, valign: "middle",
+    }),
+  );
+  sec.y -= BLOCK_GAP - 0.04; // a label hugs the block it introduces
+}
+
+/** Body copy. Splits across continuation slides rather than shrinking to fit. */
+function secText(
+  sec: Sec,
+  text: string,
+  opts: { fontSize?: number; color?: string; bold?: boolean; italic?: boolean } = {},
+) {
+  const body = sText(text);
+  if (!body) return;
+  const fs = Math.max(PPT_MIN_PT, opts.fontSize ?? 12);
+  let rest = body;
+  let guard = 0;
+  while (rest && guard++ < 12) {
+    if (secRemaining(sec) < 0.6) continueSection(sec);
+    const avail = secRemaining(sec);
+    const full = boxH(rest, MW, fs);
+    const chunk = full <= avail ? rest : clampText(rest, MW, fs, avail);
+    const h = Math.min(avail, boxH(chunk, MW, fs));
+    const yy = sec.y;
+    txt(sec.slide, chunk, {
+      x: MX, y: yy, w: MW, h, fontFace: F, fontSize: fs, color: opts.color ?? P.ink,
+      bold: opts.bold, italic: opts.italic, valign: "top", lineSpacingMultiple: 1.15,
+    });
+    sec.y += h + BLOCK_GAP;
+    if (chunk.length >= rest.length) break;
+    // Continue from where the chunk stopped, dropping the ellipsis marker.
+    rest = rest.slice(chunk.replace(/…$/, "").length).trim();
+    if (rest) continueSection(sec);
+  }
+}
+
+/** Bulleted list, packed into as many boxes/slides as the items need. */
+function secBullets(
+  sec: Sec,
+  items: string[],
+  opts: { fontSize?: number; color?: string; x?: number; w?: number } = {},
+) {
+  const fs = Math.max(PPT_MIN_PT, opts.fontSize ?? 11);
+  const x = opts.x ?? MX;
+  const w = opts.w ?? MW;
+  const queue = items.map(sText).filter(Boolean);
+  let guard = 0;
+  while (queue.length && guard++ < 40) {
+    if (secRemaining(sec) < 0.5) continueSection(sec);
+    const avail = secRemaining(sec);
+    const batch: string[] = [];
+    let h = 0.06;
+    while (queue.length) {
+      const item = clampText(queue[0], w - 0.3, fs, Math.max(0.4, avail - 0.1));
+      const hi = boxH(item, w - 0.3, fs);
+      if (h + hi > avail && batch.length) break;
+      queue.shift();
+      batch.push(item);
+      h += hi;
+      if (h > avail) break;
+    }
+    if (!batch.length) break;
+    const boxHeight = Math.min(avail, h);
+    const yy = sec.y;
+    txt(
+      sec.slide,
+      batch.map((t) => ({ text: t, options: { bullet: { code: "2022" }, fontSize: fs, color: opts.color ?? P.ink } })),
+      { x, y: yy, w, h: boxHeight, fontFace: F, valign: "top", paraSpaceAfter: 3, lineSpacingMultiple: 1.15 },
+    );
+    sec.y += boxHeight + BLOCK_GAP;
+  }
+}
+
+/**
+ * A table, paginated by rows across continuation slides. Rows keep their height
+ * (and therefore their type size) rather than being squeezed to fit one slide.
+ */
+function secTable(
+  sec: Sec,
+  head: string[],
+  rows: any[][],
+  colW: number[],
+  opts: { rowH?: number; fontSize?: number } = {},
+) {
+  if (!rows.length) return;
+  const rowH = opts.rowH ?? 0.44;
+  const headRow = head.map((t) => ({ text: t, options: cellHead() }));
+  let i = 0;
+  let guard = 0;
+  while (i < rows.length && guard++ < 60) {
+    if (secRemaining(sec) < rowH * 2 + 0.1) continueSection(sec);
+    const perSlide = Math.max(1, Math.floor((secRemaining(sec) - rowH) / rowH));
+    const chunk = rows.slice(i, i + perSlide);
+    i += chunk.length;
+    const h = rowH * (chunk.length + 1);
+    const yy = sec.y;
+    sec.slide.addTable([headRow, ...chunk], {
+      x: MX, y: yy, w: MW, h, colW, rowH,
+      valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
+    });
+    sec.y += h + BLOCK_GAP;
+  }
+}
+
+/** Two side-by-side lists. Columns never share an x range, so they cannot collide. */
+function secColumns(
+  sec: Sec,
+  left: { label: string; items: string[]; color?: string } | null,
+  right: { label: string; items: string[]; color?: string } | null,
+) {
+  const cols = [left, right].filter(Boolean) as { label: string; items: string[]; color?: string }[];
+  if (!cols.length) return;
+  const fs = 11;
+  const height = (c: { items: string[] }) =>
+    c.items.reduce((a, t) => a + boxH(t, HALF - 0.3, fs), 0.06);
+  const needed = Math.max(...cols.map(height)) + 0.3;
+  const avail = Math.min(needed, BODY_LIMIT - 1.5);
+  secRoom(sec, avail);
+  const y = sec.y;
+  const place = (c: { label: string; items: string[]; color?: string }, x: number) => {
+    txt(sec.slide, c.label.toUpperCase(), {
+      x, y, w: HALF, h: 0.26, fontFace: F, fontSize: PPT_MIN_PT, bold: true, color: c.color ?? P.muted, charSpacing: 1, valign: "middle",
+    });
+    const listH = Math.max(0.4, avail - 0.32);
+    const items = c.items.map((t) => clampText(t, HALF - 0.3, fs, listH));
+    txt(
+      sec.slide,
+      items.map((t) => ({ text: t, options: { bullet: { code: "2022" }, fontSize: fs, color: P.ink } })),
+      { x, y: y + 0.3, w: HALF, h: listH, fontFace: F, valign: "top", paraSpaceAfter: 3, lineSpacingMultiple: 1.15 },
+    );
+  };
+  if (left) place(left, MX);
+  if (right) place(right, COL_R);
+  sec.y += avail + BLOCK_GAP;
+}
+
+/** A row of labelled statistics. */
+function secStats(sec: Sec, cards: [string, string, boolean][]) {
+  if (!cards.length) return;
+  const h = 1.25;
+  const cw = (MW - (cards.length - 1) * GUT) / cards.length;
+  secBlock(sec, h, (y) => {
+    cards.forEach(([label, value, hi], i) => {
+      statCard(sec.slide, MX + i * (cw + GUT), y, cw, h, label, value, hi);
+    });
+  });
+}
+
+/** A single highlighted line — used for the one figure or call that matters. */
+function secCallout(sec: Sec, label: string, text: string, accent = P.accent) {
+  const body = sText(text);
+  if (!body) return;
+  const clamped = clampText(body, MW - 0.6, 11, 0.9);
+  const h = Math.max(0.5, Math.min(1.0, boxH(clamped, MW - 0.6, 11) + 0.1));
+  secBlock(sec, h, (y) => {
+    sec.slide.addShape("rect", { x: MX, y, w: MW, h, fill: { color: P.calloutBg }, line: { type: "none" } });
+    sec.slide.addShape("rect", { x: MX, y, w: 0.07, h, fill: { color: accent } });
+    txt(sec.slide, [
+      { text: `${label.toUpperCase()}   `, options: { fontSize: PPT_MIN_PT, bold: true, color: P.accent2, charSpacing: 1 } },
+      { text: clamped, options: { fontSize: 11, color: P.ink } },
+    ], { x: MX + 0.22, y, w: MW - 0.34, h, fontFace: F, valign: "middle" });
+  });
 }
 
 export async function exportClientDeck(
@@ -1794,7 +3232,7 @@ export async function exportClientDeck(
     objects: [
       { rect: { x: MX, y: 6.85, w: MW, h: 0.008, fill: { color: P.line } } },
     ],
-    slideNumber: { x: SLIDE_W - MX - 0.6, y: FOOTER_Y, w: 0.6, h: 0.3, fontFace: F, fontSize: 8, color: P.faint, align: "right" },
+    slideNumber: { x: SLIDE_W - MX - 0.6, y: FOOTER_Y, w: 0.6, h: 0.3, fontFace: F, fontSize: PPT_MIN_PT, color: P.faint, align: "right" },
   });
 
   const regions = strategy?.regionalAnalysis ?? [];
@@ -1830,12 +3268,12 @@ export async function exportClientDeck(
     const cellW = MW / 4;
     kpis.forEach(([label, value, hi], i) => {
       const x = MX + i * cellW;
-      slide.addShape("line", { x, y: 4.5, w: 0, h: 1.0, line: { color: P.line, width: 1 } } as any);
-      txt(slide,label, { x: x + 0.15, y: 4.55, w: cellW - 0.3, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
-      txt(slide,value, { x: x + 0.15, y: 4.8, w: cellW - 0.3, h: 0.7, fontFace: F, fontSize: 19, bold: true, color: hi ? P.accent2 : P.ink });
+      slide.addShape("line", { x, y: 4.5, w: 0, h: 1.1, line: { color: P.line, width: 1 } } as any);
+      txt(slide,label, { x: x + 0.15, y: 4.54, w: cellW - 0.3, h: 0.28, fontFace: F, fontSize: PPT_MIN_PT, bold: true, color: P.muted, charSpacing: 1, valign: "middle" });
+      txt(slide,value, { x: x + 0.15, y: 4.86, w: cellW - 0.3, h: 0.72, fontFace: F, fontSize: 19, bold: true, color: hi ? P.accent2 : P.ink, valign: "top" });
     });
 
-    txt(slide,`${BRAND}  ·  ${TODAY()}  ·  Confidential`, { x: MX, y: 6.6, w: MW, h: 0.3, fontFace: F, fontSize: 10, color: P.faint });
+    txt(slide,`${BRAND}  ·  ${TODAY()}  ·  Confidential`, { x: MX, y: FOOTER_Y, w: MW, h: 0.3, fontFace: F, fontSize: PPT_MIN_PT, color: P.faint });
   }
 
   // ─── Divider: Opportunity ───────────────────────────────────────────────
@@ -2287,7 +3725,7 @@ function contentSlide(pptx: any, kicker: string, title: string, accent: string, 
   txt(slide,title, { x: MX, y: 0.74, w: MW, h: 0.78, fontFace: F, fontSize: 24, bold: true, color: P.ink, valign: "top" });
   slide.addShape("line", { x: MX, y: 1.55, w: MW, h: 0, line: { color: P.line, width: 1 } } as any);
   txt(slide,`Source: ${source ?? "CartaOS — public regulatory, clinical, IP & pricing sources"}`, {
-    x: MX, y: FOOTER_Y, w: MW - 1, h: 0.3, fontFace: F, fontSize: 8, color: P.faint,
+    x: MX, y: FOOTER_Y, w: MW - 1, h: 0.3, fontFace: F, fontSize: PPT_MIN_PT, color: P.faint,
   });
   return slide;
 }
@@ -2303,11 +3741,21 @@ function dividerSlide(pptx: any, num: string, label: string, takeaway: string, a
 }
 
 function cellHead(): any {
-  return { bold: true, fontSize: 11, color: "FFFFFF", fill: { color: P.ink }, align: "left", valign: "middle", fontFace: F, margin: [4, 6, 4, 6] };
+  return { bold: true, fontSize: 11, color: "FFFFFF", fill: { color: P.ink }, align: "left", valign: "middle", fontFace: F, margin: [6, 8, 6, 8] };
 }
 
+/** Trim a cell to what its column and row height can actually show. */
+function cellFit(text: unknown, colWIn: number, rowHIn: number, fs = 11): string {
+  const cpl = Math.max(6, Math.floor(((colWIn - 0.28) * 72) / (fs * 0.52)));
+  const lines = Math.max(1, Math.floor((rowHIn * 72) / (fs * 1.4)));
+  return truncate(String(text ?? ""), Math.max(14, cpl * lines));
+}
+
+/** Table cells never drop below the readable floor, whatever a call site asks for. */
 function cellBody(extra: any = {}): any {
-  return { fontSize: 11.5, color: P.ink, valign: "middle", fontFace: F, fill: { color: "FFFFFF" }, margin: [3, 6, 3, 6], ...extra };
+  const merged = { fontSize: 11, color: P.ink, valign: "middle", fontFace: F, fill: { color: "FFFFFF" }, margin: [6, 8, 6, 8], ...extra };
+  merged.fontSize = Math.max(PPT_MIN_PT, typeof merged.fontSize === "number" ? merged.fontSize : PPT_MIN_PT);
+  return merged;
 }
 
 const attractivenessPpt = (level: string): string =>
@@ -2340,7 +3788,7 @@ function newDeck(PptxGenJS: any, title: string): any {
     ],
     slideNumber: {
       x: SLIDE_W - MX - 0.6, y: FOOTER_Y, w: 0.6, h: 0.3,
-      fontFace: F, fontSize: 8, color: P.faint, align: "right",
+      fontFace: F, fontSize: PPT_MIN_PT, color: P.faint, align: "right",
     },
   });
   return pptx;
@@ -2372,13 +3820,13 @@ function titleSlide(
   const cellW = MW / Math.max(1, kpis.length);
   kpis.forEach(([label, value, hi], i) => {
     const x = MX + i * cellW;
-    slide.addShape("line", { x, y: 4.5, w: 0, h: 1.0, line: { color: P.line, width: 1 } } as any);
-    txt(slide, label, { x: x + 0.15, y: 4.55, w: cellW - 0.3, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
-    txt(slide, value, { x: x + 0.15, y: 4.8, w: cellW - 0.3, h: 0.7, fontFace: F, fontSize: 19, bold: true, color: hi ? P.accent2 : P.ink });
+    slide.addShape("line", { x, y: 4.5, w: 0, h: 1.1, line: { color: P.line, width: 1 } } as any);
+    txt(slide, label, { x: x + 0.15, y: 4.54, w: cellW - 0.3, h: 0.28, fontFace: F, fontSize: PPT_MIN_PT, bold: true, color: P.muted, charSpacing: 1, valign: "middle" });
+    txt(slide, value, { x: x + 0.15, y: 4.86, w: cellW - 0.3, h: 0.72, fontFace: F, fontSize: 19, bold: true, color: hi ? P.accent2 : P.ink, valign: "top" });
   });
 
   txt(slide, `${BRAND}  ·  ${TODAY()}  ·  Confidential`, {
-    x: MX, y: 6.6, w: MW, h: 0.3, fontFace: F, fontSize: 10, color: P.faint,
+    x: MX, y: FOOTER_Y, w: MW, h: 0.3, fontFace: F, fontSize: PPT_MIN_PT, color: P.faint, valign: "middle",
   });
   return slide;
 }
@@ -2396,12 +3844,12 @@ function statCard(slide: any, x: number, y: number, w: number, h: number, label:
  * rather than emitted empty, and a dimension or market the evidence could not
  * support says so in place of a number.
  */
-export async function exportDiagnosisPPTX(
+export async function buildDiagnosisPptx(
   diagnosis: Diagnosis,
   branch: "off_patent" | "innovative",
   assetName: string,
   opts?: ExportOptions,
-) {
+): Promise<any> {
   const PptxGenJS = (await import("pptxgenjs")).default;
 
   const includeMarkets = opts?.includeMarkets !== false;
@@ -2416,14 +3864,23 @@ export async function exportDiagnosisPPTX(
   const swingFactors = (Array.isArray(diagnosis.swingFactors) ? diagnosis.swingFactors : []).map(sText).filter(Boolean);
   const ipFlags = Array.isArray(diagnosis.ipFlags) ? diagnosis.ipFlags : [];
   const valueLevers = Array.isArray(diagnosis.valueLevers) ? diagnosis.valueLevers : [];
+  const rejectedEnvelope = Array.isArray(diagnosis.consideredAndRejected) ? diagnosis.consideredAndRejected : [];
   const coverage = Array.isArray(diagnosis.coverage) ? diagnosis.coverage : [];
+
+  const f = readOffPatentReport(diagnosis);
+  const leadReg = leadRegion(f);
+  const liveLevers = scoredLevers(f);
+  const actions = buildNextActions(diagnosis, f, branch, 8);
 
   const scored = dimensions.filter((d) => d.score != null);
   const uncomputed = dimensions.length - scored.length;
   const topDimension = scored.slice().sort(byScoreDesc)[0];
 
-  const consulted = Array.from(new Set(dimensions.flatMap((d) => (Array.isArray(d.sourcesConsulted) ? d.sourcesConsulted : []).map(sText).filter(Boolean))));
-  const SRC = consulted.slice(0, 8).join(" · ") || "CartaOS — public regulatory, clinical, IP & pricing sources";
+  const consulted = Array.from(
+    new Set(dimensions.flatMap((d) => (Array.isArray(d.sourcesConsulted) ? d.sourcesConsulted : []).map(sText).filter(Boolean))),
+  );
+  const SRC = (f.sourcesUsed.length ? f.sourcesUsed : consulted).slice(0, 8).join(" · ")
+    || "CartaOS — public regulatory, clinical, IP & pricing sources";
 
   // ─── Title ──────────────────────────────────────────────────────────────
   titleSlide(
@@ -2434,186 +3891,681 @@ export async function exportDiagnosisPPTX(
       ? "Is this asset worth taking into these markets — and what does the evidence actually support?"
       : "What is this asset worth, what would change that, and where is the evidence thin?",
     [
-      ["VERDICT", verdictLabel(diagnosis.verdict), true],
+      ["VERDICT", f.verdict || verdictLabel(diagnosis.verdict), true],
       ["WORTHINESS", diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "n/a", false],
-      ["CONFIDENCE", cap(diagnosis.verdictConfidence) || "n/a", false],
-      ["MARKETS ASSESSED", String(perMarket.length), false],
+      ["CONFIDENCE", f.verdictConfidence || cap(diagnosis.verdictConfidence) || "n/a", false],
+      ["LEAD MARKET", leadReg?.label ?? `${perMarket.length} assessed`, false],
     ],
     P.accent,
   );
 
+  // ─── What to do next ────────────────────────────────────────────────────
+  if (actions.length) {
+    const sec = beginSection(
+      pptx,
+      "What to do next",
+      f.recommendations[0]
+        ? `Open ${f.recommendations[0].region} first, then work down this list`
+        : liveLevers[0]
+          ? `Start with "${liveLevers[0].name}" — the strongest play in this run`
+          : "The moves this diagnosis actually supports",
+      P.accent,
+      "Assembled from this run's own recommendations, levers, falsifiers and gaps",
+      "Nothing on this list is generic: each line names the route, lever, evidence or source this run produced.",
+    );
+    secTable(
+      sec,
+      ["#", "Do this", "Owner", "Because"],
+      actions.map((a, i) => [
+        { text: String(i + 1), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
+        { text: cellFit(a.action, 5.6, 0.62), options: cellBody({ bold: true }) },
+        { text: cellFit(a.owner || "Not assigned", 2.0, 0.62, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: cellFit(a.detail || "—", 4.0, 0.62, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+      ]),
+      [0.5, 5.633, 2.0, 4.0],
+      { rowH: 0.62 },
+    );
+  }
+
   // ─── Verdict ────────────────────────────────────────────────────────────
   {
-    const slide = contentSlide(
-      pptx, "Diagnosis",
-      sText(diagnosis.thesis) ? truncate(sText(diagnosis.thesis), 110) : `${verdictLabel(diagnosis.verdict)} on ${assetName}`,
-      P.accent, SRC,
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Verdict",
+      f.opportunityThesis || sText(diagnosis.thesis) || `${verdictLabel(diagnosis.verdict)} on ${assetName}`,
+      P.accent,
+      SRC,
     );
-    slide.addShape("rect", { x: MX, y: 1.75, w: HALF, h: 1.5, fill: { color: P.calloutBg }, line: { type: "none" } });
-    slide.addShape("rect", { x: MX, y: 1.75, w: 0.07, h: 1.5, fill: { color: P.accent2 } });
-    txt(slide, "VERDICT", { x: MX + 0.25, y: 1.9, w: HALF - 0.5, h: 0.3, fontFace: F, fontSize: 10, bold: true, color: P.muted, charSpacing: 1 });
-    txt(slide, verdictLabel(diagnosis.verdict), { x: MX + 0.25, y: 2.2, w: HALF - 0.5, h: 0.9, fontFace: F, fontSize: 34, bold: true, color: P.accent2, valign: "top" });
-
-    statCard(slide, COL_R, 1.75, (HALF - GUT) / 2, 1.5, "Worthiness",
-      diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "Not computable");
-    statCard(slide, COL_R + (HALF - GUT) / 2 + GUT, 1.75, (HALF - GUT) / 2, 1.5, "Verdict confidence",
-      cap(diagnosis.verdictConfidence) || "Not stated");
-
+    secStats(sec, [
+      ["Verdict", f.verdict || verdictLabel(diagnosis.verdict), true],
+      ["Worthiness", diagnosis.worthinessScore != null ? `${Math.round(diagnosis.worthinessScore)}/100` : "Not computable", false],
+      ["Verdict confidence", f.verdictConfidence || cap(diagnosis.verdictConfidence) || "Not stated", false],
+      ["Evidence confidence", f.dataConfidence || "Not stated", false],
+    ]);
     if (sText(diagnosis.thesis)) {
-      txt(slide, "THESIS", { x: MX, y: 3.5, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
-      txt(slide, sText(diagnosis.thesis), {
-        x: MX, y: 3.8, w: MW, h: 1.5, fontFace: F, fontSize: 12.5, color: P.ink, valign: "top", lineSpacingMultiple: 1.15,
-      });
+      secLabel(sec, "Thesis");
+      secText(sec, sText(diagnosis.thesis), { fontSize: 12 });
+    }
+    if (f.executiveSummary) {
+      secLabel(sec, "Executive summary");
+      secText(sec, f.executiveSummary, { fontSize: 11 });
     }
     if (branch === "innovative" && sText(diagnosis.inflectionLever)) {
-      txt(slide, "BIGGEST VALUE-INFLECTION LEVER", { x: MX, y: 5.4, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
-      txt(slide, sText(diagnosis.inflectionLever), { x: MX, y: 5.7, w: MW, h: 0.9, fontFace: F, fontSize: 11.5, color: P.ink, valign: "top" });
+      secCallout(sec, "Biggest value-inflection lever", sText(diagnosis.inflectionLever), P.accent2);
+    }
+  }
+
+  // ─── Framing & calibration (off-patent report) ──────────────────────────
+  if (f.archetype || f.framing || f.weightedWorthiness) {
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Framing",
+      f.archetype?.mode
+        ? `Scored as "${f.archetype.mode}" — the rubric follows the archetype, not a default`
+        : "How this verdict was framed",
+      P.accent,
+      "CartaOS quality framework",
+    );
+    if (f.archetype?.rubricNote) secCallout(sec, "Scoring lens", f.archetype.rubricNote, P.accent);
+    if (f.archetype?.rationale) {
+      secLabel(sec, "Why this archetype");
+      secText(sec, f.archetype.rationale, { fontSize: 11 });
+    }
+    if (f.framing) {
+      secColumns(
+        sec,
+        f.framing.narrow ? { label: "Narrow — the off-patent in-license trade", items: [f.framing.narrow] } : null,
+        f.framing.broad ? { label: "Broad — is there any real market value", items: [f.framing.broad], color: P.accent2 } : null,
+      );
+      if (f.framing.note) secText(sec, f.framing.note, { fontSize: 11, color: P.muted });
+    }
+    if (f.weightedWorthiness) {
+      if (f.weightedWorthiness.score != null) {
+        secCallout(
+          sec,
+          "Client-weighted worthiness",
+          `${Math.round(f.weightedWorthiness.score)}/100 — ${f.weightedWorthiness.method || "weighted with the criteria supplied for this run"}`,
+          P.accent2,
+        );
+      }
+      if (f.weightedWorthiness.byLever.length) {
+        secTable(
+          sec,
+          ["Lever", "Score", "Weight", "Basis"],
+          f.weightedWorthiness.byLever.map((l: any) => [
+            { text: cellFit(l.lever || "Unnamed lever", 5.0, 0.44), options: cellBody({ bold: true }) },
+            { text: l.score != null ? String(Math.round(l.score)) : "n/a", options: cellBody({ align: "right" }) },
+            { text: l.weight != null ? String(Math.round(l.weight)) : "n/a", options: cellBody({ align: "right" }) },
+            { text: l.computed ? "Computed" : "Reasoned", options: cellBody({ fontSize: 10, color: P.muted }) },
+          ]),
+          [5.133, 2.0, 2.0, 3.0],
+        );
+      }
+      if (f.weightedWorthiness.note) secText(sec, f.weightedWorthiness.note, { fontSize: 11, color: P.muted });
+    }
+  }
+
+  // ─── Asset profile (off-patent report) ──────────────────────────────────
+  if (f.assetProfile) {
+    const p = f.assetProfile;
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Asset profile",
+      p.name ? `${p.name}${p.developmentStage ? ` — ${p.developmentStage}` : ""}` : "The asset under assessment",
+      P.accent,
+      SRC,
+      p.description || undefined,
+    );
+    const facts: [string, string][] = [
+      ["Modality", p.modality],
+      ["Mechanism", p.mechanism],
+      ["Therapeutic area", p.therapeuticArea],
+      ["Development stage", p.developmentStage],
+      ["Current markets", p.currentMarkets.join(", ")],
+    ];
+    const filled = facts.filter(([, v]) => !!v);
+    if (filled.length) {
+      secTable(
+        sec,
+        ["Attribute", "Value"],
+        filled.map(([k, v]) => [
+          { text: k, options: cellBody({ bold: true }) },
+          { text: cellFit(v, 8.5, 0.44), options: cellBody() },
+        ]),
+        [3.133, 9.0],
+      );
+    }
+    if (p.strengths.length || p.challenges.length) {
+      secColumns(
+        sec,
+        p.strengths.length ? { label: "Key strengths — lead with these", items: p.strengths, color: P.accent2 } : null,
+        p.challenges.length ? { label: "Key challenges — plan around these", items: p.challenges } : null,
+      );
+    }
+    if (p.dataPoints.length) {
+      secTable(
+        sec,
+        ["Metric", "Value", "Source", "Tier", "Basis"],
+        p.dataPoints.map((d: any) => [
+          { text: cellFit(d.label || "—", 3.2, 0.44), options: cellBody({ bold: true }) },
+          { text: cellFit(d.value || "—", 2.6, 0.44), options: cellBody() },
+          { text: cellFit(d.source || "Not stated", 3.6, 0.44, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+          { text: d.tier || "Not tiered", options: cellBody({ fontSize: 10, color: d.tier === "Tier 3" ? P.accent2 : P.muted }) },
+          { text: d.basis === "inference" ? "Inference" : d.basis === "evidence" ? "Evidence" : "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+        ]),
+        [3.2, 2.6, 3.6, 1.4, 1.333],
+      );
     }
   }
 
   // ─── Dimension scorecard ────────────────────────────────────────────────
   if (dimensions.length) {
-    const slide = contentSlide(
-      pptx, "Diagnosis · Scorecard",
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Scorecard",
       topDimension
         ? `${dimensionLabel(branch, topDimension.key)} is the strongest dimension`
         : "No dimension could be scored from the connected evidence",
       P.accent,
+      uncomputed ? `${uncomputed} of ${dimensions.length} dimensions not computable · ${SRC}` : SRC,
       uncomputed
-        ? `${uncomputed} of ${dimensions.length} dimensions not computable · ${SRC}`
-        : SRC,
+        ? `${uncomputed} of ${dimensions.length} dimensions state why they could not be computed — connect the named source to close them.`
+        : undefined,
     );
-    const rows: any[][] = [
-      ["Dimension", "Score", "Confidence", "Basis"].map((t) => ({ text: t, options: cellHead() })),
-      ...dimensions.map((d) => {
+    secTable(
+      sec,
+      ["Dimension", "Score", "Confidence", "Basis"],
+      dimensions.map((d) => {
         const nc = d.score == null;
         return [
-          { text: dimensionLabel(branch, d.key), options: cellBody({ bold: true, color: nc ? P.faint : P.ink }) },
+          { text: cellFit(dimensionLabel(branch, d.key), 3.4, 0.46), options: cellBody({ bold: true, color: nc ? P.faint : P.ink }) },
           {
             text: nc ? "Not computable" : ` ${dotScale(d.score ?? 0)}  ${Math.round(d.score ?? 0)}`,
             options: cellBody({ bold: true, color: nc ? P.faint : P.accent2 }),
           },
-          { text: nc ? "—" : (cap(d.confidence) || "—"), options: cellBody({ color: P.muted, fontSize: 10 }) },
+          { text: nc ? "—" : (cap(d.confidence) || "—"), options: cellBody({ fontSize: 10, color: P.muted }) },
           {
             text: nc
-              ? truncate(sText(d.notComputable) || "No reason recorded", 90)
+              ? cellFit(sText(d.notComputable) || "No reason recorded", 4.633, 0.46, 10)
               : d.computed === true ? "Computed" : "Reasoned",
             options: cellBody({ fontSize: 10, color: nc ? P.accent2 : P.muted }),
           },
         ];
       }),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.4, 2.6, 1.5, 4.633],
-      rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [3.4, 2.6, 1.5, 4.633],
+      { rowH: 0.46 },
+    );
   }
 
-  // ─── Per-market ─────────────────────────────────────────────────────────
+  // ─── Value levers ───────────────────────────────────────────────────────
+  if (branch === "off_patent" && (f.levers.length || valueLevers.length)) {
+    const levers = f.levers.length
+      ? [...liveLevers, ...f.levers.filter((l: any) => l.notComputable)]
+      : valueLevers.map(readLever);
+    const strongest = levers.find((l: any) => !l.notComputable);
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Value levers",
+      strongest
+        ? `"${strongest.name}" is the strongest play — start there`
+        : "Where value still sits in an already-approved asset",
+      P.accent,
+      SRC,
+      "A lever the evidence cannot support names the input that would make it computable instead of showing a number.",
+    );
+    secTable(
+      sec,
+      ["Lever", "Score", "Confidence", "Est. value", "Basis"],
+      levers.map((l: any) => [
+        { text: cellFit(l.name, 3.0, 0.46), options: cellBody({ bold: true, color: l.notComputable ? P.faint : P.ink }) },
+        {
+          text: l.notComputable ? "Not computable" : ` ${dotScale(l.score ?? 0)}  ${Math.round(l.score)}`,
+          options: cellBody({ bold: true, color: l.notComputable ? P.faint : P.accent2 }),
+        },
+        { text: l.notComputable ? "—" : (l.confidence || "—"), options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: cellFit(l.estValue || "—", 2.8, 0.46, 10), options: cellBody({ fontSize: 10 }) },
+        {
+          text: l.notComputable
+            ? cellFit(`Needs: ${l.reason || l.dataGap || "no reason recorded"}`, 3.4, 0.46, 10)
+            : l.computed ? "Computed" : "Reasoned",
+          options: cellBody({ fontSize: 10, color: l.notComputable ? P.accent2 : P.muted }),
+        },
+      ]),
+      [3.0, 2.3, 1.6, 2.8, 2.433],
+      { rowH: 0.46 },
+    );
+
+    // Per-lever detail — the evidence, the plays and the gap behind each score.
+    for (const l of levers) {
+      if (!l.evidence.length && !l.actions.length && !l.dataGap && !l.reason) continue;
+      const det = beginSection(
+        pptx,
+        "Diagnosis · Value levers",
+        l.notComputable
+          ? `${l.name} — not computable, and this is what would change that`
+          : `${l.name} — ${Math.round(l.score)}/100${l.actions.length ? `: ${truncate(l.actions[0], 70)}` : ""}`,
+        P.accent,
+        l.evidence.map((e: any) => e.source).filter(Boolean).slice(0, 5).join(" · ") || SRC,
+        l.estValue ? `Estimated value: ${l.estValue}` : undefined,
+      );
+      if (l.evidence.length) {
+        secLabel(det, "Evidence");
+        secBullets(det, l.evidence.map((e: any) => (e.source ? `${e.finding} — ${e.source}` : e.finding)));
+      }
+      if (l.actions.length) {
+        secLabel(det, "Recommended plays", P.accent2);
+        secBullets(det, l.actions, { color: P.ink });
+      }
+      if (l.dataGap || l.reason) {
+        secCallout(det, "Evidence needed", `Obtain: ${l.dataGap || l.reason}`, P.accent2);
+      }
+    }
+  }
+
+  // ─── Markets ────────────────────────────────────────────────────────────
   if (includeMarkets && perMarket.length) {
     const ranked = perMarket.slice().sort(byScoreDesc);
-    const shown = ranked.slice(0, 10);
     const leadMarket = ranked.find((m) => m.score != null);
-    const slide = contentSlide(
-      pptx, "Diagnosis · Markets",
-      leadMarket ? `${countryLabel(leadMarket.country)} leads the market set` : "No market could be scored from the connected evidence",
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Markets",
+      leadMarket ? `${countryLabel(leadMarket.country)} leads the market set — take it first` : "No market could be scored from the connected evidence",
       P.accent,
-      shown.length < ranked.length ? `Top ${shown.length} of ${ranked.length} markets by score · ${SRC}` : SRC,
+      SRC,
     );
-    const rows: any[][] = [
-      ["Market", "Score", "Verdict", "Read"].map((t) => ({ text: t, options: cellHead() })),
-      ...shown.map((m) => {
+    secTable(
+      sec,
+      ["Market", "Score", "Verdict", "Read"],
+      ranked.map((m) => {
         const nc = m.score == null;
         return [
-          { text: countryLabel(m.country), options: cellBody({ bold: true, color: nc ? P.faint : P.ink }) },
+          { text: cellFit(countryLabel(m.country), 2.6, 0.5), options: cellBody({ bold: true, color: nc ? P.faint : P.ink }) },
           {
             text: nc ? "Not computable" : ` ${dotScale(m.score ?? 0)}  ${Math.round(m.score ?? 0)}`,
             options: cellBody({ bold: true, color: nc ? P.faint : P.accent2 }),
           },
           { text: verdictLabel(m.verdict), options: cellBody({ fontSize: 10, color: P.muted }) },
           {
-            text: truncate(
+            text: cellFit(
               nc ? (sText((m as Record<string, unknown>).notComputable) || sText(m.summary) || "Not stated") : (sText(m.summary) || "Not stated"),
-              150,
+              5.733, 0.5, 10,
             ),
             options: cellBody({ fontSize: 10 }),
           },
         ];
       }),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [2.6, 2.2, 1.6, 5.733],
-      rowH: 0.44, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [2.6, 2.2, 1.6, 5.733],
+      { rowH: 0.5 },
+    );
   }
 
-  // ─── Risks & swing factors ──────────────────────────────────────────────
-  if (topRisks.length || swingFactors.length) {
-    const slide = contentSlide(pptx, "Diagnosis · Risk", "What could kill this, and what most moves the score", P.accent, SRC);
-    if (topRisks.length) {
-      txt(slide, "TOP RISKS", { x: MX, y: BODY_TOP + 0.15, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.ink, charSpacing: 1 });
-      txt(slide, topRisks.slice(0, 5).map((t) => ({ text: truncate(t, 220), options: { bullet: { code: "2022" }, fontSize: 12, color: P.ink } })),
-        { x: MX, y: BODY_TOP + 0.5, w: HALF - 0.2, h: 4.2, fontFace: F, valign: "top", paraSpaceAfter: 6 });
+  // ─── Regional matrix (off-patent report) ────────────────────────────────
+  if (f.regions.length) {
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Regional assessment",
+      leadReg ? `${leadReg.label} leads the regional set — concentrate effort there` : "Regional opportunity matrix",
+      P.accent,
+      SRC,
+      f.marketWorthinessSummary || undefined,
+    );
+    secTable(
+      sec,
+      ["Region", "Attractiveness", "COS", "Worthiness", "Market size", "Growth", "Patent", "FTO"],
+      f.regions.map((r: any) => [
+        { text: cellFit(r.label, 1.7, 0.5), options: cellBody({ bold: true }) },
+        { text: cellFit(r.attractiveness || "—", 1.9, 0.5), options: cellBody({ bold: true, color: attractivenessPpt(r.attractiveness) }) },
+        { text: r.score != null ? String(Math.round(r.score)) : "n/a", options: cellBody({ align: "center", bold: true }) },
+        {
+          text: r.worthiness ? cellFit(`${r.worthiness.rating || "—"}${r.worthiness.score != null ? ` ${Math.round(r.worthiness.score)}` : ""}`, 2.0, 0.5, 10) : "Not assessed",
+          options: cellBody({ fontSize: 10, color: r.worthiness ? worthinessPpt(r.worthiness.rating) : P.faint }),
+        },
+        { text: cellFit(r.market.size || "—", 1.7, 0.5, 10), options: cellBody({ fontSize: 10 }) },
+        { text: cellFit(r.market.growth || "—", 1.3, 0.5, 10), options: cellBody({ fontSize: 10 }) },
+        { text: cellFit(r.ip.patentStrength || "—", 1.3, 0.5, 10), options: cellBody({ fontSize: 10 }) },
+        { text: cellFit(r.ip.fto || "—", 1.233, 0.5, 10), options: cellBody({ fontSize: 10 }) },
+      ]),
+      [1.7, 1.9, 0.8, 2.0, 1.7, 1.3, 1.3, 1.433],
+      { rowH: 0.5 },
+    );
+
+    // ─── One section per region ───────────────────────────────────────────
+    for (const r of f.regions) {
+      const sub = beginSection(
+        pptx,
+        `Diagnosis · ${r.label}`,
+        r.businessCase?.verdict
+          ? `${r.label} — ${r.businessCase.verdict}${r.score != null ? ` (COS ${Math.round(r.score)}/100)` : ""}`
+          : `${r.label}${r.score != null ? ` — COS ${Math.round(r.score)}/100` : ""}`,
+        P.accent,
+        SRC,
+        r.worthiness?.thesis || r.businessCase?.valueProposition || undefined,
+      );
+
+      if (r.businessCase) {
+        if (r.businessCase.valueProposition && r.businessCase.valueProposition !== (r.worthiness?.thesis ?? "")) {
+          secCallout(sub, `Business case — ${r.businessCase.verdict || "call not stated"}`, r.businessCase.valueProposition, P.accent);
+        }
+        if (r.businessCase.profitWedge) {
+          secLabel(sub, "Where the profitable case is");
+          secText(sub, r.businessCase.profitWedge, { fontSize: 11 });
+        }
+        if (r.businessCase.economics) {
+          secLabel(sub, "Economics");
+          secText(sub, r.businessCase.economics, { fontSize: 11 });
+        }
+      }
+
+      const vectors: [string, string][] = [
+        ["Market — size", r.market.size],
+        ["Market — growth", r.market.growth],
+        ["Market — unmet need", r.market.unmetNeed],
+        ["Regulatory — authority", r.legal.authority],
+        ["Regulatory — pathway", r.legal.pathway],
+        ["Regulatory — timeline", r.legal.timeline],
+        ["Commercial — competitive density", r.commercial.competitors],
+        ["Commercial — pricing / HTA", r.commercial.pricing],
+        ["Commercial — reimbursement", r.commercial.reimbursement],
+        ["Commercial — distribution", r.commercial.distribution],
+        ["IP — patent strength", r.ip.patentStrength],
+        ["IP — freedom to operate", r.ip.fto],
+        ["IP — estimated exclusivity", r.ip.years != null ? `${r.ip.years} years` : ""],
+        ["Manufacturing — complexity", r.manufacturing?.complexity ?? ""],
+        ["Manufacturing — notes", r.manufacturing?.notes ?? ""],
+      ];
+      const present = vectors.filter(([, v]) => !!v);
+      if (present.length) {
+        secTable(
+          sub,
+          ["Vector", "What this run found"],
+          present.map(([k, v]) => [
+            { text: k, options: cellBody({ bold: true, fontSize: 10 }) },
+            { text: cellFit(v, 8.4, 0.46, 10), options: cellBody({ fontSize: 10 }) },
+          ]),
+          [3.733, 8.4],
+          { rowH: 0.46 },
+        );
+      }
+      if (r.cos) {
+        const cosRows: [string, number | null][] = [
+          ["Market size", r.cos.marketSize],
+          ["Regulatory", r.cos.regulatory],
+          ["IP runway", r.cos.ip],
+          ["Market access", r.cos.marketAccess],
+          ["Low competition", r.cos.competition],
+        ];
+        const cosPresent = cosRows.filter(([, v]) => v != null);
+        if (cosPresent.length) {
+          secTable(
+            sub,
+            ["Commercial opportunity driver", "Score"],
+            cosPresent.map(([k, v]) => [
+              { text: k, options: cellBody({ bold: true }) },
+              { text: ` ${dotScale(v as number)}  ${Math.round(v as number)}`, options: cellBody({ color: P.accent2, bold: true }) },
+            ]),
+            [8.133, 4.0],
+          );
+        }
+      }
+      if (r.market.drivers.length || r.market.barriers.length) {
+        secColumns(
+          sub,
+          r.market.drivers.length ? { label: "Market drivers", items: r.market.drivers, color: P.accent2 } : null,
+          r.market.barriers.length ? { label: "Market barriers", items: r.market.barriers } : null,
+        );
+      }
+      if (r.legal.opportunities.length || r.legal.barriers.length) {
+        secColumns(
+          sub,
+          r.legal.opportunities.length ? { label: "Exclusivity opportunities", items: r.legal.opportunities, color: P.accent2 } : null,
+          r.legal.barriers.length ? { label: "Regulatory barriers", items: r.legal.barriers } : null,
+        );
+      }
+      if (r.commercial.partners.length || r.ip.opportunities.length) {
+        secColumns(
+          sub,
+          r.commercial.partners.length ? { label: "Partner candidates — approach these", items: r.commercial.partners, color: P.accent2 } : null,
+          r.ip.opportunities.length ? { label: "IP opportunities", items: r.ip.opportunities } : null,
+        );
+      }
+      if (r.ip.risks.length || r.provenanceFlags.length) {
+        secColumns(
+          sub,
+          r.ip.risks.length ? { label: "Expiration risks", items: r.ip.risks } : null,
+          r.provenanceFlags.length ? { label: "Provenance flags — verify before relying", items: r.provenanceFlags, color: P.accent2 } : null,
+        );
+      }
+
+      if (r.worthiness) {
+        const w = r.worthiness;
+        const wsec = beginSection(
+          pptx,
+          `Diagnosis · ${r.label} market worthiness`,
+          `${r.label} — ${w.rating || "not rated"}${w.score != null ? ` (${Math.round(w.score)}/100)` : ""} on purely commercial grounds`,
+          P.accent,
+          SRC,
+          w.thesis || undefined,
+        );
+        const wRows: [string, string][] = [
+          ["Healthcare landscape", w.healthcareLandscape],
+          ["Legal landscape", w.legalLandscape],
+          ["Market size vs competitors", w.marketSizeVsCompetitors],
+          ["Room for partnerships", w.partnershipRoom],
+          ["Distribution channels", w.distributionChannels],
+        ];
+        const wPresent = wRows.filter(([, v]) => !!v);
+        if (wPresent.length) {
+          secTable(
+            wsec,
+            ["Lens", "The current picture"],
+            wPresent.map(([k, v]) => [
+              { text: k, options: cellBody({ bold: true, fontSize: 10 }) },
+              { text: cellFit(v, 8.6, 0.62, 10), options: cellBody({ fontSize: 10 }) },
+            ]),
+            [3.533, 8.6],
+            { rowH: 0.62 },
+          );
+        }
+        if (w.novelPaths.length) {
+          secLabel(wsec, "Novel paths to capture this market", P.accent2);
+          secBullets(wsec, w.novelPaths);
+        }
+      }
     }
-    if (swingFactors.length) {
-      txt(slide, "SWING FACTORS — RESOLVE THESE FIRST", { x: COL_R, y: BODY_TOP + 0.15, w: HALF, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
-      txt(slide, swingFactors.slice(0, 5).map((t) => ({ text: truncate(t, 220), options: { bullet: { code: "2022" }, fontSize: 12, color: P.ink } })),
-        { x: COL_R, y: BODY_TOP + 0.5, w: HALF - 0.2, h: 4.2, fontFace: F, valign: "top", paraSpaceAfter: 6 });
+  }
+
+  // ─── Recommendations (off-patent report) ────────────────────────────────
+  if (f.recommendations.length) {
+    const first = f.recommendations[0];
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Recommendations",
+      `Prioritise ${first.region} — ${first.structure || "market entry"}`,
+      P.accent,
+      SRC,
+      "Ranked by priority; each row is a route to open, not an option to weigh.",
+    );
+    secTable(
+      sec,
+      ["#", "Region", "Route", "Upfront", "Total", "Royalty", "Timeline"],
+      f.recommendations.map((r: any) => [
+        { text: String(r.rank || "—"), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
+        { text: cellFit(r.region, 1.6, 0.5), options: cellBody({ bold: true }) },
+        { text: cellFit(r.structure || "—", 3.0, 0.5, 10), options: cellBody({ fontSize: 10 }) },
+        { text: cellFit(r.upfront || "—", 1.5, 0.5, 10), options: cellBody({ fontSize: 10, bold: true, color: P.accent2 }) },
+        { text: cellFit(r.total || "—", 1.5, 0.5, 10), options: cellBody({ fontSize: 10, bold: true, color: P.accent2 }) },
+        { text: cellFit(r.royalty || "—", 1.5, 0.5, 10), options: cellBody({ fontSize: 10, color: P.accent2 }) },
+        { text: cellFit(r.timeline || "—", 2.433, 0.5, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+      ]),
+      [0.6, 1.6, 3.0, 1.5, 1.5, 1.5, 2.433],
+      { rowH: 0.5 },
+    );
+    for (const r of f.recommendations) {
+      if (!r.rationale && !r.partners.length && !r.prerequisites.length && !r.roi) continue;
+      const det = beginSection(
+        pptx,
+        `Diagnosis · Recommendation #${r.rank}`,
+        `${r.region} — ${r.structure || "structure to be set"}${r.total ? `, target ${r.total}` : ""}`,
+        P.accent,
+        SRC,
+        r.roi ? `Expected ROI: ${r.roi}` : undefined,
+      );
+      if (r.rationale) secText(det, r.rationale, { fontSize: 12 });
+      if (r.partners.length) {
+        secLabel(det, "Top partner candidates — open these conversations", P.accent2);
+        secBullets(det, r.partners);
+      }
+      if (r.prerequisites.length) {
+        secLabel(det, "Prerequisites to clear first");
+        secBullets(det, r.prerequisites);
+      }
+    }
+  }
+
+  // ─── Business case (off-patent report) ──────────────────────────────────
+  if (f.commercialPlan) {
+    const cp = f.commercialPlan;
+    const firstStep = cp.steps[0];
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Business case",
+      firstStep ? `Start with step ${firstStep.step} — ${truncate(firstStep.action, 80)}` : "Commercial channels and go-to-market",
+      P.accent,
+      SRC,
+      cp.summary || undefined,
+    );
+    if (cp.channels.length) {
+      secLabel(sec, "Commercial channels");
+      secTable(
+        sec,
+        ["Channel", "Geographies", "Where the value is", "How to win it"],
+        cp.channels.map((c: any) => [
+          { text: cellFit(c.channel, 2.3, 0.56), options: cellBody({ bold: true }) },
+          { text: cellFit(c.geographies.join(", ") || "—", 1.7, 0.56, 10), options: cellBody({ fontSize: 10 }) },
+          { text: cellFit(c.valueRole || "—", 3.5, 0.56, 10), options: cellBody({ fontSize: 10 }) },
+          {
+            text: cellFit(
+              [c.accessMechanics, c.keyPlayers.length ? `(${c.keyPlayers.join(", ")})` : ""].filter(Boolean).join(" "),
+              4.633, 0.56, 10,
+            ),
+            options: cellBody({ fontSize: 10 }),
+          },
+        ]),
+        [2.3, 1.7, 3.5, 4.633],
+        { rowH: 0.56 },
+      );
+    }
+    if (cp.steps.length) {
+      secLabel(sec, "How to proceed", P.accent2);
+      secTable(
+        sec,
+        ["#", "Action", "Geography", "Approach", "Timing", "Owner"],
+        cp.steps.map((s: any) => [
+          { text: String(s.step), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
+          { text: cellFit(s.action, 4.4, 0.52), options: cellBody({ bold: true }) },
+          { text: cellFit(s.geography || "—", 1.6, 0.52, 10), options: cellBody({ fontSize: 10 }) },
+          { text: cellFit(s.approach || "—", 2.6, 0.52, 10), options: cellBody({ fontSize: 10, color: P.accent2 }) },
+          { text: cellFit(s.timing || "—", 1.6, 0.52, 10), options: cellBody({ fontSize: 10 }) },
+          { text: cellFit(s.owner || "Not assigned", 1.333, 0.52, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+        ]),
+        [0.6, 4.4, 1.6, 2.6, 1.6, 1.333],
+        { rowH: 0.52 },
+      );
+    }
+  }
+
+  // ─── Flaws & blockers ───────────────────────────────────────────────────
+  if (f.risks.length || topRisks.length || swingFactors.length) {
+    const high = f.risks.filter((r: any) => r.impact === "High");
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Flaws & blockers",
+      high.length
+        ? `${high.length} high-impact blocker${high.length === 1 ? "" : "s"} need an owner before any commitment`
+        : "What could kill this, and what most moves the score",
+      P.accent,
+      SRC,
+      "Swing factors are the variables to resolve first — they change the answer, not just the confidence.",
+    );
+    if (f.risks.length) {
+      secTable(
+        sec,
+        ["Category", "Risk", "Impact", "Likelihood", "Mitigation — do this"],
+        f.risks.map((r: any) => [
+          { text: cellFit(r.category || "—", 1.5, 0.58, 10), options: cellBody({ fontSize: 10, bold: true }) },
+          { text: cellFit(r.risk, 3.6, 0.58, 10), options: cellBody({ fontSize: 10, bold: true }) },
+          { text: r.impact || "—", options: cellBody({ fontSize: 10, bold: r.impact === "High", color: r.impact === "High" ? P.accent2 : P.muted }) },
+          { text: r.likelihood || "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+          { text: cellFit(r.mitigation || "No mitigation recorded — assign an owner to define one", 4.033, 0.58, 10), options: cellBody({ fontSize: 10 }) },
+        ]),
+        [1.5, 3.6, 1.4, 1.6, 4.033],
+        { rowH: 0.58 },
+      );
+    }
+    if (topRisks.length || swingFactors.length) {
+      secColumns(
+        sec,
+        topRisks.length ? { label: "Top risks", items: topRisks } : null,
+        swingFactors.length ? { label: "Swing factors — resolve these first", items: swingFactors, color: P.accent2 } : null,
+      );
     }
   }
 
   // ─── IP flags (innovative) ──────────────────────────────────────────────
   if (branch === "innovative" && ipFlags.length) {
-    const slide = contentSlide(
-      pptx, "Diagnosis · IP & FTO", "Flags counsel must clear before any commitment", P.accent,
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · IP & FTO",
+      "Flags counsel must clear before any commitment",
+      P.accent,
       "A screen of public patent and regulatory records — not a legal opinion",
     );
-    const rows: any[][] = [
-      ["Severity", "Claim / flag", "Why it matters", "Citation"].map((t) => ({ text: t, options: cellHead() })),
-      ...ipFlags.slice(0, 9).map((f) => [
-        { text: (sText(f.severity) || "not stated").toUpperCase(), options: cellBody({ bold: true, color: P.accent2, fontSize: 10 }) },
-        { text: truncate(sText(f.flag) || sText(f.claim) || sText(f.label) || "Unnamed flag", 110), options: cellBody({ bold: true }) },
-        { text: truncate(sText(f.note) || sText(f.whyItMatters) || sText(f.why) || "Not stated", 150), options: cellBody({ fontSize: 10 }) },
-        { text: truncate(sText(f.citation) || sText(f.source) || "Not cited", 60), options: cellBody({ fontSize: 9.5, color: P.muted }) },
+    secTable(
+      sec,
+      ["Severity", "Claim / flag", "Why it matters", "Citation"],
+      ipFlags.map((fl) => [
+        { text: (sText(fl.severity) || "not stated").toUpperCase(), options: cellBody({ bold: true, color: P.accent2, fontSize: 10 }) },
+        { text: cellFit(sText(fl.flag) || sText(fl.claim) || sText(fl.label) || "Unnamed flag", 3.6, 0.56, 10), options: cellBody({ bold: true, fontSize: 10 }) },
+        { text: cellFit(sText(fl.note) || sText(fl.whyItMatters) || sText(fl.why) || "Not stated", 4.533, 0.56, 10), options: cellBody({ fontSize: 10 }) },
+        { text: cellFit(sText(fl.citation) || sText(fl.source) || "Not cited", 2.7, 0.56, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
       ]),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [1.3, 3.6, 4.533, 2.7],
-      rowH: 0.5, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [1.5, 3.6, 4.533, 2.5],
+      { rowH: 0.56 },
+    );
   }
 
-  // ─── Value levers (off-patent) ──────────────────────────────────────────
-  if (branch === "off_patent" && valueLevers.length) {
-    const slide = contentSlide(
-      pptx, "Diagnosis · Value levers", "Where value still sits in an already-approved asset", P.accent, SRC,
+  // ─── What would flip it / considered & rejected ─────────────────────────
+  const rejectedRows = f.consideredAndRejected.length
+    ? f.consideredAndRejected
+    : rejectedEnvelope.map((r) => ({ opportunity: sText(r.opportunity), reason: sText(r.reason) })).filter((r) => r.opportunity);
+  if (f.whatWouldFlipIt.length || rejectedRows.length) {
+    const sec = beginSection(
+      pptx,
+      "Diagnosis · Calibration",
+      f.whatWouldFlipIt.length
+        ? "The evidence that would change this answer — go and get it"
+        : "The angles argued for and then set aside",
+      P.accent,
+      "CartaOS quality framework",
+      "A verdict that nothing could overturn is not a verdict. These are the falsifiers.",
     );
-    const rows: any[][] = [
-      ["Lever", "Score", "Confidence", "Basis"].map((t) => ({ text: t, options: cellHead() })),
-      ...valueLevers.slice(0, 10).map((l) => {
-        const nc = readNotComputable(l.notComputable);
-        const raw = Number(l.score);
-        const hasScore = !nc.flag && Number.isFinite(raw);
-        return [
-          { text: sText(l.lever) || sText(l.label) || sText(l.key) || "Unnamed lever", options: cellBody({ bold: true, color: hasScore ? P.ink : P.faint }) },
-          {
-            text: hasScore ? ` ${dotScale(raw)}  ${Math.round(raw)}` : "Not computable",
-            options: cellBody({ bold: true, color: hasScore ? P.accent2 : P.faint }),
-          },
-          { text: hasScore ? (cap(l.confidence) || "—") : "—", options: cellBody({ fontSize: 10, color: P.muted }) },
-          {
-            text: hasScore
-              ? (l.computed === true ? "Computed" : "Reasoned")
-              : truncate(nc.reason || sText(l.dataGap) || "No reason recorded", 90),
-            options: cellBody({ fontSize: 10, color: hasScore ? P.muted : P.accent2 }),
-          },
-        ];
-      }),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.4, 2.6, 1.5, 4.633],
-      rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+    if (f.whatWouldFlipIt.length) {
+      secLabel(sec, "What would flip the verdict", P.accent2);
+      secBullets(sec, f.whatWouldFlipIt);
+    }
+    if (rejectedRows.length) {
+      secLabel(sec, "Considered & rejected — do not reopen without new evidence");
+      secTable(
+        sec,
+        ["Opportunity", "Why it was rejected"],
+        rejectedRows.map((r: any) => [
+          { text: cellFit(r.opportunity, 4.0, 0.52), options: cellBody({ bold: true }) },
+          { text: cellFit(r.reason || "Not stated", 8.133, 0.52, 10), options: cellBody({ fontSize: 10 }) },
+        ]),
+        [4.0, 8.133],
+        { rowH: 0.52 },
+      );
+    }
   }
 
   // ─── Evidence ───────────────────────────────────────────────────────────
@@ -2621,7 +4573,6 @@ export async function exportDiagnosisPPTX(
     const items = dimensions.flatMap((d) =>
       (Array.isArray(d.evidence) ? d.evidence : []).map((e: EvidenceItem) => ({ dim: dimensionLabel(branch, d.key), e })),
     );
-    // Strongest first: sourced findings before estimates, then by source tier.
     const strongest = items
       .slice()
       .sort((a, b) => {
@@ -2629,53 +4580,91 @@ export async function exportDiagnosisPPTX(
         if (kind !== 0) return kind;
         return (a.e.tier ?? 9) - (b.e.tier ?? 9);
       })
-      .slice(0, 9);
+      .slice(0, 18);
 
     if (strongest.length) {
-      const slide = contentSlide(
-        pptx, "Diagnosis · Evidence", "The evidence the verdict rests on", P.accent,
-        `${items.length} evidence items recorded across ${dimensions.length} dimensions — strongest shown`,
+      const estimates = strongest.filter((x) => x.e.kind === "estimate").length;
+      const sec = beginSection(
+        pptx,
+        "Diagnosis · Evidence",
+        estimates
+          ? `${estimates} of ${strongest.length} shown claims are inferences — source them before they carry a decision`
+          : "The evidence the verdict rests on",
+        P.accent,
+        `${items.length} evidence items recorded across ${dimensions.length} dimensions`,
       );
-      const rows: any[][] = [
-        ["Claim", "Dimension", "Type", "Source", "Tier"].map((t) => ({ text: t, options: cellHead() })),
-        ...strongest.map(({ dim, e }) => [
-          { text: truncate(sText(e.claim) || "—", 170), options: cellBody({ fontSize: 10.5 }) },
-          { text: truncate(dim, 40), options: cellBody({ fontSize: 10, bold: true }) },
+      secTable(
+        sec,
+        ["Claim", "Dimension", "Type", "Source", "Tier"],
+        strongest.map(({ dim, e }) => [
+          { text: cellFit(sText(e.claim) || "—", 4.6, 0.52, 10), options: cellBody({ fontSize: 10 }) },
+          { text: cellFit(dim, 2.4, 0.52, 10), options: cellBody({ fontSize: 10, bold: true }) },
           {
             text: e.kind === "estimate" ? "Estimate" : "Evidence",
             options: cellBody({ fontSize: 10, bold: true, color: e.kind === "estimate" ? P.accent2 : P.muted }),
           },
-          { text: truncate(sText(e.source) || "Not stated", 46), options: cellBody({ fontSize: 10, color: P.muted }) },
+          { text: cellFit(sText(e.source) || "Not stated", 2.6, 0.52, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
           { text: e.tier != null ? `T${e.tier}` : "—", options: cellBody({ fontSize: 10, color: P.muted, align: "center" }) },
         ]),
-      ];
-      slide.addTable(rows, {
-        x: MX, y: BODY_TOP + 0.15, w: MW, colW: [4.6, 2.4, 1.3, 2.6, 1.233],
-        rowH: 0.48, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-      });
+        [4.6, 2.4, 1.3, 2.6, 1.233],
+        { rowH: 0.52 },
+      );
     }
   }
 
   // ─── Basis of preparation ───────────────────────────────────────────────
   {
     const gaps = coverage.filter((c) => (c.unwired ?? []).length > 0);
-    const slide = contentSlide(pptx, "Basis of preparation", "How to read this diagnosis", P.accent, "CartaOS diagnosis engine");
-    const points = [
-      "Internal strategic decision support only — not medical, regulatory or legal advice, and not promotional material.",
-      "Every score is generated by CartaOS from the sources named against it. Items marked Estimate are model inferences, not sourced findings.",
-      "Dimensions and markets the evidence base could not support are stated as not computable, with the reason — they are never estimated, defaulted or shown as zero.",
-      uncomputed
-        ? `${uncomputed} of ${dimensions.length} dimensions could not be computed in this run.`
-        : "Every dimension in this run was computable from the connected evidence.",
+    const sec = beginSection(
+      pptx,
+      "Basis of preparation",
       gaps.length
-        ? `${gaps.length} dimension${gaps.length === 1 ? "" : "s"} had applicable sources with no connected client; those scores were computed without that evidence.`
-        : "",
-      "Verify every figure against primary sources before transacting.",
-    ].filter(Boolean);
-    txt(slide, points.map((t) => ({ text: t, options: { bullet: { code: "2022" }, fontSize: 12.5, color: P.ink } })),
-      { x: MX, y: BODY_TOP + 0.25, w: MW, h: 4.6, fontFace: F, valign: "top", paraSpaceAfter: 8, lineSpacingMultiple: 1.15 });
+        ? `Connect ${gaps.length} missing source set${gaps.length === 1 ? "" : "s"} before treating these scores as settled`
+        : "How to read this diagnosis",
+      P.accent,
+      "CartaOS diagnosis engine",
+    );
+    secBullets(
+      sec,
+      [
+        "Internal strategic decision support only — not medical, regulatory or legal advice, and not promotional material.",
+        "Every score is generated by CartaOS from the sources named against it. Items marked Estimate are model inferences, not sourced findings.",
+        "Dimensions, levers and markets the evidence base could not support are stated as not computable, with the reason — they are never estimated, defaulted or shown as zero.",
+        uncomputed
+          ? `${uncomputed} of ${dimensions.length} dimensions could not be computed in this run.`
+          : "Every dimension in this run was computable from the connected evidence.",
+        gaps.length
+          ? `${gaps.length} dimension${gaps.length === 1 ? "" : "s"} had applicable sources with no connected client — connect ${Array.from(new Set(gaps.flatMap((g) => g.unwired ?? []))).join(", ")} and re-run.`
+          : "",
+        "Verify every figure against primary sources before transacting.",
+      ].filter(Boolean),
+      { fontSize: 12 },
+    );
+    if (coverage.length) {
+      secTable(
+        sec,
+        ["Dimension", "Sources consulted", "Applicable but not connected"],
+        coverage.map((c) => [
+          { text: cellFit(sText(c.label) || dimensionLabel(branch, c.key), 3.5, 0.5, 10), options: cellBody({ fontSize: 10, bold: true }) },
+          { text: cellFit((c.consulted ?? []).join(", ") || "None", 4.8, 0.5, 10), options: cellBody({ fontSize: 10 }) },
+          { text: cellFit((c.unwired ?? []).join(", ") || "None", 3.833, 0.5, 10), options: cellBody({ fontSize: 10, color: (c.unwired ?? []).length ? P.accent2 : P.muted }) },
+        ]),
+        [3.5, 4.8, 3.833],
+        { rowH: 0.5 },
+      );
+    }
   }
 
+  return pptx;
+}
+
+export async function exportDiagnosisPPTX(
+  diagnosis: Diagnosis,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+  opts?: ExportOptions,
+) {
+  const pptx = await buildDiagnosisPptx(diagnosis, branch, assetName, opts);
   await pptx.writeFile({ fileName: `${safeFilename(assetName)}_Diagnosis.pptx` });
 }
 
@@ -2685,12 +4674,12 @@ export async function exportDiagnosisPPTX(
  * never read off narrated route objects, and a route missing a required input
  * names that input instead of showing a number.
  */
-export async function exportStrategyPPTX(
+export async function buildStrategyPptx(
   strategy: Strategy,
   branch: "off_patent" | "innovative",
   assetName: string,
   opts?: ExportOptions,
-) {
+): Promise<any> {
   const [PptxGenJS, engine] = await Promise.all([
     import("pptxgenjs").then((m) => m.default),
     import("@/server/services/strategy/model"),
@@ -2731,6 +4720,11 @@ export async function exportStrategyPPTX(
     return r && r.computable ? compactUsd(r.npv) : "n/a";
   };
   const computableRoutes = routes.filter((r) => byKey.get(r.key)?.computable);
+  const uncomputable = routes.filter((r) => byKey.get(r.key)?.computable !== true);
+  const partners = Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [];
+  const sequence = Array.isArray((strategy as Record<string, unknown>).approachSequence)
+    ? ((strategy as Record<string, unknown>).approachSequence as unknown[]).map(sText).filter(Boolean)
+    : [];
   const SRC = "Deterministic CartaOS strategy model, computed from the assumption set in this deck";
 
   // ─── Title ──────────────────────────────────────────────────────────────
@@ -2748,79 +4742,119 @@ export async function exportStrategyPPTX(
     P.accent,
   );
 
+  // ─── What to do next ────────────────────────────────────────────────────
+  const nextSteps = strategyNextActions({
+    recommended, best, byKey, missing, labelOf, sens, partners, assumptions, uncomputable, strategy, limit: 8,
+  });
+  if (nextSteps.length) {
+    const sec = beginSection(
+      pptx,
+      "What to do next",
+      best
+        ? `Commit to ${routeLabel(best.key)} and close the inputs that could still move it`
+        : "Close the missing inputs before this decision can be taken",
+      P.accent,
+      SRC,
+      "Each line names the route, variable, counterparty or input this model run produced — not a generic checklist.",
+    );
+    secTable(
+      sec,
+      ["#", "Do this", "Owner", "Because"],
+      nextSteps.map((a, i) => [
+        { text: String(i + 1), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
+        { text: cellFit(a.action, 5.633, 0.62), options: cellBody({ bold: true }) },
+        { text: cellFit(a.owner || "Not assigned", 2.0, 0.62, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: cellFit(a.detail || "—", 4.0, 0.62, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
+      ]),
+      [0.5, 5.633, 2.0, 4.0],
+      { rowH: 0.62 },
+    );
+  }
+
   // ─── Recommendation ─────────────────────────────────────────────────────
   {
-    const slide = contentSlide(
-      pptx, "Strategy · Recommendation",
+    const sec = beginSection(
+      pptx,
+      "Strategy · Recommendation",
       best ? `${routeLabel(best.key)} realises the most value` : "No route is computable on the current assumptions",
-      P.accent, SRC,
+      P.accent,
+      SRC,
     );
-    let y = BODY_TOP + 0.15;
 
     if (recommendation?.lowFit) {
-      slide.addShape("rect", { x: MX, y, w: MW, h: 0.72, fill: { color: P.calloutBg }, line: { type: "none" } });
-      slide.addShape("rect", { x: MX, y, w: 0.07, h: 0.72, fill: { color: P.accent2 } });
-      txt(slide, [
-        { text: "NO ROUTE CLEARED THE FIT BAR   ", options: { fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 } },
-        { text: "This is the best economics available, not a route judged open to this asset. Treat it as a ceiling on value, not a recommendation to execute.", options: { fontSize: 11, color: P.ink } },
-      ], { x: MX + 0.25, y: y + 0.05, w: MW - 0.5, h: 0.64, fontFace: F, valign: "middle" });
-      y += 0.92;
+      secCallout(
+        sec,
+        "No route cleared the fit bar",
+        "This is the best economics available, not a route judged open to this asset. Treat it as a ceiling on value, not a recommendation to execute.",
+        P.accent2,
+      );
     }
 
     if (best) {
-      const cw = (MW - 3 * GUT) / 4;
-      const cards: [string, string, boolean][] = [
+      secStats(sec, [
         ["NPV", compactUsd(best.npv), true],
         ["IRR", best.irr != null ? `${best.irr.toFixed(1)}%` : "n/a", false],
         ["Break-even", best.breakEvenYear != null ? `Year ${best.breakEvenYear}` : "Never in horizon", false],
         ["Peak revenue", compactUsd(best.peakRevenue), false],
-      ];
-      cards.forEach(([label, value, hi], i) => statCard(slide, MX + i * (cw + GUT), y, cw, 1.3, label, value, hi));
-      y += 1.55;
-
-      txt(slide, "SCENARIO RANGE — EVERY DRIVER MOVED TOGETHER BY ±20%", { x: MX, y, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.muted, charSpacing: 1 });
-      txt(slide, `Downside ${scenNpv(scen.downside, best.key)}     ·     Base ${compactUsd(best.npv)}     ·     Upside ${scenNpv(scen.upside, best.key)}`,
-        { x: MX, y: y + 0.28, w: MW, h: 0.45, fontFace: F, fontSize: 14, bold: true, color: P.ink });
-      y += 0.9;
-
+      ]);
+      secLabel(sec, "Scenario range — every driver moved together by ±20%");
+      secText(
+        sec,
+        `Downside ${scenNpv(scen.downside, best.key)}     ·     Base ${compactUsd(best.npv)}     ·     Upside ${scenNpv(scen.upside, best.key)}`,
+        { fontSize: 14, bold: true },
+      );
       const dependency = sText(recommended?.keyDependency) || sText(best.keyDependency);
-      if (dependency) {
-        txt(slide, "KEY DEPENDENCY — WHAT WOULD BREAK THIS PLAN", { x: MX, y, w: MW, h: 0.3, fontFace: F, fontSize: 9.5, bold: true, color: P.accent2, charSpacing: 1 });
-        txt(slide, dependency, { x: MX, y: y + 0.28, w: MW, h: 0.8, fontFace: F, fontSize: 12, color: P.ink, valign: "top" });
-      }
+      if (dependency) secCallout(sec, "Key dependency — what would break this plan", dependency, P.accent2);
+      const rationale = sText((recommended as Record<string, unknown> | undefined)?.rationale);
+      if (rationale) secText(sec, rationale, { fontSize: 11 });
     } else {
-      txt(slide, `No route can be modelled until these assumptions are supplied: ${missing.map(labelOf).join(", ") || "none recorded"}.`,
-        { x: MX, y, w: MW, h: 1.0, fontFace: F, fontSize: 14, color: P.accent2, valign: "top" });
+      secText(
+        sec,
+        `No route can be modelled until these assumptions are supplied: ${missing.map(labelOf).join(", ") || "none recorded"}.`,
+        { fontSize: 13, color: P.accent2 },
+      );
     }
 
     if (recommendation?.setAside.length) {
-      txt(slide, `Passed over on fit despite higher NPV: ${recommendation.setAside.map((s) => `${routeLabel(s.key)} (${compactUsd(s.npv)}, fit ${s.score})`).join(" · ")}`,
-        { x: MX, y: 6.25, w: MW, h: 0.5, fontFace: F, fontSize: 10, color: P.muted, valign: "top" });
+      secLabel(sec, "Passed over on fit despite higher NPV");
+      secBullets(
+        sec,
+        recommendation.setAside.map((s) => `${routeLabel(s.key)} — ${compactUsd(s.npv)}, fit ${s.score}`),
+        { color: P.muted },
+      );
     }
   }
 
   // ─── Route comparison ───────────────────────────────────────────────────
   if (routes.length) {
-    const slide = contentSlide(pptx, "Strategy · Route comparison", "Every route, one assumption set", P.accent, SRC);
-    const ordered = [...computableRoutes, ...routes.filter((r) => byKey.get(r.key)?.computable !== true)];
-    const rows: any[][] = [
-      ["Route", "Score", "NPV", "IRR", "Break-even", "Peak revenue"].map((t) => ({ text: t, options: cellHead() })),
-      ...ordered.slice(0, 9).map((r) => {
+    const ordered = [...computableRoutes, ...uncomputable];
+    const sec = beginSection(
+      pptx,
+      "Strategy · Route comparison",
+      "Every route, one assumption set",
+      P.accent,
+      SRC,
+      "A route missing a required input names that input — it is never shown as a zero or ranked as one.",
+    );
+    secTable(
+      sec,
+      ["Route", "Fit", "NPV", "IRR", "Break-even", "Peak revenue"],
+      ordered.map((r) => {
         const e = byKey.get(r.key);
         const isRec = r.key === recommendedKey;
         if (!e || !e.computable) {
           const miss = e && !e.computable ? e.missing : required;
           return [
-            { text: r.label, options: cellBody({ bold: true, color: P.faint }) },
+            { text: cellFit(r.label, 3.4, 0.5), options: cellBody({ bold: true, color: P.faint }) },
             { text: r.score != null ? String(r.score) : "n/a", options: cellBody({ color: P.faint, align: "center" }) },
-            { text: `Not computable — needs ${miss.map(labelOf).join(", ")}`, options: cellBody({ fontSize: 9.5, color: P.accent2 }) },
+            { text: cellFit(`Not computable — needs ${miss.map(labelOf).join(", ")}`, 5.2, 0.5, 10), options: cellBody({ fontSize: 10, color: P.accent2 }) },
             { text: "—", options: cellBody({ color: P.faint, align: "center" }) },
             { text: "—", options: cellBody({ color: P.faint, align: "center" }) },
             { text: "—", options: cellBody({ color: P.faint, align: "center" }) },
           ];
         }
         return [
-          { text: r.label, options: cellBody({ bold: true, color: P.ink }) },
+          { text: cellFit(r.label, 3.4, 0.5), options: cellBody({ bold: true }) },
           { text: r.score != null ? String(r.score) : "n/a", options: cellBody({ align: "center" }) },
           { text: compactUsd(e.npv), options: cellBody({ bold: true, color: P.accent2, align: "right" }) },
           { text: e.irr != null ? `${e.irr.toFixed(1)}%` : "n/a", options: cellBody({ align: "right" }) },
@@ -2828,112 +4862,136 @@ export async function exportStrategyPPTX(
           { text: compactUsd(e.peakRevenue), options: cellBody({ align: "right", bold: isRec }) },
         ];
       }),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.4, 1.0, 2.6, 1.2, 1.4, 2.533],
-      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [3.4, 1.0, 2.6, 1.2, 1.4, 2.533],
+      { rowH: 0.5 },
+    );
   }
 
   // ─── Assumptions ────────────────────────────────────────────────────────
   if (assumptions.length) {
     const assumed = assumptions.filter((a) => a.basis !== "sourced").length;
-    const slide = contentSlide(
-      pptx, "Strategy · Assumptions", "What every figure in this deck rests on", P.accent,
-      `${assumed} of ${assumptions.length} inputs are the model's own estimate — challenge those first`,
+    const sec = beginSection(
+      pptx,
+      "Strategy · Assumptions",
+      assumed
+        ? `${assumed} of ${assumptions.length} inputs are the model's own estimate — challenge those first`
+        : "Every input in this deck is sourced",
+      P.accent,
+      SRC,
     );
-    const rows: any[][] = [
-      ["Assumption", "Value", "Unit", "Basis"].map((t) => ({ text: t, options: cellHead() })),
-      ...assumptions.slice(0, 11).map((a) => {
+    secTable(
+      sec,
+      ["Assumption", "Value", "Unit", "Basis"],
+      assumptions.map((a) => {
         const supplied = String(a.value ?? "").trim() !== "";
         const sourced = a.basis === "sourced";
         return [
-          { text: sText(a.label) || a.key, options: cellBody({ bold: true, color: P.ink }) },
+          { text: cellFit(sText(a.label) || a.key, 4.2, 0.46), options: cellBody({ bold: true }) },
           {
             text: supplied ? String(a.value) : "Not supplied",
             options: cellBody({ align: "right", bold: supplied, color: supplied ? P.ink : P.accent2 }),
           },
-          { text: sText(a.unit) || "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+          { text: cellFit(sText(a.unit) || "—", 1.6, 0.46, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
           {
-            text: sourced ? truncate(`Sourced — ${sText(a.source) || "source not named"}`, 90) : "Assumed — not sourced",
+            text: cellFit(sourced ? `Sourced — ${sText(a.source) || "source not named"}` : "Assumed — not sourced, source it", 4.333, 0.46, 10),
             options: cellBody({ fontSize: 10, color: sourced ? P.muted : P.accent2, bold: !sourced }),
           },
         ];
       }),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [4.2, 2.0, 1.6, 4.333],
-      rowH: 0.42, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [4.2, 2.0, 1.6, 4.333],
+      { rowH: 0.46 },
+    );
+    if (missing.length) {
+      secCallout(sec, "Still missing", `${missing.map(labelOf).join(", ")} — supply these to unlock the routes above.`, P.accent2);
+    }
   }
 
   // ─── Scenarios ──────────────────────────────────────────────────────────
   if (computableRoutes.length) {
-    const slide = contentSlide(
-      pptx, "Strategy · Scenarios", "How the routes hold up when every driver moves together", P.accent,
+    const sec = beginSection(
+      pptx,
+      "Strategy · Scenarios",
+      "How the routes hold up when every driver moves together",
+      P.accent,
       "Every scenario driver moved ±20% at once; routes that cannot be modelled are excluded rather than defaulted",
     );
-    const rows: any[][] = [
-      ["Route", "Downside NPV", "Base NPV", "Upside NPV"].map((t) => ({ text: t, options: cellHead() })),
-      ...computableRoutes.slice(0, 9).map((r) => {
+    secTable(
+      sec,
+      ["Route", "Downside NPV", "Base NPV", "Upside NPV"],
+      computableRoutes.map((r) => {
         const isRec = r.key === recommendedKey;
         return [
-          { text: r.label, options: cellBody({ bold: true, color: P.ink }) },
+          { text: cellFit(r.label, 4.333, 0.5), options: cellBody({ bold: true }) },
           { text: scenNpv(scen.downside, r.key), options: cellBody({ align: "right", color: P.muted }) },
           { text: scenNpv(scen.base, r.key), options: cellBody({ align: "right", bold: true, color: isRec ? P.accent2 : P.ink }) },
           { text: scenNpv(scen.upside, r.key), options: cellBody({ align: "right", color: P.muted }) },
         ];
       }),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [4.333, 2.6, 2.6, 2.6],
-      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [4.333, 2.6, 2.6, 2.6],
+      { rowH: 0.5 },
+    );
   }
 
   // ─── Sensitivity ────────────────────────────────────────────────────────
   if (sens.length && best) {
-    const slide = contentSlide(
-      pptx, "Strategy · Sensitivity",
-      `${labelOf(sens[0].key)} dominates the outcome`,
+    const sec = beginSection(
+      pptx,
+      "Strategy · Sensitivity",
+      `${labelOf(sens[0].key)} dominates the outcome — settle it first`,
       P.accent,
       `Each driver moved ±20% on its own, everything else held, against ${routeLabel(best.key)}`,
     );
-    const rows: any[][] = [
-      ["#", "Variable", "NPV at -20%", "NPV at +20%", "Swing"].map((t) => ({ text: t, options: cellHead() })),
-      ...sens.map((s, i) => [
+    secTable(
+      sec,
+      ["#", "Variable", "NPV at -20%", "NPV at +20%", "Swing"],
+      sens.map((s, i) => [
         { text: String(i + 1), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
-        { text: labelOf(s.key), options: cellBody({ bold: true, color: P.ink }) },
+        { text: cellFit(labelOf(s.key), 4.333, 0.52), options: cellBody({ bold: true }) },
         { text: compactUsd(s.low), options: cellBody({ align: "right" }) },
         { text: compactUsd(s.high), options: cellBody({ align: "right" }) },
         { text: compactUsd(s.swing), options: cellBody({ align: "right", bold: true, color: P.accent2 }) },
       ]),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [0.8, 4.333, 2.4, 2.4, 2.2],
-      rowH: 0.5, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [0.8, 4.333, 2.4, 2.4, 2.2],
+      { rowH: 0.52 },
+    );
   }
 
   // ─── Partner shortlist ──────────────────────────────────────────────────
-  const partners = Array.isArray(strategy.partnerShortlist) ? strategy.partnerShortlist : [];
   if (partners.length) {
-    const slide = contentSlide(pptx, "Strategy · Counterparties", "Partner shortlist", P.accent, SRC);
-    const rows: any[][] = [
-      ["#", "Partner", "Type", "Score", "Geographies", "Why them"].map((t) => ({ text: t, options: cellHead() })),
-      ...partners.slice(0, 9).map((p, i) => [
+    const sec = beginSection(
+      pptx,
+      "Strategy · Counterparties",
+      `Open with ${sText(partners[0]?.name) || "the top-ranked counterparty"}`,
+      P.accent,
+      SRC,
+    );
+    secTable(
+      sec,
+      ["#", "Partner", "Type", "Fit", "Geographies", "Why them"],
+      partners.map((p, i) => [
         { text: String(i + 1), options: cellBody({ bold: true, color: P.accent, align: "center" }) },
-        { text: p.name, options: cellBody({ bold: true, color: P.ink }) },
-        { text: sText(p.kind) || "—", options: cellBody({ fontSize: 10, color: P.muted }) },
+        { text: cellFit(p.name, 2.4, 0.52), options: cellBody({ bold: true }) },
+        { text: cellFit(sText(p.kind) || "—", 1.6, 0.52, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
         { text: p.score != null ? String(p.score) : "n/a", options: cellBody({ align: "center" }) },
-        { text: (p.geographies ?? []).map(countryLabel).join(", ") || "—", options: cellBody({ fontSize: 10 }) },
-        { text: truncate(sText(p.rationale) || "Not stated", 150), options: cellBody({ fontSize: 10 }) },
+        { text: cellFit((p.geographies ?? []).map(countryLabel).join(", ") || "—", 2.0, 0.52, 10), options: cellBody({ fontSize: 10 }) },
+        { text: cellFit(sText(p.rationale) || "Not stated", 4.633, 0.52, 10), options: cellBody({ fontSize: 10 }) },
       ]),
-    ];
-    slide.addTable(rows, {
-      x: MX, y: BODY_TOP + 0.15, w: MW, colW: [0.6, 2.4, 1.6, 0.9, 2.0, 4.633],
-      rowH: 0.46, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-    });
+      [0.6, 2.4, 1.6, 0.9, 2.0, 4.633],
+      { rowH: 0.52 },
+    );
+  }
+
+  // ─── Sequence of approach ───────────────────────────────────────────────
+  if (sequence.length) {
+    const sec = beginSection(
+      pptx,
+      "Strategy · Sequence",
+      "The order to run this in",
+      P.accent,
+      SRC,
+      "Each step assumes the one before it has landed — running them in parallel forfeits the leverage.",
+    );
+    secBullets(sec, sequence.map((s, i) => `${i + 1}. ${s}`), { fontSize: 12 });
   }
 
   // ─── Evidence behind the routes ─────────────────────────────────────────
@@ -2949,31 +5007,70 @@ export async function exportStrategyPPTX(
         if (kind !== 0) return kind;
         return (a.e.tier ?? 9) - (b.e.tier ?? 9);
       })
-      .slice(0, 9);
+      .slice(0, 18);
 
     if (strongest.length) {
-      const slide = contentSlide(
-        pptx, "Strategy · Evidence", "What the route reads are built on", P.accent,
+      const estimates = strongest.filter((x) => x.e.kind === "estimate").length;
+      const sec = beginSection(
+        pptx,
+        "Strategy · Evidence",
+        estimates
+          ? `${estimates} of ${strongest.length} shown claims are inferences — source them before they carry a decision`
+          : "What the route reads are built on",
+        P.accent,
         "Items marked Estimate are CartaOS inferences, not sourced findings",
       );
-      const rows: any[][] = [
-        ["Subject", "Claim", "Type", "Source"].map((t) => ({ text: t, options: cellHead() })),
-        ...strongest.map(({ subject, e }) => [
-          { text: truncate(subject, 44), options: cellBody({ bold: true, fontSize: 10 }) },
-          { text: truncate(sText(e.claim) || "—", 190), options: cellBody({ fontSize: 10.5 }) },
+      secTable(
+        sec,
+        ["Subject", "Claim", "Type", "Source"],
+        strongest.map(({ subject, e }) => [
+          { text: cellFit(subject, 3.0, 0.52, 10), options: cellBody({ bold: true, fontSize: 10 }) },
+          { text: cellFit(sText(e.claim) || "—", 5.0, 0.52, 10), options: cellBody({ fontSize: 10 }) },
           {
             text: e.kind === "estimate" ? "Estimate" : "Evidence",
             options: cellBody({ fontSize: 10, bold: true, color: e.kind === "estimate" ? P.accent2 : P.muted }),
           },
-          { text: truncate(sText(e.source) || "Not stated", 50), options: cellBody({ fontSize: 10, color: P.muted }) },
+          { text: cellFit(sText(e.source) || "Not stated", 2.833, 0.52, 10), options: cellBody({ fontSize: 10, color: P.muted }) },
         ]),
-      ];
-      slide.addTable(rows, {
-        x: MX, y: BODY_TOP + 0.15, w: MW, colW: [3.0, 5.0, 1.3, 2.833],
-        rowH: 0.48, valign: "middle", border: { type: "none" }, fontFace: F, autoPage: false,
-      });
+        [3.0, 5.0, 1.3, 2.833],
+        { rowH: 0.52 },
+      );
     }
   }
 
+  // ─── Basis of preparation ───────────────────────────────────────────────
+  {
+    const sec = beginSection(
+      pptx,
+      "Basis of preparation",
+      "How to read this strategy",
+      P.accent,
+      SRC,
+    );
+    secBullets(
+      sec,
+      [
+        "Internal strategic decision support only — not investment, legal or regulatory advice.",
+        "Every financial figure is recomputed here from the assumption set in this deck by the same deterministic engine the screen uses; change an assumption and the figures move with it.",
+        "A route missing a required input is named as not computable with the input it needs — it is never defaulted to zero or dropped silently.",
+        missing.length
+          ? `Still missing across the model: ${missing.map(labelOf).join(", ")}.`
+          : "Every required input for this branch was supplied.",
+        "Verify every assumption marked Assumed against a primary source before transacting.",
+      ].filter(Boolean),
+      { fontSize: 12 },
+    );
+  }
+
+  return pptx;
+}
+
+export async function exportStrategyPPTX(
+  strategy: Strategy,
+  branch: "off_patent" | "innovative",
+  assetName: string,
+  opts?: ExportOptions,
+) {
+  const pptx = await buildStrategyPptx(strategy, branch, assetName, opts);
   await pptx.writeFile({ fileName: `${safeFilename(assetName)}_Strategy.pptx` });
 }

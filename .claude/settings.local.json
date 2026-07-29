@@ -89,7 +89,18 @@
       "Bash(node --env-file=.env poll-run.mjs cms52omy90001l204x1lq79vc)",
       "Bash(grep -n \"renderResults\\\\|renderRunViewer\\\\|const { agents, deploy\" components/run/diagnosis-shell.tsx)",
       "Bash(./node_modules/.bin/eslint components/run/run-notes.tsx components/run/diagnosis-shell.tsx components/run/strategy-shell.tsx server/routers/run.ts hooks/use-agent-stream.ts)",
-      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/17/merge -d '{\"merge_method\":\"merge\"}')"
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/17/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(grep -oE '\\(title|label\\)=\"[^\"]{4,50}\"' components/hub/results/out-licensing-strategy-results.tsx)",
+      "Bash(awk 'NR>=1310 && NR<=1700 && /sectionTitle\\\\\\(state,|subHeader\\\\\\(state,/' lib/exports.ts)",
+      "Bash(awk 'NR>=1365 && NR<=1620' lib/exports.ts)",
+      "Bash(awk 'NR>0')",
+      "Bash(grep -n \"^export async function exportDiagnosisPDF\\\\|_Diagnosis.pdf\\\\`\\)\" lib/exports.ts)",
+      "Bash(grep -n \"^export async function exportDiagnosisPPTX\\\\|_Diagnosis.pptx\\\\`\" lib/exports.ts)",
+      "Bash(cd \"C:/Users/anast/cartaos/.claude/worktrees/competent-gauss-b9c64b\" *)",
+      "Bash(cp lib/exports.ts /tmp/exports.bak)",
+      "Bash(sed -i 's/^const BLOCK_GAP = 0.18;.*/const BLOCK_GAP = -0.45;/' lib/exports.ts)",
+      "Bash(awk '{print $5\" bytes  \"$NF}')",
+      "Bash(node C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/pdftext.cjs C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/real_diagnosis.pdf C:/Users/anast/AppData/Local/Temp/claude/C--Users-anast-cartaos--claude-worktrees-competent-gauss-b9c64b/7da1c944-4db3-4f80-836e-5398679ed50d/scratchpad/pdf-text.txt)"
     ]
   }
 }
