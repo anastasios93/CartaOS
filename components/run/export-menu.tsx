@@ -3,14 +3,14 @@
 /**
  * The export control shared by every pillar.
  *
- * Two decisions, both visible at once: what format, and what goes in. That is
- * the whole flow — pick, then download. Anything more elaborate would be a
- * settings page, and anything less would mean guessing what the reader needs.
+ * Three decisions, all visible at once: how deep, what goes in the appendix,
+ * and what format. That is the whole flow — pick, then download.
  *
- * The options genuinely change the output rather than being decoration: the
- * per-market breakdown and the evidence appendix are the two sections that
- * separate a board summary from a defensible working document, and they are the
- * two people most often want to drop or keep.
+ * Depth is the one that matters most. A full off-patent run is 103 slides and
+ * 62 pages, which is right for the file and wrong for the meeting; summary-only
+ * is 9 slides and 5 pages carrying the verdict, the actions and the headline
+ * numbers. The two include-toggles only bite when there is an appendix to put
+ * things in, so they disable with it rather than sitting there lying.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -40,6 +40,7 @@ export function ExportMenu({
 }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<ExportFormat | null>(null);
+  const [includeAppendix, setIncludeAppendix] = useState(true);
   const [includeMarkets, setIncludeMarkets] = useState(true);
   const [includeEvidence, setIncludeEvidence] = useState(true);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -65,7 +66,7 @@ export function ExportMenu({
   const run = async (format: ExportFormat) => {
     setBusy(format);
     try {
-      await onExport(format, { includeMarkets, includeEvidence });
+      await onExport(format, { includeAppendix, includeMarkets, includeEvidence });
       setOpen(false);
     } catch (err) {
       toast.error("The export could not be produced", {
@@ -96,13 +97,44 @@ export function ExportMenu({
           aria-label="Export options"
           className="absolute right-0 top-full z-40 mt-2 w-[300px] rounded-xl border border-border bg-white p-4 shadow-xl"
         >
-          <p className={`${TINY} mb-2`}>Include</p>
-          <div className="space-y-2 mb-4">
+          <p className={`${TINY} mb-2`}>Depth</p>
+          <div className="space-y-1.5 mb-4">
+            {[
+              {
+                on: true,
+                title: "Executive summary + appendix",
+                hint: "The decision up front, every supporting detail behind it.",
+              },
+              {
+                on: false,
+                title: "Executive summary only",
+                hint: "Just the verdict, the actions and the headline numbers.",
+              },
+            ].map((choice) => (
+              <label key={String(choice.on)} className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="export-depth"
+                  checked={includeAppendix === choice.on}
+                  onChange={() => setIncludeAppendix(choice.on)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#F97316]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium text-[#1A1A2E]">{choice.title}</span>
+                  <span className="block text-[11px] text-muted-foreground leading-relaxed">{choice.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <p className={`${TINY} mb-2`}>Include in the appendix</p>
+          <div className={`space-y-2 mb-4 ${includeAppendix ? "" : "opacity-50"}`}>
             {showMarkets && (
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={includeMarkets}
+                  disabled={!includeAppendix}
                   onChange={(e) => setIncludeMarkets(e.target.checked)}
                   className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#F97316]"
                 />
@@ -118,6 +150,7 @@ export function ExportMenu({
               <input
                 type="checkbox"
                 checked={includeEvidence}
+                disabled={!includeAppendix}
                 onChange={(e) => setIncludeEvidence(e.target.checked)}
                 className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#F97316]"
               />
