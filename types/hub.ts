@@ -86,6 +86,8 @@ export const AGENT_META: Record<AgentId, { label: string; description: string; c
 // ─── SSE Events ─────────────────────────────────────────────────────────────
 
 export type SSEEvent =
+  /** Emitted once, early: which Run row this stream is writing to. */
+  | { type: "run"; runId: string }
   | { agent: AgentId; type: "status"; status: AgentStatus; message: string }
   | { agent: AgentId; type: "sources"; sources: SourceHit[] }
   | { agent: AgentId; type: "result"; data: AgentResult }

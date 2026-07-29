@@ -551,6 +551,13 @@ model Run {
   strategy     Json?
   execution    Json?
   log          Json?    // RunLogEvent[] — the run console
+  /**
+   * The user's own working notes, { diagnosis?: string, strategy?: string }.
+   * Deliberately its own column and NOT part of the diagnosis/strategy
+   * envelopes: the exporters take those envelopes, so keeping notes outside
+   * them is what guarantees notes can never reach a PDF or a deck.
+   */
+  notes        Json?
   error        String?  @db.Text
   legacySource String?  // "hub_request" | "evaluation" for backfilled rows
   legacyId     String?  @unique // source row id — makes the backfill idempotent

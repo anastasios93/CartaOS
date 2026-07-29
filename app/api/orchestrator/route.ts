@@ -139,6 +139,12 @@ export async function POST(req: Request) {
     .then(r => r.id)
     .catch(() => null);
 
+  // Tell the client which Run it is watching, so the page can attach notes to
+  // it while the run is still streaming rather than only after a reopen.
+  void runRowPromise.then((id) => {
+    if (id) sendEvent({ type: "run", runId: id });
+  });
+
   // Run agents in background (don't await — stream starts immediately)
   (async () => {
     try {

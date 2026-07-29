@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RunConsole } from "@/components/run/run-console";
 import { StrategyResults, buildBlankStrategy, type StrategyBranch } from "@/components/run/strategy-results";
+import { RunNotes } from "@/components/run/run-notes";
 import { useAgentStream } from "@/hooks/use-agent-stream";
 import { useRunLog } from "@/hooks/use-run-log";
 import { trpc } from "@/lib/trpc";
@@ -68,7 +69,7 @@ export function StrategyShell({ branch, title, subtitle }: StrategyShellProps) {
   const [manual, setManual] = useState(false);
   const [viewingRunId, setViewingRunId] = useState<string | null>(null);
 
-  const { agents, deploy, reset, isRunning } = useAgentStream();
+  const { agents, deploy, reset, isRunning, runId: liveRunId } = useAgentStream();
   const log = useRunLog(agents);
 
   const runsQuery = trpc.run.list.useQuery({ assetType: branch }, { refetchOnWindowFocus: false });
@@ -126,7 +127,22 @@ export function StrategyShell({ branch, title, subtitle }: StrategyShellProps) {
           ← Back to Strategy
         </button>
         {stored && Array.isArray(stored.routes) ? (
-          <StrategyResults strategy={stored} branch={branch} assetName={viewingRun.data.assetQuery} />
+          <>
+            <StrategyResults strategy={stored} branch={branch} assetName={viewingRun.data.assetQuery} />
+            {branch === "off_patent" && (
+              <RunNotes
+                key={`strategy-${viewingRunId}`}
+                runId={viewingRunId}
+                scope="strategy"
+                initial={
+                  typeof ((viewingRun.data.notes ?? {}) as Record<string, unknown>).strategy === "string"
+                    ? (((viewingRun.data.notes ?? {}) as Record<string, unknown>).strategy as string)
+                    : ""
+                }
+                title="Your notes on this strategy"
+              />
+            )}
+          </>
         ) : (
           <p className="text-sm text-muted-foreground">
             This run has no stored strategy{viewingRun.data.error ? ` — ${viewingRun.data.error}` : ""}.
@@ -336,7 +352,17 @@ export function StrategyShell({ branch, title, subtitle }: StrategyShellProps) {
 
       {/* Live results */}
       {liveStrategy && (
-        <StrategyResults strategy={liveStrategy} branch={branch} assetName={selected?.assetQuery ?? "Asset"} />
+        <>
+          <StrategyResults strategy={liveStrategy} branch={branch} assetName={selected?.assetQuery ?? "Asset"} />
+          {branch === "off_patent" && (liveRunId ?? selectedRunId) && !isRunning && (
+            <RunNotes
+              key={`strategy-${liveRunId ?? selectedRunId}`}
+              runId={(liveRunId ?? selectedRunId)!}
+              scope="strategy"
+              title="Your notes on this strategy"
+            />
+          )}
+        </>
       )}
 
       {/* Manual escape hatch — the deterministic engine with no agent behind it */}

@@ -77,6 +77,8 @@ export async function POST(req: Request) {
     writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)).catch(() => {});
   };
 
+  sendEvent({ type: "run", runId: run.id });
+
   (async () => {
     try {
       await db.run.update({ where: { id: run.id }, data: { status: "strategy_running" } }).catch(() => {});
