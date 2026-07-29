@@ -14,6 +14,12 @@
  *   - the PDFs carry every section they are supposed to, and none of the
  *     private run brief.
  *
+ * They also pin the shape of every deliverable: a decision-ready executive
+ * summary, one appendix divider, and the whole of the old export behind it —
+ * with `includeAppendix: false` yielding the summary alone. The layout contract
+ * above is asserted in BOTH modes, because a summary-only file is a real file a
+ * client opens.
+ *
  * A failure here is a layout bug, not a test to relax.
  */
 import { describe, expect, it } from "vitest";
@@ -27,6 +33,7 @@ import {
   buildStrategyPptx,
   pdfSafe,
 } from "../lib/exports";
+import type { ExportOptions } from "../lib/exports";
 import type { Diagnosis, Strategy } from "../types/run";
 
 // ── Geometry constants (mirrors of lib/exports.ts) ───────────────────────────
@@ -674,55 +681,162 @@ describe("the overlap detector itself", () => {
   });
 });
 
+/** One string per slide, so "before the divider" is answerable by index. */
+const slideTexts = (slides: { shapes: Box[] }[]): string[] =>
+  slides.map((s) => s.shapes.map((b) => b.text).join(" "));
+
+/**
+ * The word "Appendix" is reserved for the divider slide — every appendix
+ * section is numbered A1, A2, … and every cross-reference in the summary says
+ * "the appendix" in lower case. So a slide carrying it IS the divider.
+ */
+const DIVIDER_MARK = "Appendix";
+
+interface DeckCase {
+  label: string;
+  build: (opts?: ExportOptions) => Promise<any>;
+  /** Kickers that must sit in Part 1, before the divider. */
+  summary: string[];
+  /** Kickers that must sit in Part 2, behind the divider. */
+  appendix: string[];
+  /** Content a summary-only file must still carry. */
+  keep: string[];
+}
+
+const decks: DeckCase[] = [
+  {
+    label: "off-patent diagnosis",
+    build: (o) => buildDiagnosisPptx(offPatentDiagnosis(), "off_patent", "Cartazine", o),
+    summary: ["EXECUTIVE SUMMARY", "WHAT TO DO NEXT", "LEAD MARKETS", "TOP VALUE LEVERS"],
+    appendix: [
+      "DIAGNOSIS · REGIONAL ASSESSMENT",
+      "DIAGNOSIS · VALUE LEVERS",
+      "DIAGNOSIS · MARKETS",
+      "DIAGNOSIS · EVIDENCE",
+      "DIAGNOSIS · GERMANY",
+    ],
+    keep: ["Conditional Go", "WHAT TO DO NEXT"],
+  },
+  {
+    label: "innovative diagnosis",
+    build: (o) => buildDiagnosisPptx(innovativeDiagnosis(), "innovative", "CTX-4410", o),
+    summary: ["EXECUTIVE SUMMARY", "WHAT TO DO NEXT", "LEAD MARKETS", "STRONGEST DIMENSIONS"],
+    appendix: ["DIAGNOSIS · SCORECARD", "DIAGNOSIS · MARKETS", "DIAGNOSIS · EVIDENCE", "DIAGNOSIS · IP"],
+    keep: ["VERDICT", "WHAT TO DO NEXT"],
+  },
+  {
+    label: "off-patent strategy",
+    build: (o) => buildStrategyPptx(offPatentStrategy(), "off_patent", "Cartazine", o),
+    summary: ["EXECUTIVE SUMMARY", "WHAT TO DO NEXT", "ROUTE COMPARISON", "COUNTERPARTIES"],
+    appendix: [
+      "STRATEGY · ROUTE COMPARISON",
+      "STRATEGY · ASSUMPTIONS",
+      "STRATEGY · SCENARIOS",
+      "STRATEGY · EVIDENCE",
+    ],
+    // The deck's shape text is truncated by the harness, so the recommended
+    // route is asserted through the headline that names it rather than through
+    // a table cell that may be clipped.
+    keep: ["RECOMMENDED ROUTE", "is the route to commit to", "WHAT TO DO NEXT"],
+  },
+];
+
+const modes: { label: string; opts: ExportOptions | undefined }[] = [
+  { label: "full", opts: undefined },
+  { label: "summary only", opts: { includeAppendix: false } },
+];
+
 describe("PowerPoint layout", () => {
-  const decks: { label: string; build: () => Promise<any> }[] = [
-    { label: "off-patent diagnosis", build: () => buildDiagnosisPptx(offPatentDiagnosis(), "off_patent", "Cartazine") },
-    { label: "innovative diagnosis", build: () => buildDiagnosisPptx(innovativeDiagnosis(), "innovative", "CTX-4410") },
-    { label: "off-patent strategy", build: () => buildStrategyPptx(offPatentStrategy(), "off_patent", "Cartazine") },
-  ];
-
   for (const deck of decks) {
-    describe(deck.label, () => {
-      it("places no two text-bearing shapes on top of each other", async () => {
-        const slides = await slidesOf(await deck.build());
-        expect(slides.length).toBeGreaterThan(3);
-        // Guard against a silently vacuous pass: if the XML shape parser ever
-        // stops matching, there is nothing left to collide and this test would
-        // go green on an empty set.
-        const shapeCount = slides.reduce((a, s) => a + s.shapes.length, 0);
-        expect(shapeCount).toBeGreaterThan(slides.length * 3);
-        const problems = collisionReport(slides);
-        expect(problems, `Overlapping shapes in the ${deck.label} deck:\n  ${problems.join("\n  ")}`).toEqual([]);
-      });
+    for (const mode of modes) {
+      describe(`${deck.label} — ${mode.label}`, () => {
+        it("places no two text-bearing shapes on top of each other", async () => {
+          const slides = await slidesOf(await deck.build(mode.opts));
+          expect(slides.length).toBeGreaterThan(3);
+          // Guard against a silently vacuous pass: if the XML shape parser ever
+          // stops matching, there is nothing left to collide and this test would
+          // go green on an empty set.
+          const shapeCount = slides.reduce((a, s) => a + s.shapes.length, 0);
+          expect(shapeCount).toBeGreaterThan(slides.length * 3);
+          const problems = collisionReport(slides);
+          expect(problems, `Overlapping shapes in the ${deck.label} deck:\n  ${problems.join("\n  ")}`).toEqual([]);
+        });
 
-      it("keeps every shape inside the slide and above the body floor", async () => {
-        const slides = await slidesOf(await deck.build());
-        const problems = boundsReport(slides);
-        expect(problems, `Out-of-bounds shapes in the ${deck.label} deck:\n  ${problems.join("\n  ")}`).toEqual([]);
-      });
+        it("keeps every shape inside the slide and above the body floor", async () => {
+          const slides = await slidesOf(await deck.build(mode.opts));
+          const problems = boundsReport(slides);
+          expect(problems, `Out-of-bounds shapes in the ${deck.label} deck:\n  ${problems.join("\n  ")}`).toEqual([]);
+        });
 
-      it("never sets type below 10pt", async () => {
-        const slides = await slidesOf(await deck.build());
-        const problems = tinyType(slides);
-        expect(problems, `Type below the floor in the ${deck.label} deck:\n  ${problems.join("\n  ")}`).toEqual([]);
-      });
+        it("never sets type below 10pt", async () => {
+          const slides = await slidesOf(await deck.build(mode.opts));
+          const problems = tinyType(slides);
+          expect(problems, `Type below the floor in the ${deck.label} deck:\n  ${problems.join("\n  ")}`).toEqual([]);
+        });
 
-      it("carries text on every slide it emits", async () => {
-        const slides = await slidesOf(await deck.build());
-        const empty = slides.filter((s) => s.shapes.length === 0).map((s) => s.name);
-        expect(empty, `Slides with no text at all: ${empty.join(", ")}`).toEqual([]);
+        it("carries text on every slide it emits", async () => {
+          const slides = await slidesOf(await deck.build(mode.opts));
+          const empty = slides.filter((s) => s.shapes.length === 0).map((s) => s.name);
+          expect(empty, `Slides with no text at all: ${empty.join(", ")}`).toEqual([]);
+        });
+
+        it("never leaks the private run brief", async () => {
+          const slides = await slidesOf(await deck.build(mode.opts));
+          expect(slideTexts(slides).join(" ")).not.toContain(BRIEF_SENTINEL);
+        });
       });
-    });
+    }
   }
 
   it("gives the off-patent report a section per region and a next-steps slide", async () => {
     const slides = await slidesOf(await buildDiagnosisPptx(offPatentDiagnosis(), "off_patent", "Cartazine"));
-    const all = slides.map((s) => s.shapes.map((b) => b.text).join(" ")).join(" ");
+    const all = slideTexts(slides).join(" ");
     expect(all).toContain("WHAT TO DO NEXT");
     expect(all).toContain("Germany");
     expect(all).toContain("Japan");
     expect(all).not.toContain(BRIEF_SENTINEL);
   });
+});
+
+describe("PowerPoint — summary, then appendix", () => {
+  for (const deck of decks) {
+    describe(deck.label, () => {
+      it("puts the whole executive summary before exactly one appendix divider", async () => {
+        const texts = slideTexts(await slidesOf(await deck.build()));
+        const dividers = texts.filter((t) => t.includes(DIVIDER_MARK));
+        expect(dividers.length, `expected one appendix divider, found ${dividers.length}`).toBe(1);
+        const divider = texts.findIndex((t) => t.includes(DIVIDER_MARK));
+        for (const marker of deck.summary) {
+          const at = texts.findIndex((t) => t.includes(marker));
+          expect(at, `summary section "${marker}" is missing`).toBeGreaterThanOrEqual(0);
+          expect(at, `summary section "${marker}" must sit before the appendix divider`).toBeLessThan(divider);
+        }
+      });
+
+      it("keeps the detail sections behind the divider", async () => {
+        const texts = slideTexts(await slidesOf(await deck.build()));
+        const divider = texts.findIndex((t) => t.includes(DIVIDER_MARK));
+        for (const marker of deck.appendix) {
+          const at = texts.findIndex((t, i) => i > divider && t.includes(marker));
+          expect(at, `appendix section "${marker}" is missing from behind the divider`).toBeGreaterThan(divider);
+        }
+      });
+
+      it("emits a materially shorter deck with includeAppendix: false", async () => {
+        const full = await slidesOf(await deck.build());
+        const summary = await slidesOf(await deck.build({ includeAppendix: false }));
+        expect(
+          summary.length,
+          `summary-only deck is ${summary.length} slides against ${full.length} full — not materially shorter`,
+        ).toBeLessThan(full.length / 2);
+        const texts = slideTexts(summary);
+        expect(texts.some((t) => t.includes(DIVIDER_MARK)), "a summary-only deck must carry no divider").toBe(false);
+        for (const marker of deck.keep) {
+          expect(texts.join(" "), `summary-only deck dropped "${marker}"`).toContain(marker);
+        }
+      });
+    });
+  }
 });
 
 describe("PDF content", () => {
@@ -780,6 +894,100 @@ describe("PDF content", () => {
   });
 });
 
+describe("PDF — summary, then appendix", () => {
+  interface DocCase {
+    label: string;
+    build: (opts?: ExportOptions) => Promise<any>;
+    /** Eyebrows that must be printed in Part 1, before the divider. */
+    summary: string[];
+    /** Eyebrows that must be printed in Part 2, behind the divider. */
+    appendix: string[];
+    /** Content a summary-only file must still carry. */
+    keep: string[];
+  }
+
+  const docs: DocCase[] = [
+    {
+      label: "off-patent diagnosis",
+      build: (o) => buildDiagnosisPdf(offPatentDiagnosis(), "off_patent", "Cartazine", o),
+      summary: ["EXECUTIVE SUMMARY", "WHAT TO DO NEXT", "LEAD MARKETS", "TOP VALUE LEVERS"],
+      appendix: [
+        "DIMENSION SCORES",
+        "REGIONAL ASSESSMENT",
+        "SOURCE COVERAGE",
+        "NOVEL PATHS TO CAPTURE THE MARKET",
+      ],
+      keep: ["Conditional Go", "WHAT TO DO NEXT"],
+    },
+    {
+      label: "innovative diagnosis",
+      build: (o) => buildDiagnosisPdf(innovativeDiagnosis(), "innovative", "CTX-4410", o),
+      summary: ["EXECUTIVE SUMMARY", "WHAT TO DO NEXT", "LEAD MARKETS", "STRONGEST DIMENSIONS"],
+      appendix: ["DIMENSION SCORES", "IP & FREEDOM TO OPERATE", "SOURCE COVERAGE", "EVIDENCE"],
+      keep: ["Go - CTX-4410", "WHAT TO DO NEXT"],
+    },
+    {
+      label: "off-patent strategy",
+      build: (o) => buildStrategyPdf(offPatentStrategy(), "off_patent", "Cartazine", o),
+      summary: ["EXECUTIVE SUMMARY", "WHAT TO DO NEXT", "ROUTE COMPARISON", "COUNTERPARTIES"],
+      appendix: ["ASSUMPTIONS", "SENSITIVITY", "RECOMMENDATION"],
+      keep: ["is the route to commit to", "Own MA + own distribution", "WHAT TO DO NEXT"],
+    },
+  ];
+
+  const occurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+
+  for (const doc of docs) {
+    describe(doc.label, () => {
+      it("puts the whole executive summary before exactly one appendix divider", async () => {
+        const text = pdfText(await doc.build());
+        expect(occurrences(text, "Appendix"), "expected exactly one appendix divider").toBe(1);
+        const divider = text.indexOf("Appendix");
+        for (const marker of doc.summary) {
+          const at = text.indexOf(marker);
+          expect(at, `summary section "${marker}" is missing`).toBeGreaterThanOrEqual(0);
+          expect(at, `summary section "${marker}" must be printed before the appendix divider`).toBeLessThan(divider);
+        }
+      });
+
+      it("keeps the detail sections behind the divider", async () => {
+        const text = pdfText(await doc.build());
+        const divider = text.indexOf("Appendix");
+        for (const marker of doc.appendix) {
+          const at = text.indexOf(marker, divider);
+          expect(at, `appendix section "${marker}" is missing from behind the divider`).toBeGreaterThan(divider);
+        }
+      });
+
+      it("emits a materially shorter file with includeAppendix: false", async () => {
+        const full = await doc.build();
+        const summary = await doc.build({ includeAppendix: false });
+        const fullPages = full.internal.getNumberOfPages();
+        const summaryPages = summary.internal.getNumberOfPages();
+        // Two independent claims, because either on its own can pass vacuously.
+        // The summary is a FIXED-SIZE document — a cover plus five sections,
+        // never more than five pages however large the run behind it — while
+        // the appendix grows with the payload. And dropping the appendix has to
+        // remove real pages, not trim a widow line off the end.
+        expect(
+          summaryPages,
+          `a summary-only PDF must hold its 3-4 page budget; this one is ${summaryPages} pages`,
+        ).toBeLessThanOrEqual(5);
+        expect(
+          fullPages - summaryPages,
+          `summary-only PDF is ${summaryPages} pages against ${fullPages} full — the appendix barely cost anything`,
+        ).toBeGreaterThanOrEqual(3);
+        const text = pdfText(summary);
+        expect(occurrences(text, "Appendix"), "a summary-only PDF must carry no divider").toBe(0);
+        for (const marker of doc.keep) {
+          expect(text, `summary-only PDF dropped "${marker}"`).toContain(marker);
+        }
+        expect(text).not.toContain(BRIEF_SENTINEL);
+      });
+    });
+  }
+});
+
 describe("PDF text encoding", () => {
   // jsPDF's standard fonts are WinAnsi. Non-ASCII reaching them renders as
   // mojibake — a real off-patent run produced "gA©nA©riques rA©pertoire" and
@@ -802,4 +1010,62 @@ describe("PDF text encoding", () => {
       "Atorvastatin 20mg, Germany (DE) - 68/100",
     );
   });
+});
+
+/**
+ * Real payloads are far wordier than a hand-written fixture, and that is where
+ * layout breaks. A live off-patent run put 5.03in of kill-criteria text into a
+ * two-column block starting at 2.16in; it ran past the body floor onto the
+ * source line and the page number. The fixtures were too short to reach it, so
+ * the harness passed while the real deck was broken.
+ *
+ * This inflates every string in the fixture so the same content is exercised at
+ * realistic length.
+ */
+function verbose<T>(value: T, factor = 6): T {
+  const pad =
+    " Sustained hospital tender pressure and Rabattvertraege renegotiation cycles materially change the addressable pool here";
+  const walk = (v: any): any => {
+    if (typeof v === "string") return v.length > 12 ? v + pad.repeat(factor) : v;
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  return walk(value) as T;
+}
+
+describe("layout holds on realistically long content", () => {
+  for (const [mode, opts] of [
+    ["full", {}],
+    ["summary only", { includeAppendix: false }],
+  ] as const) {
+    it(`off-patent diagnosis, ${mode}: nothing collides or crosses the body floor`, async () => {
+      const deck = await buildDiagnosisPptx(
+        verbose(offPatentDiagnosis()),
+        "off_patent",
+        "Cartazine",
+        opts as any,
+      );
+      const slides = await slidesOf(deck);
+      const problems: string[] = [];
+
+      for (const slide of slides) {
+        for (const b of slide.shapes) {
+          const inFooterBand = b.y >= BODY_LIMIT - TOL;
+          if (!inFooterBand && b.y + b.h > BODY_LIMIT + TOL) {
+            problems.push(`${slide.name}: crosses the body floor — ${fmt(b)}`);
+          }
+        }
+        for (let i = 0; i < slide.shapes.length; i++) {
+          for (let j = i + 1; j < slide.shapes.length; j++) {
+            const a = slide.shapes[i];
+            const b = slide.shapes[j];
+            if (overlaps(a, b)) problems.push(`${slide.name}: ${fmt(a)} collides with ${fmt(b)}`);
+          }
+        }
+      }
+      expect(slides.length).toBeGreaterThan(3);
+      expect(problems).toEqual([]);
+    });
+  }
 });
