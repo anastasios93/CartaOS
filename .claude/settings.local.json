@@ -79,7 +79,17 @@
       "Bash(./node_modules/.bin/eslint lib/exports.ts)",
       "Bash(./node_modules/.bin/eslint components/run/export-menu.tsx components/run/diagnosis-shell.tsx components/run/strategy-results.tsx)",
       "Bash(grep -E \"^\\\\S*\\\\.tsx$|warning|error\")",
-      "Bash(./node_modules/.bin/eslint components/run/strategy-results.tsx)"
+      "Bash(./node_modules/.bin/eslint components/run/strategy-results.tsx)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/13/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/14/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(git pull *)",
+      "Bash(legacy)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/15/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/16/merge -d '{\"merge_method\":\"merge\"}')",
+      "Bash(node --env-file=.env poll-run.mjs cms52omy90001l204x1lq79vc)",
+      "Bash(grep -n \"renderResults\\\\|renderRunViewer\\\\|const { agents, deploy\" components/run/diagnosis-shell.tsx)",
+      "Bash(./node_modules/.bin/eslint components/run/run-notes.tsx components/run/diagnosis-shell.tsx components/run/strategy-shell.tsx server/routers/run.ts hooks/use-agent-stream.ts)",
+      "Bash(curl -s -X PUT -H \"Authorization: token $\\(cat /tmp/ghtok\\)\" -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/anastasios93/CartaOS/pulls/17/merge -d '{\"merge_method\":\"merge\"}')"
     ]
   }
 }

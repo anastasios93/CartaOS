@@ -50,44 +50,6 @@ export const runRouter = router({
   }),
 
   /**
-   * The user's own working notes for one pillar of a run.
-   *
-   * Stored in its own column rather than inside the diagnosis or strategy
-   * envelope, because the exporters take those envelopes — keeping notes out of
-   * them is what makes "never appears in the PDF or the deck" structural rather
-   * than a filter someone can forget to apply.
-   */
-  updateNotes: protectedProcedure
-    .input(
-      z.object({
-        runId: z.string().min(1),
-        scope: z.enum(["diagnosis", "strategy"]),
-        text: z.string().max(20000),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const scope = await getOwnerScope(ctx);
-      const run = await ctx.db.run.findFirst({
-        where: { id: input.runId, ...(scope.ownerId ? { userId: scope.ownerId } : {}) },
-        select: { id: true, notes: true },
-      });
-      if (!run) throw new Error("Not found");
-
-      const existing = (run.notes ?? {}) as Record<string, unknown>;
-      const text = input.text.trim();
-      const next = { ...existing, [input.scope]: text === "" ? undefined : text };
-      // Drop cleared keys rather than storing empty strings.
-      for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
-
-      const updated = await ctx.db.run.update({
-        where: { id: run.id },
-        data: { notes: next as never },
-        select: { notes: true },
-      });
-      return updated.notes;
-    }),
-
-  /**
    * Tracking a milestone: status, owner and notes are the user's to set.
    *
    * Deliberately narrow. Dates stay computed — letting the client post an

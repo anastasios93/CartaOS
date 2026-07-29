@@ -132,6 +132,12 @@ export async function POST(req: Request) {
         assetType: intake.assetType,
         geographies: intake.geographies,
         criteria: (intake.criteria ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        // The free-text brief that steered this run. Stored outside the
+        // diagnosis envelope, so it travels with the run without ever
+        // reaching an export.
+        notes: (intake.context.trim()
+          ? { diagnosis: intake.context.trim() }
+          : Prisma.JsonNull) as Prisma.InputJsonValue,
         status: "diagnosis_running",
       },
       select: { id: true },

@@ -81,7 +81,20 @@ export async function POST(req: Request) {
 
   (async () => {
     try {
-      await db.run.update({ where: { id: run.id }, data: { status: "strategy_running" } }).catch(() => {});
+      const brief = body.context.trim();
+      const existingNotes = (run.notes ?? {}) as Record<string, unknown>;
+      await db.run
+        .update({
+          where: { id: run.id },
+          data: {
+            status: "strategy_running",
+            // Merge: a strategy brief must not wipe the diagnosis one.
+            ...(brief
+              ? { notes: { ...existingNotes, strategy: brief } as Prisma.InputJsonValue }
+              : {}),
+          },
+        })
+        .catch(() => {});
       const { runStrategyAgent } = await import("@/server/agents/strategy");
       sendEvent({ agent: "strategy", type: "status", status: "idle", message: "Queued…" });
       await runStrategyAgent(

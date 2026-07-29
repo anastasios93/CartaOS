@@ -24,7 +24,7 @@ import { RunConsole } from "@/components/run/run-console";
 import { useAgentStream } from "@/hooks/use-agent-stream";
 import { useRunLog } from "@/hooks/use-run-log";
 import { ExportMenu, type ExportFormat } from "@/components/run/export-menu";
-import { RunNotes } from "@/components/run/run-notes";
+import { CriteriaRefinementInput, CriteriaRefinementSummary } from "@/components/run/criteria-refinement";
 import { exportDiagnosisPDF, exportDiagnosisPPTX, type ExportOptions } from "@/lib/exports";
 import { mapReportToDiagnosis } from "@/server/services/run-mapper";
 import { trpc } from "@/lib/trpc";
@@ -133,9 +133,11 @@ export function DiagnosisShell({
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [files, setFiles] = useState<RunFile[]>([]);
   const [extracting, setExtracting] = useState(false);
+  /** Free text passed to the agents as part of the brief (§ refines the search). */
+  const [refinement, setRefinement] = useState("");
   const [viewingRunId, setViewingRunId] = useState<string | null>(null);
 
-  const { agents, deploy, reset, isRunning, runId: liveRunId } = useAgentStream();
+  const { agents, deploy, reset, isRunning } = useAgentStream();
   const log = useRunLog(agents);
 
   const runsQuery = trpc.run.list.useQuery({ assetType: branch }, { refetchOnWindowFocus: false });
@@ -151,14 +153,11 @@ export function DiagnosisShell({
     : toDiagnosis(liveResult);
   const exportName = viewingRunId ? (viewingRun.data?.assetQuery ?? "asset") : asset || "asset";
 
-  /**
-   * Notes need a run to hang off. A reopened run has one; a live run learns
-   * its id from the stream's run event. Requested for off-patent only.
-   */
-  const notesRunId = viewingRunId ?? liveRunId;
-  const showNotes = branch === "off_patent" && !!notesRunId && !isRunning;
-  const storedNotes =
-    (viewingRunId ? ((viewingRun.data?.notes ?? {}) as Record<string, unknown>) : {})?.diagnosis;
+  /** What a reopened run was asked, so the brief travels with the result. */
+  const storedRefinement = (() => {
+    const n = (viewingRun.data?.notes ?? {}) as Record<string, unknown>;
+    return typeof n.diagnosis === "string" ? n.diagnosis : "";
+  })();
 
   const runExport = async (format: ExportFormat, options: ExportOptions) => {
     if (!exportable) throw new Error("This run has no diagnosis to export yet.");
@@ -228,7 +227,7 @@ export function DiagnosisShell({
       geographies,
       exactGeographies: true,
       assetType: branch,
-      context: "",
+      context: refinement.trim(),
       criteria: criteria.length ? criteriaToSearchCriteria(criteria) : undefined,
     });
   };
@@ -256,15 +255,7 @@ export function DiagnosisShell({
           assetQuery: viewingRun.data.assetQuery,
           error: viewingRun.data.error ?? null,
         })}
-        {showNotes && (
-          <RunNotes
-            key={`diagnosis-${notesRunId}`}
-            runId={notesRunId!}
-            scope="diagnosis"
-            initial={typeof storedNotes === "string" ? storedNotes : ""}
-            title="Your notes on this diagnosis"
-          />
-        )}
+        {branch === "off_patent" && <CriteriaRefinementSummary text={storedRefinement} />}
       </div>
     );
   }
@@ -344,6 +335,10 @@ export function DiagnosisShell({
             </div>
           </div>
 
+          {branch === "off_patent" && (
+            <CriteriaRefinementInput value={refinement} onChange={setRefinement} disabled={isRunning} />
+          )}
+
           <div className="flex items-center justify-between gap-3 pt-1 border-t border-border/30">
             {/* A disabled primary action always states the unmet condition. */}
             <p className="text-[11px] text-muted-foreground">
@@ -375,14 +370,6 @@ export function DiagnosisShell({
             </div>
           )}
           {renderResults(liveResult, { agents, assetQuery: asset })}
-          {showNotes && (
-            <RunNotes
-              key={`diagnosis-${notesRunId}`}
-              runId={notesRunId!}
-              scope="diagnosis"
-              title="Your notes on this diagnosis"
-            />
-          )}
         </>
       )}
 

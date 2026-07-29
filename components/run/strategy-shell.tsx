@@ -22,7 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RunConsole } from "@/components/run/run-console";
 import { StrategyResults, buildBlankStrategy, type StrategyBranch } from "@/components/run/strategy-results";
-import { RunNotes } from "@/components/run/run-notes";
+import { CriteriaRefinementSummary } from "@/components/run/criteria-refinement";
 import { useAgentStream } from "@/hooks/use-agent-stream";
 import { useRunLog } from "@/hooks/use-run-log";
 import { trpc } from "@/lib/trpc";
@@ -69,7 +69,7 @@ export function StrategyShell({ branch, title, subtitle }: StrategyShellProps) {
   const [manual, setManual] = useState(false);
   const [viewingRunId, setViewingRunId] = useState<string | null>(null);
 
-  const { agents, deploy, reset, isRunning, runId: liveRunId } = useAgentStream();
+  const { agents, deploy, reset, isRunning } = useAgentStream();
   const log = useRunLog(agents);
 
   const runsQuery = trpc.run.list.useQuery({ assetType: branch }, { refetchOnWindowFocus: false });
@@ -130,16 +130,12 @@ export function StrategyShell({ branch, title, subtitle }: StrategyShellProps) {
           <>
             <StrategyResults strategy={stored} branch={branch} assetName={viewingRun.data.assetQuery} />
             {branch === "off_patent" && (
-              <RunNotes
-                key={`strategy-${viewingRunId}`}
-                runId={viewingRunId}
-                scope="strategy"
-                initial={
+              <CriteriaRefinementSummary
+                text={
                   typeof ((viewingRun.data.notes ?? {}) as Record<string, unknown>).strategy === "string"
                     ? (((viewingRun.data.notes ?? {}) as Record<string, unknown>).strategy as string)
                     : ""
                 }
-                title="Your notes on this strategy"
               />
             )}
           </>
@@ -251,11 +247,16 @@ export function StrategyShell({ branch, title, subtitle }: StrategyShellProps) {
 
               <div>
                 <label htmlFor="strategy-context" className={`block ${TINY} mb-1.5`}>
-                  Constraints & context{" "}
+                  Additional search criteria{" "}
                   <span className="normal-case tracking-normal font-normal">
                     (optional — capital available, appetite for risk, must-keep rights)
                   </span>
                 </label>
+                <p className="text-[12px] text-muted-foreground leading-relaxed mb-2 max-w-3xl">
+                  Free text that steers which routes and partners the engine takes seriously. It is read as part of
+                  the brief.{" "}
+                  <span className="font-medium text-[#1A1A2E]">It is never printed in the PDF or the PowerPoint.</span>
+                </p>
                 <textarea
                   id="strategy-context"
                   value={context}
@@ -354,14 +355,6 @@ export function StrategyShell({ branch, title, subtitle }: StrategyShellProps) {
       {liveStrategy && (
         <>
           <StrategyResults strategy={liveStrategy} branch={branch} assetName={selected?.assetQuery ?? "Asset"} />
-          {branch === "off_patent" && (liveRunId ?? selectedRunId) && !isRunning && (
-            <RunNotes
-              key={`strategy-${liveRunId ?? selectedRunId}`}
-              runId={(liveRunId ?? selectedRunId)!}
-              scope="strategy"
-              title="Your notes on this strategy"
-            />
-          )}
         </>
       )}
 
