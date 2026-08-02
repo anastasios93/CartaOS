@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, FormEvent, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,8 +30,24 @@ const ROLE_OPTIONS = [
   "Other",
 ];
 
-export default function SignupPage() {
+/**
+ * Display-only decode of the invite token's expiry segment (v1.<exp36>.<sig>).
+ * The signature is verified server-side on submit; a tampered expiry here only
+ * mislabels the banner and is caught by the API.
+ */
+function inviteExpiry(token: string | null): Date | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const ms = parseInt(parts[1], 36);
+  return Number.isFinite(ms) ? new Date(ms) : null;
+}
+
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("invite");
+  const inviteUntil = inviteExpiry(inviteToken);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +67,15 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, company, role, department }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          company,
+          role,
+          department,
+          inviteToken: inviteToken || undefined,
+        }),
       });
 
       const data = await res.json();
@@ -100,11 +124,30 @@ export default function SignupPage() {
         {/* Signup Card */}
         <Card className="border border-[#E5E7EB] bg-white shadow-sm">
           <CardHeader className="text-center">
-            <CardTitle className="text-lg text-[#1A1A2E]">Create your account</CardTitle>
-            <CardDescription>Get started with CartaOS</CardDescription>
+            <CardTitle className="text-lg text-[#1A1A2E]">
+              {inviteToken ? "Create your test account" : "Create your account"}
+            </CardTitle>
+            <CardDescription>
+              {inviteToken
+                ? "You've been invited to test CartaOS"
+                : "Get started with CartaOS"}
+            </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-5">
+            {inviteToken && inviteUntil && (
+              <div className="rounded-md bg-orange-50 border border-orange-200 px-3 py-2 text-sm text-orange-800">
+                Test access is free and runs until{" "}
+                <span className="font-medium">
+                  {inviteUntil.toLocaleDateString(undefined, {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                .
+              </div>
+            )}
             {error && (
               <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
                 {error}
@@ -246,5 +289,14 @@ export default function SignupPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  // useSearchParams requires a Suspense boundary during prerender
+  return (
+    <Suspense fallback={null}>
+      <SignupForm />
+    </Suspense>
   );
 }

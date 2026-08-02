@@ -16,6 +16,7 @@ declare module "next-auth" {
       company?: string | null;
       department?: string | null;
       isAdmin?: boolean;
+      trialExpiresAt?: number | null;
     };
   }
 
@@ -24,6 +25,7 @@ declare module "next-auth" {
     company?: string | null;
     department?: string | null;
     isAdmin?: boolean;
+    trialExpiresAt?: number | null;
   }
 }
 
@@ -34,6 +36,7 @@ declare module "next-auth/jwt" {
     company?: string | null;
     department?: string | null;
     isAdmin?: boolean;
+    trialExpiresAt?: number | null;
   }
 }
 
@@ -62,6 +65,13 @@ export const authOptions: NextAuthOptions = {
 
         if (!isValid) return null;
 
+        // Trial accounts stop working the moment their invite window closes.
+        // Thrown (not null) so the login page can distinguish this from a
+        // wrong password via result.error === "TrialExpired".
+        if (user.trialExpiresAt && user.trialExpiresAt.getTime() <= Date.now()) {
+          throw new Error("TrialExpired");
+        }
+
         // Stamp last login so admins can see when each client was active
         db.user
           .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
@@ -76,6 +86,7 @@ export const authOptions: NextAuthOptions = {
           company: user.company,
           department: user.department,
           isAdmin: user.isAdmin,
+          trialExpiresAt: user.trialExpiresAt?.getTime() ?? null,
         };
       },
     }),
@@ -103,6 +114,7 @@ export const authOptions: NextAuthOptions = {
         token.company = user.company;
         token.department = user.department;
         token.isAdmin = user.isAdmin;
+        token.trialExpiresAt = user.trialExpiresAt;
       }
       // Refresh profile from DB when session is updated
       if (trigger === "update") {
@@ -128,6 +140,7 @@ export const authOptions: NextAuthOptions = {
         session.user.company = token.company;
         session.user.department = token.department;
         session.user.isAdmin = token.isAdmin;
+        session.user.trialExpiresAt = token.trialExpiresAt;
       }
       return session;
     },

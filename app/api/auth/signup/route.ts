@@ -1,10 +1,37 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/server/db";
+import { verifyTrialToken } from "@/lib/trial";
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password, company, role, department } = await req.json();
+    const { name, email, password, company, role, department, inviteToken } =
+      await req.json();
+
+    // Invite handling. When INVITE_ONLY_SIGNUP=1 a valid, unexpired invite
+    // token is the only way in; otherwise a token is optional but, when
+    // present, still stamps the account with the invite's expiry.
+    let trialExpiresAt: Date | null = null;
+    if (inviteToken) {
+      const check = verifyTrialToken(String(inviteToken));
+      if (!check.valid) {
+        return NextResponse.json(
+          {
+            error:
+              check.reason === "expired"
+                ? "This test invite has expired. Ask your CartaOS contact for a new link."
+                : "This invite link is invalid. Ask your CartaOS contact for a new link.",
+          },
+          { status: 403 }
+        );
+      }
+      trialExpiresAt = check.expiresAt;
+    } else if (process.env.INVITE_ONLY_SIGNUP?.trim() === "1") {
+      return NextResponse.json(
+        { error: "Signups are currently invite-only. Ask your CartaOS contact for an invite link." },
+        { status: 403 }
+      );
+    }
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -38,6 +65,7 @@ export async function POST(req: Request) {
         company: company || null,
         role: role || null,
         department: department || null,
+        trialExpiresAt,
       },
     });
 

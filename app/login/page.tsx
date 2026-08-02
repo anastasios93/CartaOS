@@ -53,7 +53,11 @@ function LoginContent() {
     });
 
     if (result?.error) {
-      setError("Invalid email or password");
+      setError(
+        result.error === "TrialExpired"
+          ? "Your test access has expired. Contact us to continue using CartaOS."
+          : "Invalid email or password"
+      );
       setLoading(false);
       return;
     }
